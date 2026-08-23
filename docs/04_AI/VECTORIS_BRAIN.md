@@ -10,6 +10,8 @@
 
 The Brain is the reasoning/planning component of the Vectoris Agent — it answers "what should I do?" It is not the same component as Perception ("what is here?"); this separation is deliberate and load-bearing (see `AI_SYSTEM.md` §1).
 
+The execution control loop that drives the Brain (Planner/Executor decomposition, ReAct cycles, runtime timeout/iteration guards) is governed by `AGENT_RUNTIME.md`.
+
 ## 2. Recommended Direction
 
 **A fine-tuned open-source foundation model, specialized for Vectoris behavior.** Do not train a model from scratch unless future evidence strongly justifies it (no such evidence exists today).
@@ -43,5 +45,6 @@ Fine-tuning shapes tendency; it does not guarantee compliance. Hard boundaries (
 ## 7. Cross-References
 
 - `AI_SYSTEM.md` §4 (the governing fine-tuning-vs-retrieval principle)
+- `AGENT_RUNTIME.md` (the runtime control loop and execution guards)
 - `TRAINING.md` (how corrections become fine-tuning data)
 - `EVALUATION.md` (how Brain behavior is measured — the "Agent Behavior" category)

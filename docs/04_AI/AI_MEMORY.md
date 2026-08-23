@@ -21,13 +21,12 @@ Preserving and extending the legacy README's "Four Memory Layers" principle:
 
 Volatile, project-specific, or company-specific facts belong in retrieval/database layers. Model weights (via fine-tuning, see `VECTORIS_BRAIN.md`) encode **behavior**, never **current facts**. This is the same rule as `AI_SYSTEM.md` §4, restated here because Memory is the component responsible for enforcing it operationally.
 
-## 3. What Memory Provides to the Brain
+## 3. Context Management & Retrieval Mechanics
 
-- Project context (current documents, prior decisions, approved data)
-- Company knowledge (once company memory exists — near-term/future scope)
-- User preferences
-- Previous decisions within the project or session
-- Approved information (distinguished from proposed/unapproved)
+Memory retrieval feeds the Brain's prompt context following the hierarchical loading strategy in `AGENT_RUNTIME.md` §5:
+- **Hierarchical Indexing:** Project manifest and document directory loaded initially.
+- **On-Demand Sheet Loading:** Detailed visual/OCR sheet contents loaded only when specifically queried.
+- **Sliding Window & Summarization:** Sessions older than 6 turns are compacted into rolling session summaries to prevent context bloat.
 
 ## 4. Memory Must Distinguish Confidence/Provenance
 
@@ -40,4 +39,5 @@ Company memory (preferred manufacturers, naming conventions, material mappings, 
 ## 6. Cross-References
 
 - `AI_SYSTEM.md` §4, `VECTORIS_BRAIN.md`
+- `AGENT_RUNTIME.md` (context compaction, on-demand sheet retrieval)
 - `../03_ARCHITECTURE/DATA_MODEL.md` for the underlying storage of project/session data

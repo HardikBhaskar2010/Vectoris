@@ -55,6 +55,7 @@ docs/
 │
 ├── 04_AI/
 │   ├── AI_SYSTEM.md
+│   ├── AGENT_RUNTIME.md
 │   ├── VECTORIS_BRAIN.md
 │   ├── PERCEPTION.md
 │   ├── AI_MEMORY.md
@@ -122,40 +123,41 @@ docs/
 | 21 | STORAGE.md | Local-first storage & sync architecture | DB engine choice detail (→ DATA_MODEL ADR) | ARCHITECTURE | Complete |
 | 22 | SECURITY.md | AuthN/Z, tenancy, encryption, consent | Legal certifications (TBD) | USER_ROLES, STORAGE | Complete |
 | 23 | AI_SYSTEM.md | Overall agentic AI architecture | Brain fine-tuning detail (→ VECTORIS_BRAIN) | ARCHITECTURE | Complete |
-| 24 | VECTORIS_BRAIN.md | Brain behavior, fine-tuning philosophy | Perception model detail | AI_SYSTEM | Complete |
-| 25 | PERCEPTION.md | Vision/OCR/geometry layer | Brain reasoning | AI_SYSTEM | Complete |
-| 26 | AI_MEMORY.md | Memory layers (project/company/user/session) | Tool implementations | AI_SYSTEM | Complete |
-| 27 | TOOL_SYSTEM.md | Agent tool inventory & contracts | Model choice | AI_SYSTEM | Complete |
-| 28 | TRAINING.md | Correction → dataset → fine-tune pipeline | Evaluation metrics detail (→ EVALUATION) | VECTORIS_BRAIN | Complete |
-| 29 | EVALUATION.md | Evaluation suite categories & benchmark | Training pipeline mechanics | TRAINING | Complete |
-| 30 | MODEL_GOVERNANCE.md | Versioning, consent, deployment gating | Evaluation metrics themselves | TRAINING, EVALUATION | Complete |
-| 31 | IMPLEMENTATION_FLOW.md | Build sequence across all layers | Phase-internal task breakdown (→ DEVELOPMENT_PHASES) | PRODUCT_SCOPE, ARCHITECTURE | Complete |
-| 32 | DEVELOPMENT_PHASES.md | Phase-by-phase deliverables & exit criteria | Design content | IMPLEMENTATION_FLOW | Complete |
-| 33 | FRONTEND.md | Frontend implementation approach | Backend detail | TECH_STACK | Complete |
-| 34 | BACKEND.md | Backend implementation approach | Frontend detail | TECH_STACK | Complete |
-| 35 | AI_IMPLEMENTATION.md | How AI_SYSTEM gets built | AI theory (→ AI_SYSTEM) | AI_SYSTEM, BACKEND | Complete |
-| 36 | TESTING.md | Test strategy across layers | AI evaluation (→ EVALUATION) | FRONTEND, BACKEND | Complete |
-| 37 | DEPLOYMENT.md | Deployment topology & environments | CI pipeline YAML detail | TECH_STACK | Complete |
-| 38 | MARKETING_LANDING.md | Marketing landing page | Core product layout | APP_FLOW | Complete |
-| 39 | LANDING.md | Landing/unauthenticated page behavior | Cross-page navigation logic | APP_FLOW | Complete |
-| 40 | AUTH.md | Auth/sign-in/sign-up page behavior | Cross-page navigation logic | APP_FLOW | Complete |
-| 41 | ONBOARDING.md | Onboarding and guided tours | Persistent layouts | APP_FLOW | Complete |
-| 42 | DASHBOARD.md | Dashboard page behavior | Cross-page navigation logic | APP_FLOW, CORE_WORKFLOWS | Complete |
-| 43 | PROJECTS.md | Projects list page | — | APP_FLOW | Complete |
-| 44 | CREATE_PROJECT.md | Create project form | — | APP_FLOW | Complete |
-| 45 | PROJECT_OVERVIEW.md | Project hub page | — | APP_FLOW | Complete |
-| 46 | SETTINGS.md | Organization and user settings page | — | APP_FLOW | Complete |
-| 47 | DOCUMENT_UPLOAD.md | Upload surface | — | APP_FLOW | Complete |
-| 48 | PROCESSING.md | Processing/progress page | — | APP_FLOW | Complete |
-| 49 | DRAWING_VIEWER.md | Drawing/Takeoff Workspace | — | APP_FLOW | Complete |
-| 50 | TAKEOFF_REVIEW.md | Takeoff review table | — | APP_FLOW | Complete |
-| 51 | LINE_ITEM_DETAILS.md | Line item detail panel | — | APP_FLOW | Complete |
-| 52 | EXPORT.md | Export interaction | — | APP_FLOW | Complete |
-| 53 | AI_SESSION.md | AI chat session / assistant-ui layer | Core chat model | APP_FLOW, AI_SYSTEM | Complete |
-| 54 | OBSERVABILITY.md | Logging/monitoring/analytics ownership | AI evaluation metrics | AI_SYSTEM | Complete |
-| 55 | BACKUPS.md | Backup/restore policy | Storage architecture detail | STORAGE | Complete |
-| 56 | ENVIRONMENT.md | Environments (local/staging/prod), config | Deployment topology (→ DEPLOYMENT) | DEPLOYMENT | Complete |
-| 57 | DATA_LIFECYCLE.md | Retention, deletion, export/erasure | Security architecture (→ SECURITY) | SECURITY | Complete |
+| 24 | AGENT_RUNTIME.md | Agent control loop, guards, error contracts, async jobs | Tool inventory (→ TOOL_SYSTEM.md) | AI_SYSTEM | Complete |
+| 25 | VECTORIS_BRAIN.md | Brain behavior, fine-tuning philosophy | Perception model detail | AI_SYSTEM | Complete |
+| 26 | PERCEPTION.md | Vision/OCR/geometry layer | Brain reasoning | AI_SYSTEM | Complete |
+| 27 | AI_MEMORY.md | Memory layers (project/company/user/session) | Tool implementations | AI_SYSTEM | Complete |
+| 28 | TOOL_SYSTEM.md | Agent tool inventory & contracts | Model choice | AI_SYSTEM | Complete |
+| 29 | TRAINING.md | Correction → dataset → fine-tune pipeline | Evaluation metrics detail (→ EVALUATION) | VECTORIS_BRAIN | Complete |
+| 30 | EVALUATION.md | Evaluation suite categories & benchmark | Training pipeline mechanics | TRAINING | Complete |
+| 31 | MODEL_GOVERNANCE.md | Versioning, consent, deployment gating | Evaluation metrics themselves | TRAINING, EVALUATION | Complete |
+| 32 | IMPLEMENTATION_FLOW.md | Build sequence across all layers | Phase-internal task breakdown (→ DEVELOPMENT_PHASES) | PRODUCT_SCOPE, ARCHITECTURE | Complete |
+| 33 | DEVELOPMENT_PHASES.md | Phase-by-phase deliverables & exit criteria | Design content | IMPLEMENTATION_FLOW | Complete |
+| 34 | FRONTEND.md | Frontend implementation approach | Backend detail | TECH_STACK | Complete |
+| 35 | BACKEND.md | Backend implementation approach | Frontend detail | TECH_STACK | Complete |
+| 36 | AI_IMPLEMENTATION.md | How AI_SYSTEM gets built | AI theory (→ AI_SYSTEM) | AI_SYSTEM, BACKEND | Complete |
+| 37 | TESTING.md | Test strategy across layers | AI evaluation (→ EVALUATION) | FRONTEND, BACKEND | Complete |
+| 38 | DEPLOYMENT.md | Deployment topology & environments | CI pipeline YAML detail | TECH_STACK | Complete |
+| 39 | MARKETING_LANDING.md | Marketing landing page | Core product layout | APP_FLOW | Complete |
+| 40 | LANDING.md | Landing/unauthenticated page behavior | Cross-page navigation logic | APP_FLOW | Complete |
+| 41 | AUTH.md | Auth/sign-in/sign-up page behavior | Cross-page navigation logic | APP_FLOW | Complete |
+| 42 | ONBOARDING.md | Onboarding and guided tours | Persistent layouts | APP_FLOW | Complete |
+| 43 | DASHBOARD.md | Dashboard page behavior | Cross-page navigation logic | APP_FLOW, CORE_WORKFLOWS | Complete |
+| 44 | PROJECTS.md | Projects list page | — | APP_FLOW | Complete |
+| 45 | CREATE_PROJECT.md | Create project form | — | APP_FLOW | Complete |
+| 46 | PROJECT_OVERVIEW.md | Project hub page | — | APP_FLOW | Complete |
+| 47 | SETTINGS.md | Organization and user settings page | — | APP_FLOW | Complete |
+| 48 | DOCUMENT_UPLOAD.md | Upload surface | — | APP_FLOW | Complete |
+| 49 | PROCESSING.md | Processing/progress page | — | APP_FLOW | Complete |
+| 50 | DRAWING_VIEWER.md | Drawing/Takeoff Workspace | — | APP_FLOW | Complete |
+| 51 | TAKEOFF_REVIEW.md | Takeoff review table | — | APP_FLOW | Complete |
+| 52 | LINE_ITEM_DETAILS.md | Line item detail panel | — | APP_FLOW | Complete |
+| 53 | EXPORT.md | Export interaction | — | APP_FLOW | Complete |
+| 54 | AI_SESSION.md | AI chat session / assistant-ui layer | Core chat model | APP_FLOW, AI_SYSTEM | Complete |
+| 55 | OBSERVABILITY.md | Logging/monitoring/analytics ownership | AI evaluation metrics | AI_SYSTEM | Complete |
+| 56 | BACKUPS.md | Backup/restore policy | Storage architecture detail | STORAGE | Complete |
+| 57 | ENVIRONMENT.md | Environments (local/staging/prod), config | Deployment topology (→ DEPLOYMENT) | DEPLOYMENT | Complete |
+| 58 | DATA_LIFECYCLE.md | Retention, deletion, export/erasure | Security architecture (→ SECURITY) | SECURITY | Complete |
 | R1 | ARCHITECTURE_DECISIONS_SUMMARY.md | Summary index of all ADRs across all docs | Full ADR rationale (that lives in owning files) | All architecture files | Complete |
 | R2 | OPEN_DECISIONS.md | Registry of unresolved product/technical decisions | Decided items | All | Complete |
 | R3 | MVP_BOUNDARY.md | Root-level authoritative MVP in/out list | Architecture, page detail | PRODUCT_SCOPE, PRD | Complete |

@@ -37,6 +37,7 @@
 | ADR-23 | **Project type stored as three separate fields (ai_inferred / user_provided / verified), never conflated** | **LOCKED** | `03_ARCHITECTURE/DATA_MODEL.md` | §2 (Project entity) |
 | ADR-24 | **State-mutating tool calls produce proposals, not final writes — approval required** | **LOCKED** | `04_AI/TOOL_SYSTEM.md` | §2 |
 | ADR-25 | **H1 and H2 are one pipeline with two entry points — not two separate products** | **LOCKED** | `00_PROJECT/VISION.md` | §1, §4 |
+| ADR-26 | **Agent Runtime: ReAct Loop + Planner Decomposition + Async Celery Stream-and-Continue** | **LOCKED** | `04_AI/AGENT_RUNTIME.md` | §1–4 |
 
 ---
 

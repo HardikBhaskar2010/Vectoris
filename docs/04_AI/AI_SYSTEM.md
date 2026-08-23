@@ -44,6 +44,8 @@ The Vectoris Brain is an **agent**, not a chatbot. It must:
 - Avoid inventing capabilities it does not have
 - Respect permissions and organization policy
 
+The concrete runtime execution loop, iteration/cost guards, concurrency policies, and async Celery job coordination are formally defined in `AGENT_RUNTIME.md`.
+
 ### Example: "Find all power cables for the PAC units."
 
 ```mermaid
@@ -127,5 +129,6 @@ Vectoris employs a strict **Hybrid + Local-first** AI execution model, governed 
 
 ## 7. Cross-References
 
+- `AGENT_RUNTIME.md` (runtime loop, guards, error contracts, async execution)
 - `VECTORIS_BRAIN.md`, `PERCEPTION.md`, `AI_MEMORY.md`, `TOOL_SYSTEM.md`, `TRAINING.md`, `EVALUATION.md`, `MODEL_GOVERNANCE.md`
 - `../02_DESIGN/UX_PRINCIPLES.md` for how these principles surface in UI

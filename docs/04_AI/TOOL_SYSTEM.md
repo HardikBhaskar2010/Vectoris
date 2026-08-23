@@ -26,9 +26,12 @@ Tools are the **only** way the Brain interacts with real application state or fi
 
 **Every state-mutating tool produces a *proposal*, not a final write.** Final approval remains a human action per `../02_DESIGN/UX_PRINCIPLES.md` §1 and `AI_SYSTEM.md` §3, except where a user has explicitly directed an action in the moment (e.g., "delete this detection" in chat) — even then, the action is logged as an attributed event, not silently applied.
 
-## 3. Tool Contract Shape (Conceptual)
+## 3. Tool Contract Shape & Error Handling
 
-Each tool defines: name, description, input schema, output schema, required permission scope, whether it mutates state, and whether it requires human approval before the result is considered final. Concrete schemas: **TBD**, implementation-phase detail.
+Each tool defines: name, description, input schema, output schema, required permission scope, whether it mutates state, and whether it requires human approval before the result is considered final.
+
+- Concrete JSON schemas for tool inputs/outputs, typed error payloads (`not_found`, `permission_denied`, `timeout`, `validation_failed`, `internal_error`), and parallel vs. sequential execution rules are canonically defined in `AGENT_RUNTIME.md`.
+- Heavy tools (`perform_takeoff`, `measure_geometry`) dispatch to Celery asynchronously and return a `job_id` via the stream-and-continue pattern documented in `AGENT_RUNTIME.md` §4.
 
 ## 4. Verification Layer
 
@@ -42,6 +45,7 @@ Any failure at this layer halts the action and surfaces a clear reason — it do
 
 ## 5. Cross-References
 
+- `AGENT_RUNTIME.md` (tool schemas, typed error contracts, async Celery dispatch)
 - `AI_SYSTEM.md` §2–3 (agentic behavior, trust principles)
 - `../03_ARCHITECTURE/SYSTEM_COMPONENTS.md` (Tool Executor component)
 - `MODEL_GOVERNANCE.md` (auditability of tool actions)
