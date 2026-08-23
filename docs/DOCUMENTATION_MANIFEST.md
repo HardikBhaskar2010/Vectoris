@@ -160,6 +160,8 @@ docs/
 | R2 | OPEN_DECISIONS.md | Registry of unresolved product/technical decisions | Decided items | All | Complete |
 | R3 | MVP_BOUNDARY.md | Root-level authoritative MVP in/out list | Architecture, page detail | PRODUCT_SCOPE, PRD | Complete |
 | R4 | LONG_TERM_VISION.md | Long-term vision detail beyond VISION.md | MVP boundaries | VISION | Complete |
+| R5 | DEPENDENCIES.md | Centralized registry of all third-party libraries | Architecture context | TECH_STACK | Complete |
+| R6 | DOCUMENTATION_MANIFEST.md | Canonical index of every document in the system | Document content | All | Complete |
 
 ## Generation Order
 

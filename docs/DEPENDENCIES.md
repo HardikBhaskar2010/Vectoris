@@ -47,8 +47,8 @@ This document serves as the single source of truth for third-party libraries use
 | **FastAPI** | API serving | Backend | **RECOMMENDED** |
 | **Supabase** | Managed database, authentication, row-level security | Cloud | **LOCKED** |
 | **PostgreSQL** | Relational data model | Cloud | **LOCKED** |
-| **Redis** | Message broker for job queue | Backend | **LOCKED** |
-| **BullMQ** | Job queue management, retry logic, workers | Backend | **LOCKED** |
+| **Redis** | In-memory message broker for Celery queues | Backend | **LOCKED** |
+| **Celery** | Job queue management, retry logic, workers | Backend | **LOCKED** |
 
 ## 6. Monitoring
 

@@ -17,7 +17,7 @@ flowchart TB
     subgraph Backend["Backend (Python + FastAPI)"]
         API[API Layer]
         Agent[Vectoris Agent: Brain + Perception + Memory + Tools]
-        Jobs[Job Queue / Workers - Redis + BullMQ]
+        Jobs[Job Queue / Workers - Redis + Celery]
     end
     subgraph Cloud["Cloud (Metadata & Sync)"]
         DB[(Metadata DB - Supabase)]
