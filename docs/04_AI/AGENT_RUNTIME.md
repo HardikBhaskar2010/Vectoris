@@ -1,6 +1,6 @@
 # Vectoris — AI Agent Runtime
 
-**Status:** LOCKED (Control loop, guards, error contracts, async execution pattern)  
+**Status:** LOCKED (Control loop architecture, typed error contracts, async execution pattern) · RECOMMENDED (Specific numeric bounds in §2 — pending Phase 0.5 technical spike data)  
 **Owner of:** Agent execution control loop, runtime bounds, tool error handling contracts, concurrency, and async job integration  
 **Does not own:** High-level AI architecture (→ AI_SYSTEM.md), fine-tuning strategy (→ VECTORIS_BRAIN.md), tool inventory & permissions (→ TOOL_SYSTEM.md)
 
@@ -37,9 +37,11 @@ For each sub-goal, the runtime loops through:
 
 ## 2. Runtime Bounds & Cost Guards
 
-To prevent runaway loops, infinite retries, and unbounded compute/API expenses, every conversational turn is strictly bounded:
+To prevent runaway loops, infinite retries, and unbounded compute/API expenses, every conversational turn is bounded.
 
-| Parameter | Limit | Enforcement Behavior |
+> **Status Note (RECOMMENDED):** The numeric limits below are provisional baseline defaults. Exact limits will be calibrated during the Phase 0.5 technical spike (see `../05_IMPLEMENTATION/DEVELOPMENT_PHASES.md`) once empirical data on multi-sheet reasoning tool-call distributions is available.
+
+| Parameter | Limit (Baseline) | Enforcement Behavior |
 |---|---|---|
 | **Max Tool Calls per Turn** | `10 calls` | Halts execution; Brain yields current findings to user and requests confirmation to continue |
 | **Max ReAct Iterations** | `5 cycles` | Halts loop; forces synthesis of existing progress |
