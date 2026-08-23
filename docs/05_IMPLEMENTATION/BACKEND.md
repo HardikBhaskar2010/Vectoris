@@ -16,7 +16,7 @@ Mirrors `../03_ARCHITECTURE/SYSTEM_COMPONENTS.md`: API Gateway, Ingestion Servic
 
 ## 3. Job Queue Technology
 
-**TBD.** Must satisfy `../03_ARCHITECTURE/EVENT_SYSTEM.md`'s required properties (progress, retries, cancellation, idempotency, failure recovery). Candidates to evaluate at this phase: a Python task-queue framework backed by a broker, vs. a managed service — decision deferred to avoid premature infrastructure lock-in ahead of the technical spike's findings about actual processing time/scale needs.
+**LOCKED to Redis + Celery.** Satisfies `../03_ARCHITECTURE/EVENT_SYSTEM.md`'s required properties (progress, retries, cancellation, idempotency, failure recovery) while keeping the worker stack completely Python-native to align with the core backend layer. Celery provides native support for parent/child job dependencies (chains/groups) required for ingestion.
 
 ## 4. Document Processing Dependencies
 

@@ -14,7 +14,7 @@
 | **UI Application** | Rendering, state, user interaction | React/TS/Vite |
 | **API Gateway** | AuthN/Z, request routing, tenant scoping | Python/FastAPI |
 | **Ingestion Service** | Format adapters, canonical document representation | Python |
-| **Job Queue / Workers** | Async processing (ingestion, detection, measurement, export) | Python + queue tech (TBD, see `EVENT_SYSTEM.md`) |
+| **Job Queue / Workers** | Async processing (ingestion, detection, measurement, export) | Python + Celery |
 | **Perception Service** | Vision/OCR/geometry/detection (local and/or cloud-routed) | Python, model-backed |
 | **Vectoris Brain (Agent Core)** | Reasoning, planning, tool selection, conversation | Python, fine-tuned model-backed |
 | **Memory Service** | Project/company/user/session memory retrieval | Python + DB |

@@ -11,7 +11,6 @@
 ## Registry
 
 | ID | Decision | Blocking What | Owner | References | Status |
-| ID | Decision | Blocking What | Owner | References | Status |
 |---|---|---|---|---|---|
 | OD-03 | **Realtime delivery mechanism:** WebSocket vs. SSE vs. polling | `03_ARCHITECTURE/EVENT_SYSTEM.md` §4, `06_PAGES/PROCESSING.md` | Engineering | `EVENT_SYSTEM.md` | **Open — RECOMMENDED: SSE or polling at MVP, WebSocket if sub-second updates required** |
 | OD-04 | **Concurrent editing / conflict resolution:** last-write-wins, optimistic locking, or CRDT/OT | `03_ARCHITECTURE/EVENT_SYSTEM.md` §6, `01_PRODUCT/ACCEPTANCE_CRITERIA.md` AC-13 | Engineering / Product | `EVENT_SYSTEM.md` §6, `ACCEPTANCE_CRITERIA.md` | **Open — required before multi-user editing phase** |
@@ -28,7 +27,6 @@
 | OD-17 | **Takeoff Review: bulk-approve at MVP** | `06_PAGES/TAKEOFF_REVIEW.md` Open Questions | Product | `TAKEOFF_REVIEW.md` | **Open — TBD** |
 | OD-18 | **Takeoff Review: inline AI Q&A vs. side-panel session** | `06_PAGES/TAKEOFF_REVIEW.md` Open Questions | Product / Design | `TAKEOFF_REVIEW.md` | **Open — TBD** |
 | OD-19 | **Processing page: auto-navigate vs. prompt on completion** | `06_PAGES/PROCESSING.md` Open Questions | Product / Design | `PROCESSING.md` | **Open — TBD** |
-| OD-19 | **Processing page: auto-navigate vs. prompt on completion** | `06_PAGES/PROCESSING.md` Open Questions | Product / Design | `PROCESSING.md` | **Open — TBD** |
 
 ---
 
@@ -39,7 +37,7 @@
 | ID | Decision | Resolved | Document |
 |---|---|---|---|
 | OD-01 | Database engine (Supabase PostgreSQL) | 2026-08-23 | `TECH_STACK.md`, `DATA_MODEL.md` |
-| OD-02 | Job queue technology (Redis + BullMQ) | 2026-08-23 | `EVENT_SYSTEM.md`, `TECH_STACK.md` |
+| OD-02 | Job queue technology (Redis + Celery) | 2026-08-23 | `EVENT_SYSTEM.md`, `TECH_STACK.md` |
 | OD-10 | Auth provider (Supabase Auth) | 2026-08-23 | `SECURITY.md`, `TECH_STACK.md` |
 | OD-12 | Retention / deletion policy (30-day grace period) | 2026-08-23 | `DATA_LIFECYCLE.md` |
 | OD-20 | Typography (Urbanist + Plex Mono) | 2026-08-23 | `DESIGN_SYSTEM.md` |

@@ -10,7 +10,10 @@
 
 ```mermaid
 flowchart TD
+    Landing --> MarketingLanding[Marketing Landing]
     Landing --> Auth
+    Auth --> Onboarding
+    Onboarding --> Dashboard
     Auth --> Dashboard
     Dashboard --> Projects
     Projects --> CreateProject[Create Project]
@@ -23,22 +26,28 @@ flowchart TD
     TakeoffReview --> LineItemDetails[Line Item Details]
     TakeoffReview --> Export
     ProjectOverview --> Sessions[AI Chat Sessions]
+    Dashboard --> Settings
+    ProjectOverview --> Settings
 ```
 
 ## 2. Contextual Surfaces (Not Standalone Pages)
 
-Per founder decision, the following are modal/drawer/popover/command-surface UI, not dedicated pages: organization settings, member management, billing, project settings, session sharing permissions. They can be invoked from Dashboard, Project Overview, or a global command surface, but do not have their own top-level route in this app-flow graph.
+Per founder decision, the following are modal/drawer/popover/command-surface UI, not dedicated pages: member management, billing, session sharing permissions. They can be invoked from Dashboard, Project Overview, or a global command surface, but do not have their own top-level route in this app-flow graph.
 
 ## 3. Entry/Exit Conditions Summary
 
 | Page | Typical Entry | Typical Exit |
 |---|---|---|
+| Marketing Landing | External traffic | → Landing, → Auth |
 | Landing | Unauthenticated user | → Auth |
-| Auth | From Landing or session expiry | → Dashboard on success |
-| Dashboard | Post-auth | → Projects, → Create Project |
+| Auth | From Landing or session expiry | → Onboarding (first time), → Dashboard |
+| Onboarding | Post-auth (first time) | → Dashboard |
+| Dashboard | Post-auth or Post-onboarding | → Projects, → Create Project, → Settings |
 | Projects | From Dashboard | → Create Project, → Project Overview |
 | Create Project | From Projects/Dashboard | → Project Overview on success |
-| Project Overview | From Projects, or post-creation | → Document Upload, → Sessions (open existing or start new), → Takeoff Review (if takeoff exists) |
+| Project Overview | From Projects, or post-creation | → Document Upload, → Sessions (open existing or start new), → Takeoff Review (if takeoff exists), → Settings |
+| Settings | From Dashboard or Project Overview | → Return to previous |
+| Sessions | From Project Overview | → Return to Project Overview |
 | Document Upload | From Project Overview | → Processing |
 | Processing | Post-upload | → Drawing Viewer (auto or on completion) |
 | Drawing / Takeoff Workspace | Post-processing, or returning to existing project | → Takeoff Review |

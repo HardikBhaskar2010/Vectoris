@@ -20,13 +20,13 @@
 | Metadata database | Supabase / PostgreSQL | **LOCKED** |
 | Authentication | Supabase Auth | **LOCKED** |
 | Cloud edge/metadata services | Cloudflare (where appropriate) | PROVISIONAL |
-| Background jobs | Redis + BullMQ | **LOCKED** |
+| Background jobs | Redis + Celery | **LOCKED** |
 | Perception model | Fine-tuned open-source or Gemini | PROVISIONAL |
 | Brain model | Fine-tuned open-source foundation model | RECOMMENDED |
 | Drawing viewer core | PDF.js | RECOMMENDED |
 | Drawing viewer interaction layer | React-Konva (or equivalent) | RECOMMENDED |
 | Product analytics | PostHog | RECOMMENDED |
-| Deployment | Vercel (Frontend) + Render (Backend) | RECOMMENDED |
+| Deployment | Vercel (Frontend) + Render (Backend) | PROVISIONAL |
 
 ## 2. UI / Component Ecosystem
 
@@ -58,19 +58,19 @@ Vectoris uses a curated multi-library UI ecosystem.
 
 *(Note: Tailark is explicitly excluded from the Vectoris ecosystem).*
 
-## 2. Why Vite, Not Next.js, for the Desktop App
+## 3. Why Vite, Not Next.js, for the Desktop App
 
 Vectoris is fundamentally a desktop/local-first engineering application: local files, local AI, filesystem access, large drawing packages, desktop-native workflows, potential GPU/local compute, offline capability. Next.js's SSR/routing model is oriented toward server-rendered web apps; it adds no value and real friction inside a Tauri shell. Next.js remains valid for the marketing site, public docs, and SEO-oriented pages — a separate deployable, not the desktop runtime. Full ADR: `ARCHITECTURE.md`-linked decision below.
 
-## 3. Why Python + FastAPI for Backend
+## 4. Why Python + FastAPI for Backend
 
 The AI/ML ecosystem (PyTorch, Transformers, OpenCV, OCR tooling, document processing, fine-tuning, evaluation) is Python-native. FastAPI provides async-friendly API surface suited to job-queue-backed long-running operations. Rust remains responsible for native application integration, filesystem, OS-level capability, and the Tauri layer itself — not for AI orchestration.
 
-## 4. Perception Model Note
+## 5. Perception Model Note
 
 Gemini is a **candidate**, not a lock. The architecture must support local perception models, optional cloud perception models, model routing, fallback models, and model versioning (see `../04_AI/PERCEPTION.md`). The technical spike (Phase 0.5, see `../05_IMPLEMENTATION/DEVELOPMENT_PHASES.md`) determines the actual perception model(s) used.
 
-## 5. ADR — Vite vs. Next.js
+## 6. ADR — Vite vs. Next.js
 
 - **Decision:** Vite for the Vectoris desktop app; Next.js reserved for marketing/public web.
 - **Status:** LOCKED
@@ -81,7 +81,7 @@ Gemini is a **candidate**, not a lock. The architecture must support local perce
 - **Consequences:** Marketing site is a fully separate deployable using Next.js on Vercel; no shared runtime with the desktop app.
 - **Revisit conditions:** If Vectoris ever needs a full browser-based (non-desktop) product surface with SSR needs beyond what a SPA can serve.
 
-## 6. ADR — Tauri vs. Web-Only
+## 7. ADR — Tauri vs. Web-Only
 
 - **Decision:** Tauri desktop shell.
 - **Status:** LOCKED
@@ -92,7 +92,7 @@ Gemini is a **candidate**, not a lock. The architecture must support local perce
 - **Consequences:** Rust becomes a required skill in the stack (owned by native/OS layer, not by AI/backend engineers).
 - **Revisit conditions:** If local-first requirement is ever relaxed (not currently anticipated).
 
-## 7. Final Vectoris Core Stack (Architecture Diagram)
+## 8. Final Vectoris Core Stack (Architecture Diagram)
 
 ```text
                  VECTORIS
@@ -111,7 +111,7 @@ Gemini is a **candidate**, not a lock. The architecture must support local perce
         ┌────────────┼────────────┐
         ↓            ↓            ↓
      Supabase      Redis       AI Layer
-     PostgreSQL   + BullMQ         │
+     PostgreSQL   + Celery         │
      + Auth          │        ┌────┴────┐
                      │        │         │
                   Workers  Perception Brain
@@ -123,7 +123,7 @@ Gemini is a **candidate**, not a lock. The architecture must support local perce
                                Vectoris Runtime
 ```
 
-## 8. Cross-References
+## 9. Cross-References
 
 - `ARCHITECTURE.md`, `SYSTEM_COMPONENTS.md`
 - Database ADR: `DATA_MODEL.md`

@@ -41,16 +41,17 @@ Mechanism (WebSocket vs. Server-Sent Events vs. polling): **TBD.** Recommend sta
 
 ## 5. Queue Technology (Locked)
 
-The queue architecture is **LOCKED** to **Redis + BullMQ**.
+The queue architecture is **LOCKED** to **Redis + Celery**.
 
 **Architecture:**
 - FastAPI (Job Gateway)
 - Redis (Message broker)
-- BullMQ Workers (Node/TS or Python equivalents if preferred, processing jobs)
+- Celery Workers (Python-native, processing jobs)
 
-**Why Redis + BullMQ:**
-- Redis is open-source software, allowing self-hosted local development and cost-effective MVP production deployments, before needing to scale to managed Redis instances.
-- BullMQ provides native support for retries, rate limiting, and parent/child job dependencies (useful for document-to-sheet ingestion pipelines).
+**Why Redis + Celery:**
+- Keeps the entire backend and worker stack strictly Python-native.
+- Native support for retries, rate limiting, and parent/child job dependencies (chains, groups, chords), which are required for the document-to-sheet ingestion pipeline.
+- Workers can import and call Perception/Brain/Tool Executor code directly with no cross-process boundary.
 
 ## 6. Concurrent Editing / Conflict Handling
 

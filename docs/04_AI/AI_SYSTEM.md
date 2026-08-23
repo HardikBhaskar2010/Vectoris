@@ -115,34 +115,7 @@ This is the single most important architectural boundary in the AI system. Viola
 
 Vectoris employs a strict **Hybrid + Local-first** AI execution model, governed by an Execution Router.
 
-```text
-                 Vectoris Agent
-                       │
-                Execution Router
-                 /            \
-                ↓              ↓
-           LOCAL              CLOUD
-              │                  │
-       File processing      Approved API
-       Local models         Heavy processing
-       OCR / vision         Cloud inference
-       Local tools          Other services
-```
-
-### The Router Policy
-The router dynamically determines execution location by considering:
-1. Privacy policy (is cloud permitted for this org/project?)
-2. User/org permissions
-3. Model availability
-4. Local hardware capability
-5. Task requirements
-6. Network availability
-
-### Governing Philosophy
-- **Default:** Local whenever practical.
-- **Cloud:** Only when permitted and explicitly governed by the applicable policy.
-
-This ensures Vectoris maintains a genuinely local-first architecture, rather than simply claiming to "support local AI."
+> **Implementation Note:** The detailed architecture of the Execution Router (diagrams, routing policies, and local/cloud fallback mechanisms) is canonically owned and documented in `PERCEPTION.md` §3–5. Do not duplicate those rules here.
 
 ## 6. Model Choices — Status Summary
 
@@ -152,7 +125,7 @@ This ensures Vectoris maintains a genuinely local-first architecture, rather tha
 | Perception | Architecture supports local + cloud + routing via Execution Router | **LOCKED** (architecture) — see `PERCEPTION.md` |
 | Training from scratch | Not planned unless future evidence strongly justifies it | REJECTED (for now) |
 
-## 6. Cross-References
+## 7. Cross-References
 
 - `VECTORIS_BRAIN.md`, `PERCEPTION.md`, `AI_MEMORY.md`, `TOOL_SYSTEM.md`, `TRAINING.md`, `EVALUATION.md`, `MODEL_GOVERNANCE.md`
 - `../02_DESIGN/UX_PRINCIPLES.md` for how these principles surface in UI

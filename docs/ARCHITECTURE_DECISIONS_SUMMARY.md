@@ -31,7 +31,7 @@
 | ADR-17 | **Deployment: Vercel (marketing) + Render (API) + native installers (desktop)** | PROVISIONAL | `05_IMPLEMENTATION/DEPLOYMENT.md` | §1 |
 | ADR-18 | **Motion library: Motion / Framer Motion** | RECOMMENDED | `02_DESIGN/MOTION.md` | §1 |
 | ADR-19 | **Drawing viewer: PDF.js + React-Konva** | RECOMMENDED | `03_ARCHITECTURE/TECH_STACK.md` | §1 |
-| ADR-20 | **Job queue technology: Redis + BullMQ** | **LOCKED** | `03_ARCHITECTURE/EVENT_SYSTEM.md` | §5 |
+| ADR-20 | **Job queue technology: Redis + Celery** | **LOCKED** | `03_ARCHITECTURE/EVENT_SYSTEM.md` | §5 |
 | ADR-21 | **Realtime delivery: TBD (SSE/WebSocket/polling)** | TBD | `03_ARCHITECTURE/EVENT_SYSTEM.md` | §4 |
 | ADR-22 | **Auth provider: Supabase Auth** | **LOCKED** | `03_ARCHITECTURE/SECURITY.md` | §2 |
 | ADR-23 | **Project type stored as three separate fields (ai_inferred / user_provided / verified), never conflated** | **LOCKED** | `03_ARCHITECTURE/DATA_MODEL.md` | §2 (Project entity) |

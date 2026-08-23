@@ -136,26 +136,30 @@ docs/
 | 35 | AI_IMPLEMENTATION.md | How AI_SYSTEM gets built | AI theory (→ AI_SYSTEM) | AI_SYSTEM, BACKEND | Complete |
 | 36 | TESTING.md | Test strategy across layers | AI evaluation (→ EVALUATION) | FRONTEND, BACKEND | Complete |
 | 37 | DEPLOYMENT.md | Deployment topology & environments | CI pipeline YAML detail | TECH_STACK | Complete |
-| 38 | LANDING.md | Landing/unauthenticated page behavior | Cross-page navigation logic | APP_FLOW | **Not Yet Generated** |
-| 39 | AUTH.md | Auth/sign-in/sign-up page behavior | Cross-page navigation logic | APP_FLOW | **Not Yet Generated** |
-| 40 | DASHBOARD.md | Dashboard page behavior | Cross-page navigation logic | APP_FLOW, CORE_WORKFLOWS | Complete |
-| 41 | PROJECTS.md | Projects list page | — | APP_FLOW | Complete |
-| 42 | CREATE_PROJECT.md | Create project form | — | APP_FLOW | Complete |
-| 43 | PROJECT_OVERVIEW.md | Project hub page | — | APP_FLOW | Complete |
-| 44 | DOCUMENT_UPLOAD.md | Upload surface | — | APP_FLOW | Complete |
-| 45 | PROCESSING.md | Processing/progress page | — | APP_FLOW | Complete |
-| 46 | DRAWING_VIEWER.md | Drawing/Takeoff Workspace | — | APP_FLOW | Complete |
-| 47 | TAKEOFF_REVIEW.md | Takeoff review table | — | APP_FLOW | Complete |
-| 48 | LINE_ITEM_DETAILS.md | Line item detail panel | — | APP_FLOW | Complete |
-| 49 | EXPORT.md | Export interaction | — | APP_FLOW | **Not Yet Generated** |
-| 50 | OBSERVABILITY.md | Logging/monitoring/analytics ownership | AI evaluation metrics | AI_SYSTEM | **Not Yet Generated** |
-| 51 | BACKUPS.md | Backup/restore policy | Storage architecture detail | STORAGE | **Not Yet Generated** |
-| 52 | ENVIRONMENT.md | Environments (local/staging/prod), config | Deployment topology (→ DEPLOYMENT) | DEPLOYMENT | **Not Yet Generated** |
-| 53 | DATA_LIFECYCLE.md | Retention, deletion, export/erasure | Security architecture (→ SECURITY) | SECURITY | **Not Yet Generated** |
-| R1 | ARCHITECTURE_DECISIONS_SUMMARY.md | Summary index of all ADRs across all docs | Full ADR rationale (that lives in owning files) | All architecture files | **Not Yet Generated** |
-| R2 | OPEN_DECISIONS.md | Registry of unresolved product/technical decisions | Decided items | All | **Not Yet Generated** |
-| R3 | MVP_BOUNDARY.md | Root-level authoritative MVP in/out list | Architecture, page detail | PRODUCT_SCOPE, PRD | **Not Yet Generated** |
-| R4 | LONG_TERM_VISION.md | Long-term vision detail beyond VISION.md | MVP boundaries | VISION | **Not Yet Generated** |
+| 38 | MARKETING_LANDING.md | Marketing landing page | Core product layout | APP_FLOW | Complete |
+| 39 | LANDING.md | Landing/unauthenticated page behavior | Cross-page navigation logic | APP_FLOW | Complete |
+| 40 | AUTH.md | Auth/sign-in/sign-up page behavior | Cross-page navigation logic | APP_FLOW | Complete |
+| 41 | ONBOARDING.md | Onboarding and guided tours | Persistent layouts | APP_FLOW | Complete |
+| 42 | DASHBOARD.md | Dashboard page behavior | Cross-page navigation logic | APP_FLOW, CORE_WORKFLOWS | Complete |
+| 43 | PROJECTS.md | Projects list page | — | APP_FLOW | Complete |
+| 44 | CREATE_PROJECT.md | Create project form | — | APP_FLOW | Complete |
+| 45 | PROJECT_OVERVIEW.md | Project hub page | — | APP_FLOW | Complete |
+| 46 | SETTINGS.md | Organization and user settings page | — | APP_FLOW | Complete |
+| 47 | DOCUMENT_UPLOAD.md | Upload surface | — | APP_FLOW | Complete |
+| 48 | PROCESSING.md | Processing/progress page | — | APP_FLOW | Complete |
+| 49 | DRAWING_VIEWER.md | Drawing/Takeoff Workspace | — | APP_FLOW | Complete |
+| 50 | TAKEOFF_REVIEW.md | Takeoff review table | — | APP_FLOW | Complete |
+| 51 | LINE_ITEM_DETAILS.md | Line item detail panel | — | APP_FLOW | Complete |
+| 52 | EXPORT.md | Export interaction | — | APP_FLOW | Complete |
+| 53 | AI_SESSION.md | AI chat session / assistant-ui layer | Core chat model | APP_FLOW, AI_SYSTEM | Complete |
+| 54 | OBSERVABILITY.md | Logging/monitoring/analytics ownership | AI evaluation metrics | AI_SYSTEM | Complete |
+| 55 | BACKUPS.md | Backup/restore policy | Storage architecture detail | STORAGE | Complete |
+| 56 | ENVIRONMENT.md | Environments (local/staging/prod), config | Deployment topology (→ DEPLOYMENT) | DEPLOYMENT | Complete |
+| 57 | DATA_LIFECYCLE.md | Retention, deletion, export/erasure | Security architecture (→ SECURITY) | SECURITY | Complete |
+| R1 | ARCHITECTURE_DECISIONS_SUMMARY.md | Summary index of all ADRs across all docs | Full ADR rationale (that lives in owning files) | All architecture files | Complete |
+| R2 | OPEN_DECISIONS.md | Registry of unresolved product/technical decisions | Decided items | All | Complete |
+| R3 | MVP_BOUNDARY.md | Root-level authoritative MVP in/out list | Architecture, page detail | PRODUCT_SCOPE, PRD | Complete |
+| R4 | LONG_TERM_VISION.md | Long-term vision detail beyond VISION.md | MVP boundaries | VISION | Complete |
 
 ## Generation Order
 

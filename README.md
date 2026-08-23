@@ -18,7 +18,7 @@ Final, locked screen layouts and visual components are located in the `designs/s
 
 ## 🏗️ Architecture Overview
 
-Vectoris is a local-first desktop application wrapped in a **Tauri** shell, communicating with a **Python/FastAPI** backend and **Supabase** for metadata syncing and authentication. Long-running AI jobs and document ingestion are handled asynchronously via **Redis and BullMQ**.
+Vectoris is a local-first desktop application wrapped in a **Tauri** shell, communicating with a **Python/FastAPI** backend and **Supabase** for metadata syncing and authentication. Long-running AI jobs and document ingestion are handled asynchronously via **Redis and Celery**.
 
 The frontend is built with **React, TypeScript, and Vite**, leveraging a curated ecosystem of libraries (`Bklit UI`, `ReactBits`, `assistant-ui`, `Skiper UI`) that are adapted strictly to the proprietary Vectoris Design System.
 
