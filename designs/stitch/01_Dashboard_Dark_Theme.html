@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+  <title>VECTORIS — Engineering Intelligence Dashboard</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;700;800&family=Hanken+Grotesk:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            surface: '#131313',
+            'surface-dim': '#0e0e0e',
+            'surface-low': '#1b1b1b',
+            'surface-container': '#1f1f1f',
+            'surface-high': '#2a2a2a',
+            'coffee-bean': '#1a0706',
+            'black-cherry': '#55100d',
+            'racing-red': '#dd0200',
+            'on-surface': '#e2e2e2',
+            'on-surface-variant': '#e9bcb5',
+            'neon-cyan': '#00f2fe',
+            'neon-green': '#10b981',
+            'neon-amber': '#f59e0b'
+          },
+          fontFamily: {
+            display: ['Bricolage Grotesque', 'sans-serif'],
+            body: ['Hanken Grotesk', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background-color: #131313;
+      color: #e2e2e2;
+      font-family: 'Hanken Grotesk', sans-serif;
+    }
+    .liquid-glass {
+      background: linear-gradient(145deg, rgba(31, 31, 31, 0.75) 0%, rgba(20, 20, 22, 0.5) 100%);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+    }
+    .red-glow {
+      box-shadow: 0 0 20px rgba(221, 2, 0, 0.35);
+    }
+    .cad-grid {
+      background-image: 
+        linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+      background-size: 24px 24px;
+    }
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 0.8; filter: drop-shadow(0 0 4px rgba(221, 2, 0, 0.7)); }
+      50% { opacity: 1; filter: drop-shadow(0 0 10px rgba(221, 2, 0, 1)); }
+    }
+    .pulse-glow {
+      animation: pulseGlow 2.5s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="antialiased min-h-screen flex flex-col">
+
+  <!-- Desktop Top Header -->
+  <header class="h-16 bg-[#111113]/90 border-b border-white/5 fixed top-0 inset-x-0 z-40 flex items-center justify-between px-6 pl-72 backdrop-blur-xl">
+    <!-- Search Bar -->
+    <div class="flex items-center w-full max-w-lg">
+      <div class="relative w-full">
+        <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400 text-sm">search</span>
+        <input class="w-full bg-[#1b1b1f]/70 border border-white/10 text-neutral-200 rounded-full pl-10 pr-12 py-2 text-xs font-body focus:outline-none focus:border-racing-red/60 focus:ring-1 focus:ring-racing-red/50 transition placeholder:text-neutral-500" placeholder="Search blueprints, sheets, component tags, PAC feeders... (⌘ K)" type="text"/>
+        <kbd class="absolute right-3.5 top-1/2 -translate-y-1/2 text-[10px] font-mono text-neutral-400 bg-white/5 px-1.5 py-0.5 rounded border border-white/10">⌘K</kbd>
+      </div>
+    </div>
+
+    <!-- Header Actions -->
+    <div class="flex items-center gap-4">
+      <div class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-low border border-white/5 text-xs font-mono text-neutral-300">
+        <span class="w-2 h-2 rounded-full bg-neon-green"></span>
+        <span>Local Core Engine</span>
+      </div>
+      <button class="p-2 rounded-full hover:bg-white/5 text-neutral-300 hover:text-white transition relative">
+        <span class="material-symbols-outlined text-[20px]">notifications</span>
+        <span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-racing-red"></span>
+      </button>
+      <div class="h-5 w-px bg-white/10"></div>
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-racing-red to-black-cherry flex items-center justify-center font-mono font-bold text-xs text-white border border-white/10">
+          SS
+        </div>
+        <div class="text-left hidden md:block">
+          <div class="text-xs font-bold text-white leading-tight">Shubham Singh</div>
+          <div class="text-[10px] text-neutral-400 font-mono">Owner • Apex Eng</div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Persistent Left Sidebar -->
+  <aside class="w-64 bg-[#0f0f11]/95 border-r border-white/5 fixed inset-y-0 left-0 z-50 flex flex-col p-4">
+    <!-- Brand Logo -->
+    <div class="flex items-center gap-3 px-2 py-3 mb-4">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-racing-red to-black-cherry flex items-center justify-center red-glow">
+        <span class="material-symbols-outlined text-white text-lg">polyline</span>
+      </div>
+      <div>
+        <span class="font-display font-bold text-base text-white tracking-tight">VECTORIS</span>
+        <div class="text-[9px] font-mono text-neutral-500 uppercase tracking-wider">Engineering Intel</div>
+      </div>
+    </div>
+
+    <!-- Workspace Selector -->
+    <div class="mb-4 p-2 rounded-lg bg-surface-low/80 border border-white/5 flex items-center justify-between cursor-pointer hover:border-white/10 transition">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <div class="w-6 h-6 rounded bg-black-cherry text-white font-mono font-bold text-xs flex items-center justify-center">A</div>
+        <div class="min-w-0">
+          <div class="text-xs font-semibold text-neutral-200 truncate">Apex Engineering</div>
+          <div class="text-[10px] text-neutral-500 font-mono">12 members</div>
+        </div>
+      </div>
+      <span class="material-symbols-outlined text-neutral-500 text-sm">unfold_more</span>
+    </div>
+
+    <!-- Navigation Menu -->
+    <nav class="flex-1 space-y-1">
+      <a class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-gradient-to-r from-racing-red/25 to-black-cherry/30 text-white font-medium text-xs border border-racing-red/40 shadow-sm" href="#">
+        <span class="material-symbols-outlined text-racing-red text-[18px]">dashboard</span>
+        <span>Dashboard</span>
+      </a>
+      <a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 font-medium text-xs transition" href="#">
+        <span class="material-symbols-outlined text-[18px]">folder</span>
+        <span>Projects</span>
+      </a>
+      <a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 font-medium text-xs transition" href="04_Drawing_Takeoff_Workspace.html">
+        <span class="material-symbols-outlined text-[18px]">architecture</span>
+        <span>Drawing Viewer</span>
+      </a>
+      <a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 font-medium text-xs transition" href="04_Drawing_Takeoff_Workspace.html">
+        <span class="material-symbols-outlined text-[18px]">straighten</span>
+        <span>Takeoff Workspace</span>
+      </a>
+      <a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 font-medium text-xs transition" href="06_AI_Session_Agent_Chat.html">
+        <span class="material-symbols-outlined text-[18px]">psychology</span>
+        <span>AI Sessions</span>
+      </a>
+      <a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 font-medium text-xs transition" href="05_Document_Processing_Pipeline.html">
+        <span class="material-symbols-outlined text-[18px]">description</span>
+        <span>Documents</span>
+      </a>
+      <a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 font-medium text-xs transition" href="08_Takeoff_Review_BOQ_Export.html">
+        <span class="material-symbols-outlined text-[18px]">receipt_long</span>
+        <span>BOQ Reports</span>
+      </a>
+      <a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 font-medium text-xs transition" href="#">
+        <span class="material-symbols-outlined text-[18px]">settings</span>
+        <span>Settings</span>
+      </a>
+    </nav>
+
+    <!-- Plan Card -->
+    <div class="mt-auto p-3 rounded-lg bg-surface-low/50 border border-white/5 text-xs">
+      <div class="flex items-center justify-between text-neutral-300 font-medium mb-1">
+        <span>Active Workspace</span>
+        <span class="text-[10px] font-mono text-neon-green">Local Ready</span>
+      </div>
+      <div class="w-full bg-white/10 h-1.5 rounded-full overflow-hidden mb-2">
+        <div class="bg-racing-red h-full rounded-full w-3/5"></div>
+      </div>
+      <div class="text-[10px] font-mono text-neutral-500">436 sheets indexed</div>
+    </div>
+  </aside>
+
+  <!-- Main Drawing-First Dashboard Canvas -->
+  <main class="pl-64 pt-16 flex-1 flex flex-col p-6 space-y-6">
+
+    <!-- Header Welcome & Primary CTAs -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div>
+        <h1 class="font-display font-bold text-2xl text-white tracking-tight flex items-center gap-2">
+          Good evening, Shubham <span class="text-xl">👋</span>
+        </h1>
+        <p class="text-xs text-neutral-400 font-body">Drawing intelligence, electrical takeoffs, and component detection across active projects.</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <button class="px-4 py-2 rounded-lg bg-surface-low border border-white/10 hover:bg-surface-high text-neutral-200 text-xs font-medium transition flex items-center gap-2">
+          <span class="material-symbols-outlined text-sm">add</span> New Project
+        </button>
+        <button class="px-4 py-2 rounded-lg bg-gradient-to-r from-racing-red to-[#b30000] hover:brightness-110 text-white text-xs font-display font-bold transition flex items-center gap-2 red-glow">
+          <span class="material-symbols-outlined text-sm">upload_file</span> Upload Drawings (DWG/PDF)
+        </button>
+      </div>
+    </div>
+
+    <!-- 4 High-Density Engineering KPI Cards (Compact & Grounded) -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <!-- KPI 1 -->
+      <div class="liquid-glass rounded-xl p-4 flex items-center justify-between">
+        <div>
+          <div class="text-[11px] font-mono uppercase text-neutral-400">Active Projects</div>
+          <div class="font-mono text-2xl font-bold text-white mt-0.5">24</div>
+          <div class="text-[10px] font-mono text-neon-green flex items-center gap-1 mt-1">
+            <span class="material-symbols-outlined text-[12px]">trending_up</span> +3 active this week
+          </div>
+        </div>
+        <div class="w-10 h-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-neutral-300">
+          <span class="material-symbols-outlined text-lg">domain</span>
+        </div>
+      </div>
+
+      <!-- KPI 2 -->
+      <div class="liquid-glass rounded-xl p-4 flex items-center justify-between">
+        <div>
+          <div class="text-[11px] font-mono uppercase text-neutral-400">Sheets Processed</div>
+          <div class="font-mono text-2xl font-bold text-white mt-0.5">436</div>
+          <div class="text-[10px] font-mono text-neon-green flex items-center gap-1 mt-1">
+            <span class="material-symbols-outlined text-[12px]">check_circle</span> Calibration complete
+          </div>
+        </div>
+        <div class="w-10 h-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-neutral-300">
+          <span class="material-symbols-outlined text-lg">architecture</span>
+        </div>
+      </div>
+
+      <!-- KPI 3 -->
+      <div class="liquid-glass rounded-xl p-4 flex items-center justify-between border-racing-red/30">
+        <div>
+          <div class="text-[11px] font-mono uppercase text-neutral-400">Takeoff Counts</div>
+          <div class="font-mono text-2xl font-bold text-racing-red mt-0.5">18,240</div>
+          <div class="text-[10px] font-mono text-neutral-400 flex items-center gap-1 mt-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-neon-green"></span> Ready for review
+          </div>
+        </div>
+        <div class="w-10 h-10 rounded-lg bg-racing-red/10 border border-racing-red/30 flex items-center justify-center text-racing-red">
+          <span class="material-symbols-outlined text-lg">cable</span>
+        </div>
+      </div>
+
+      <!-- KPI 4 -->
+      <div class="liquid-glass rounded-xl p-4 flex items-center justify-between">
+        <div>
+          <div class="text-[11px] font-mono uppercase text-neutral-400">Verified Line Items</div>
+          <div class="font-mono text-2xl font-bold text-white mt-0.5">380</div>
+          <div class="text-[10px] font-mono text-neutral-400 flex items-center gap-1 mt-1">
+            <span>BOQ Export Ready</span>
+          </div>
+        </div>
+        <div class="w-10 h-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-neutral-300">
+          <span class="material-symbols-outlined text-lg">receipt_long</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- DRAWING-FIRST HERO SECTION: Live Blueprint Viewport + Takeoff Stream -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1">
+      
+      <!-- LEFT HERO (7 Columns): Live Drawing & Blueprint Intelligence Viewport -->
+      <div class="lg:col-span-7 liquid-glass rounded-2xl p-5 flex flex-col justify-between cad-grid relative overflow-hidden border border-white/10 shadow-2xl">
+        
+        <!-- Viewport Header Bar -->
+        <div class="flex items-center justify-between pb-3 border-b border-white/10 z-10">
+          <div class="flex items-center gap-2.5">
+            <div class="w-2.5 h-2.5 rounded-full bg-racing-red animate-ping"></div>
+            <div>
+              <div class="text-xs font-bold text-white font-display flex items-center gap-2">
+                ABC Data Center — E-104 Cable Tray & Feeder Layout
+                <span class="px-1.5 py-0.2 rounded text-[9px] font-mono bg-racing-red/20 text-racing-red border border-racing-red/30">Active Sheet</span>
+              </div>
+              <div class="text-[10px] font-mono text-neutral-400">Scale: 1:100 Metric | Layer: ELEC-TRAY-FEEDER | 142 Components Detected</div>
+            </div>
+          </div>
+          <a href="04_Drawing_Takeoff_Workspace.html" class="px-3 py-1.5 rounded-lg bg-racing-red/20 hover:bg-racing-red/30 text-racing-red text-xs font-mono font-semibold border border-racing-red/40 flex items-center gap-1.5 transition">
+            <span>Open in Takeoff Workspace</span>
+            <span class="material-symbols-outlined text-[14px]">open_in_new</span>
+          </a>
+        </div>
+
+        <!-- Embedded Interactive Mini CAD Drawing Canvas -->
+        <div class="my-4 relative h-72 rounded-xl bg-[#09090c] border border-white/10 flex items-center justify-center overflow-hidden">
+          
+          <svg class="w-full h-full p-4" viewBox="0 0 800 400" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <g opacity="0.3" stroke="#4a5568" stroke-width="1">
+              <polygon points="80,260 360,370 720,210 440,100"/>
+              <line x1="80" y1="260" x2="80" y2="140"/>
+              <line x1="440" y1="100" x2="440" y2="20"/>
+              <line x1="720" y1="210" x2="720" y2="90"/>
+            </g>
+            <!-- Cable Tray Polyline Measurement Run -->
+            <polyline points="200,240 340,300 600,180 460,120 200,240" stroke="#dd0200" stroke-width="3.5" stroke-dasharray="6 3" class="pulse-glow"/>
+            
+            <!-- Detected LED Troffers (Bounding Boxes) -->
+            <polygon points="260,180 290,195 280,205 250,190" stroke="#00f2fe" stroke-width="1.8" fill="rgba(0,242,254,0.25)"/>
+            <polygon points="320,150 350,165 340,175 310,160" stroke="#00f2fe" stroke-width="1.8" fill="rgba(0,242,254,0.25)"/>
+            <polygon points="380,220 410,235 400,245 370,230" stroke="#dd0200" stroke-width="2" fill="rgba(221,2,0,0.3)"/>
+            <polygon points="440,190 470,205 460,215 430,200" stroke="#00f2fe" stroke-width="1.8" fill="rgba(0,242,254,0.25)"/>
+            
+            <!-- Dimension Tag -->
+            <rect x="250" y="270" width="60" height="18" rx="3" fill="#131313" stroke="#dd0200" stroke-width="1"/>
+            <text x="256" y="283" fill="#ffb4a8" font-size="10" font-family="JetBrains Mono" font-weight="bold">127.4m</text>
+          </svg>
+
+          <!-- Floating HUD Overlay -->
+          <div class="absolute top-3 right-3 flex gap-1.5 bg-black/80 px-2.5 py-1 rounded-md text-[10px] font-mono text-neutral-300 border border-white/10">
+            <span class="text-neon-green font-bold">47 Fixtures</span>
+            <span class="text-neutral-500">•</span>
+            <span class="text-racing-red font-bold">127.4m Tray</span>
+            <span class="text-neutral-500">•</span>
+            <span class="text-neon-cyan font-bold">6 Feeders</span>
+          </div>
+        </div>
+
+        <!-- Telemetry & Live Project Status Table -->
+        <div class="pt-3 border-t border-white/10">
+          <div class="text-[11px] font-mono uppercase text-neutral-400 mb-2 flex items-center justify-between">
+            <span>Recent Projects & Drawing Status</span>
+            <a href="#" class="text-racing-red hover:underline text-[10px]">View all 24 projects →</a>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs border-collapse font-mono">
+              <thead>
+                <tr class="text-[10px] text-neutral-500 border-b border-white/5 uppercase">
+                  <th class="pb-1.5">Project Name</th>
+                  <th class="pb-1.5">Discipline</th>
+                  <th class="pb-1.5">Sheets</th>
+                  <th class="pb-1.5">Takeoff Status</th>
+                  <th class="pb-1.5 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-white/5 text-[11px]">
+                <tr class="hover:bg-white/5 transition">
+                  <td class="py-2 text-white font-sans font-medium">ABC Data Center</td>
+                  <td class="py-2 text-neutral-400">Electrical & Feeders</td>
+                  <td class="py-2 text-neutral-300">142 DWG</td>
+                  <td class="py-2">
+                    <span class="px-1.5 py-0.5 rounded text-[9px] bg-neon-amber/20 text-neon-amber border border-neon-amber/30">In Progress (68%)</span>
+                  </td>
+                  <td class="py-2 text-right">
+                    <a href="04_Drawing_Takeoff_Workspace.html" class="text-racing-red hover:underline text-[10px]">Inspect</a>
+                  </td>
+                </tr>
+                <tr class="hover:bg-white/5 transition">
+                  <td class="py-2 text-white font-sans font-medium">Greenfield Hospital</td>
+                  <td class="py-2 text-neutral-400">Power & Lighting</td>
+                  <td class="py-2 text-neutral-300">98 PDF</td>
+                  <td class="py-2">
+                    <span class="px-1.5 py-0.5 rounded text-[9px] bg-black-cherry text-on-surface-variant border border-white/10">In Review (42%)</span>
+                  </td>
+                  <td class="py-2 text-right">
+                    <a href="04_Drawing_Takeoff_Workspace.html" class="text-racing-red hover:underline text-[10px]">Inspect</a>
+                  </td>
+                </tr>
+                <tr class="hover:bg-white/5 transition">
+                  <td class="py-2 text-white font-sans font-medium">Skyline Tower</td>
+                  <td class="py-2 text-neutral-400">Commercial MEP</td>
+                  <td class="py-2 text-neutral-300">76 DWG</td>
+                  <td class="py-2">
+                    <span class="px-1.5 py-0.5 rounded text-[9px] bg-neon-green/20 text-neon-green border border-neon-green/30">Verified (100%)</span>
+                  </td>
+                  <td class="py-2 text-right">
+                    <a href="08_Takeoff_Review_BOQ_Export.html" class="text-racing-red hover:underline text-[10px]">BOQ</a>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT HERO (5 Columns): AI Agent Stream & Live Takeoff Breakdown -->
+      <div class="lg:col-span-5 flex flex-col space-y-4">
+        
+        <!-- Live AI Engineering Analysis Feed -->
+        <div class="liquid-glass rounded-2xl p-4 border border-white/10 flex flex-col">
+          <div class="flex items-center justify-between pb-2 mb-2 border-b border-white/5">
+            <div class="flex items-center gap-2">
+              <span class="material-symbols-outlined text-racing-red text-base">psychology</span>
+              <span class="text-xs font-bold text-white font-display">AI Engineering Copilot</span>
+            </div>
+            <span class="text-[9px] font-mono text-neon-green">Live Inference</span>
+          </div>
+
+          <div class="space-y-2 text-xs">
+            <div class="p-2.5 rounded-lg bg-surface-low/80 border border-white/5">
+              <div class="text-[10px] font-mono text-neutral-400 flex items-center justify-between mb-1">
+                <span>E-104_CableTray.dwg</span>
+                <span>2m ago</span>
+              </div>
+              <p class="text-neutral-200 text-xs leading-relaxed">
+                Detected <strong class="text-white font-mono">43x LED Troffers</strong> and measured 
+                <strong class="text-racing-red font-mono">127.4 meters</strong> of overhead ladder cable tray across Server Room B.
+              </p>
+              <div class="mt-2 flex items-center gap-2">
+                <span class="px-1.5 py-0.5 rounded text-[9px] font-mono bg-neon-green/15 text-neon-green border border-neon-green/30">Confidence: High</span>
+                <span class="px-1.5 py-0.5 rounded text-[9px] font-mono bg-white/5 text-neutral-400 border border-white/5">Source: Drawing Scale 1:100</span>
+              </div>
+            </div>
+
+            <div class="p-2.5 rounded-lg bg-surface-low/80 border border-white/5">
+              <div class="text-[10px] font-mono text-neutral-400 flex items-center justify-between mb-1">
+                <span>PAC-01 to PAC-06 Feeder Sizing</span>
+                <span>12m ago</span>
+              </div>
+              <p class="text-neutral-200 text-xs leading-relaxed">
+                Measured <strong class="text-white font-mono">184.6m</strong> feeder routes. Proposed 350 kcmil conductor sizing for human review.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Takeoff Component Breakdown (Direct Data Table, No Business Fluff) -->
+        <div class="liquid-glass rounded-2xl p-4 border border-white/10 flex-1 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between pb-2 mb-2 border-b border-white/5">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-neutral-300 text-base">straighten</span>
+                <span class="text-xs font-bold text-white font-display">Takeoff Items (ABC Data Center)</span>
+              </div>
+              <a href="08_Takeoff_Review_BOQ_Export.html" class="text-[10px] font-mono text-racing-red hover:underline">Full Takeoff →</a>
+            </div>
+
+            <div class="space-y-1.5 font-mono text-xs">
+              <div class="p-2 rounded bg-black/40 border border-white/5 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <span class="w-2 h-2 rounded-full bg-neon-cyan"></span>
+                  <span class="text-neutral-200 font-sans text-xs">Recessed 2x4 LED Troffer</span>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span class="font-bold text-white">47 EA</span>
+                  <span class="text-[9px] px-1 rounded bg-neon-green/20 text-neon-green font-sans">Verified</span>
+                </div>
+              </div>
+
+              <div class="p-2 rounded bg-black/40 border border-white/5 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <span class="w-2 h-2 rounded-full bg-racing-red"></span>
+                  <span class="text-neutral-200 font-sans text-xs">Ladder Cable Tray 600mm</span>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span class="font-bold text-white">127.4 MTR</span>
+                  <span class="text-[9px] px-1 rounded bg-neon-green/20 text-neon-green font-sans">Verified</span>
+                </div>
+              </div>
+
+              <div class="p-2 rounded bg-black/40 border border-white/5 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <span class="w-2 h-2 rounded-full bg-neon-amber"></span>
+                  <span class="text-neutral-200 font-sans text-xs">Duplex Receptacle 20A</span>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span class="font-bold text-white">86 EA</span>
+                  <span class="text-[9px] px-1 rounded bg-neon-amber/20 text-neon-amber font-sans">Review</span>
+                </div>
+              </div>
+
+              <div class="p-2 rounded bg-black/40 border border-white/5 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <span class="w-2 h-2 rounded-full bg-white/40"></span>
+                  <span class="text-neutral-200 font-sans text-xs">3" Rigid EMT Conduit</span>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span class="font-bold text-white">184.6 MTR</span>
+                  <span class="text-[9px] px-1 rounded bg-neon-green/20 text-neon-green font-sans">Verified</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom Direct CTA -->
+          <div class="mt-3 pt-3 border-t border-white/5 flex items-center justify-between">
+            <span class="text-[10px] font-mono text-neutral-400">Total Takeoff: 380 Items</span>
+            <a href="04_Drawing_Takeoff_Workspace.html" class="py-1.5 px-3 rounded-lg bg-racing-red text-white font-display font-bold text-xs hover:brightness-110 transition flex items-center gap-1.5 shadow-sm">
+              <span>Launch Drawing Takeoff</span>
+              <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+            </a>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+</body>
+</html>

@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Vectoris - Document Processing</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&amp;family=Hanken+Grotesk:wght@400..700&amp;family=JetBrains+Mono:wght@400..700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "surface": '#131313',
+                        "surface-dim": '#131313',
+                        "surface-bright": '#393939',
+                        "surface-container-lowest": '#0e0e0e',
+                        "surface-container-low": '#1b1b1b',
+                        "surface-container": '#1f1f1f',
+                        "surface-container-high": '#2a2a2a',
+                        "surface-container-highest": '#353535',
+                        "on-surface": '#e2e2e2',
+                        "on-surface-variant": '#e9bcb5',
+                        "inverse-surface": '#e2e2e2',
+                        "inverse-on-surface": '#303030',
+                        "outline": '#af8781',
+                        "outline-variant": '#5e3f3a',
+                        "surface-tint": '#ffb4a8',
+                        "primary": '#ffb4a8',
+                        "on-primary": '#680100',
+                        "primary-container": '#dd0200',
+                        "on-primary-container": '#ffedea',
+                        "inverse-primary": '#c00200',
+                        "secondary": '#ffb4ab',
+                        "on-secondary": '#5e1612',
+                        "secondary-container": '#7c2d26',
+                        "on-secondary-container": '#ff9a8e',
+                        "tertiary": '#e5bdb9',
+                        "on-tertiary": '#432a27',
+                        "tertiary-container": '#876663',
+                        "on-tertiary-container": '#ffedeb',
+                        "error": '#ffb4ab',
+                        "on-error": '#690005',
+                        "error-container": '#93000a',
+                        "on-error-container": '#ffdad6',
+                        "primary-fixed": '#ffdad4',
+                        "primary-fixed-dim": '#ffb4a8',
+                        "on-primary-fixed": '#410000',
+                        "on-primary-fixed-variant": '#930100',
+                        "secondary-fixed": '#ffdad6',
+                        "secondary-fixed-dim": '#ffb4ab',
+                        "on-secondary-fixed": '#400203',
+                        "on-secondary-fixed-variant": '#7c2d26',
+                        "tertiary-fixed": '#ffdad6',
+                        "tertiary-fixed-dim": '#e5bdb9',
+                        "on-tertiary-fixed": '#2c1514',
+                        "on-tertiary-fixed-variant": '#5c403d',
+                        "background": '#131313',
+                        "on-background": '#e2e2e2',
+                        "surface-variant": '#353535',
+                        "coffee-bean": '#1A0706',
+                        "black-cherry": '#55100D',
+                        "racing-red": '#DD0200'
+                    },
+                    fontFamily: {
+                        "display-lg": ["Bricolage Grotesque", "sans-serif"],
+                        "headline-lg": ["Bricolage Grotesque", "sans-serif"],
+                        "headline-md": ["Bricolage Grotesque", "sans-serif"],
+                        "body-lg": ["Hanken Grotesk", "sans-serif"],
+                        "body-md": ["Hanken Grotesk", "sans-serif"],
+                        "technical-sm": ["JetBrains Mono", "monospace"],
+                        "label-caps": ["Hanken Grotesk", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "sm": "0.25rem",
+                        "DEFAULT": "0.5rem",
+                        "md": "0.75rem",
+                        "lg": "1rem",
+                        "xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                    spacing: {
+                        "unit": "8px",
+                        "container-padding": "40px",
+                        "gutter": "24px",
+                        "stack-sm": "12px",
+                        "stack-md": "24px",
+                        "stack-lg": "48px"
+                    },
+                    animation: {
+                        'pulse-glow': 'pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'spin-slow': 'spin 3s linear infinite',
+                    },
+                    keyframes: {
+                        'pulse-glow': {
+                            '0%, 100%': { opacity: 1, boxShadow: '0 0 10px #DD0200' },
+                            '50%': { opacity: .5, boxShadow: '0 0 20px #DD0200' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .glass-panel {
+            background: rgba(42, 42, 42, 0.4);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+        }
+        .progress-bar-active {
+            background: linear-gradient(90deg, #55100D 0%, #DD0200 100%);
+            background-size: 200% 100%;
+            animation: gradient-shift 2s ease infinite;
+        }
+        @keyframes gradient-shift {
+            0% { background-position: 100% 0%; }
+            100% { background-position: 0% 0%; }
+        }
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+        .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface font-body-md min-h-screen flex flex-col selection:bg-primary-container selection:text-on-primary-container">
+<!-- Top Navigation Bar -->
+<header class="bg-surface-bright/80 backdrop-blur-xl border-b border-outline-variant shadow-[0px_4px_20px_rgba(0,0,0,0.4)] docked full-width top-0 sticky z-50 flex justify-between items-center h-16 px-container-padding w-full">
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-3xl" style="font-variation-settings: 'FILL' 1;">architecture</span>
+<span class="font-headline-md text-headline-md font-bold text-primary">VECTORIS</span>
+</div>
+<!-- Breadcrumbs -->
+<nav class="hidden lg:flex items-center gap-2 text-sm text-secondary-fixed-dim/70 font-body-md">
+<a class="hover:text-primary transition-colors" href="#">Projects</a>
+<span class="material-symbols-outlined text-sm">chevron_right</span>
+<a class="hover:text-primary transition-colors" href="#">ABC Data Center</a>
+<span class="material-symbols-outlined text-sm">chevron_right</span>
+<span class="text-on-surface font-medium">Document Processing Pipeline</span>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<!-- Global Search -->
+<div class="hidden md:flex items-center bg-surface-container-high rounded-full px-4 py-1.5 border border-outline-variant/30 focus-within:ring-2 focus-within:ring-primary-container transition-all">
+<span class="material-symbols-outlined text-secondary-fixed-dim text-sm mr-2">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-sm w-48 text-on-surface placeholder:text-secondary-fixed-dim/50 h-6" placeholder="Search (⌘K)" type="text"/>
+</div>
+<!-- Active Local Engine Badge -->
+<div class="flex items-center gap-2 bg-coffee-bean px-3 py-1 rounded-full border border-black-cherry">
+<div class="w-2 h-2 rounded-full bg-racing-red animate-pulse-glow"></div>
+<span class="font-technical-sm text-xs text-primary-fixed">Local Engine</span>
+</div>
+<div class="flex items-center gap-3 border-l border-outline-variant/50 pl-4 ml-2">
+<button class="text-secondary-fixed-dim hover:text-primary transition-all">
+<span class="material-symbols-outlined">dark_mode</span>
+</button>
+<button class="text-secondary-fixed-dim hover:text-primary transition-all relative">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-0 right-0 w-2 h-2 bg-primary-container rounded-full border border-surface"></span>
+</button>
+<div class="w-8 h-8 rounded-full bg-surface-container-highest overflow-hidden border border-outline-variant cursor-pointer hover:border-primary transition-all ml-2">
+<img alt="User Profile" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCaRHfve7-euX2uifDmW8DKeEDxSw4d16WDvzYdaaOY6nge4Jiw-PZoEWIsNE4vxq7DoN--3eMnkS8lj0zbwm8Xh6it3QxHO5MvuJUKTN8yMlsiXCsLcCoG6jF0oMruieZSV9ZTGedkTo65SXwKY14g6Hcl0pGTYpiFVEvehLgHRZTtnS0cs5KvteIXTqrY8KuNKLE7qe6a1ZCmtTWSmNVcK17K50aX5W2AhSzXWQbeQ3pzErBSIJJPCNMvMMyp6NAmoY8bNc0iXtWr"/>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content Container -->
+<main class="flex-grow p-container-padding flex flex-col gap-gutter max-w-[1800px] mx-auto w-full">
+<!-- Top Privacy Guarantee Banner -->
+<div class="glass-panel rounded-lg p-4 flex items-center gap-4 bg-gradient-to-r from-coffee-bean/50 to-transparent border-l-4 border-l-primary-container">
+<div class="bg-black-cherry/30 p-2 rounded-md">
+<span class="material-symbols-outlined text-primary-fixed" style="font-variation-settings: 'FILL' 1;">lock</span>
+</div>
+<div>
+<h3 class="font-headline-md text-sm font-semibold text-on-surface">Local-First Processing Active</h3>
+<p class="font-body-md text-sm text-secondary-fixed-dim">Your project drawings and engineering files remain securely on your local device.</p>
+</div>
+</div>
+<!-- Main Grid (Split 2-Column 60/40) -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter items-start">
+<!-- Left Column (AI Engineering Analysis Pipeline) - 60% -->
+<section class="lg:col-span-7 flex flex-col gap-stack-md">
+<div class="glass-panel rounded-xl p-6 flex flex-col h-full bg-surface-container-low/50 relative overflow-hidden">
+<!-- Background subtle gradient -->
+<div class="absolute -top-40 -right-40 w-96 h-96 bg-black-cherry rounded-full mix-blend-screen filter blur-[100px] opacity-20"></div>
+<!-- Card Header -->
+<div class="flex justify-between items-start mb-8 relative z-10">
+<div>
+<h2 class="font-headline-lg text-2xl font-bold text-on-surface flex items-center gap-3">
+                                AI Engineering Analysis Pipeline
+                                <span class="material-symbols-outlined text-racing-red animate-spin-slow">autorenew</span>
+</h2>
+<p class="font-technical-sm text-secondary-fixed-dim mt-1">Processing Sheet 112 of 142 (E-103_SingleLine.pdf)</p>
+</div>
+</div>
+<!-- Real-time Stage Progress Stepper -->
+<div class="flex flex-col gap-4 relative z-10 flex-grow">
+<!-- Step 1: Complete -->
+<div class="flex items-start gap-4">
+<div class="flex flex-col items-center mt-1">
+<div class="w-6 h-6 rounded-full bg-surface-container border border-outline-variant flex items-center justify-center z-10">
+<span class="material-symbols-outlined text-[14px] text-green-500" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<div class="w-px h-12 bg-outline-variant/50 my-1"></div>
+</div>
+<div class="flex-grow pt-1">
+<h4 class="font-body-md text-on-surface font-medium flex justify-between">
+                                    Document Ingestion &amp; Parsing
+                                    <span class="text-xs text-green-500 font-technical-sm">100% Complete</span>
+</h4>
+</div>
+</div>
+<!-- Step 2: Complete -->
+<div class="flex items-start gap-4">
+<div class="flex flex-col items-center mt-1">
+<div class="w-6 h-6 rounded-full bg-surface-container border border-outline-variant flex items-center justify-center z-10">
+<span class="material-symbols-outlined text-[14px] text-green-500" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<div class="w-px h-12 bg-outline-variant/50 my-1"></div>
+</div>
+<div class="flex-grow pt-1">
+<h4 class="font-body-md text-on-surface font-medium flex justify-between">
+                                    Sheet &amp; Revision Classification
+                                    <span class="text-xs text-green-500 font-technical-sm">100% Complete</span>
+</h4>
+<p class="text-xs text-secondary-fixed-dim mt-1 font-technical-sm">142 sheets organized</p>
+</div>
+</div>
+<!-- Step 3: Complete -->
+<div class="flex items-start gap-4">
+<div class="flex flex-col items-center mt-1">
+<div class="w-6 h-6 rounded-full bg-surface-container border border-outline-variant flex items-center justify-center z-10">
+<span class="material-symbols-outlined text-[14px] text-green-500" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<div class="w-px h-12 bg-outline-variant/50 my-1"></div>
+</div>
+<div class="flex-grow pt-1">
+<h4 class="font-body-md text-on-surface font-medium flex justify-between">
+                                    Coordinate Grid &amp; Scale Calibration
+                                    <span class="text-xs text-green-500 font-technical-sm">100% Complete</span>
+</h4>
+<p class="text-xs text-secondary-fixed-dim mt-1 font-technical-sm">Scale: 1/8" = 1'-0" verified</p>
+</div>
+</div>
+<!-- Step 4: Active -->
+<div class="flex items-start gap-4 bg-coffee-bean/40 -mx-4 px-4 py-3 rounded-lg border border-black-cherry/30 relative overflow-hidden">
+<!-- Subtle glow background for active state -->
+<div class="absolute inset-0 bg-gradient-to-r from-transparent via-racing-red/5 to-transparent animate-pulse"></div>
+<div class="flex flex-col items-center mt-1 relative z-10">
+<div class="w-6 h-6 rounded-full bg-black-cherry border border-racing-red flex items-center justify-center z-10 shadow-[0_0_10px_rgba(221,2,0,0.5)]">
+<div class="w-2 h-2 bg-racing-red rounded-full animate-pulse-glow"></div>
+</div>
+<div class="w-px h-16 bg-outline-variant/50 my-1 dashed border-l border-dashed border-outline-variant/50"></div>
+</div>
+<div class="flex-grow pt-1 relative z-10">
+<h4 class="font-body-md text-primary-fixed font-semibold flex justify-between">
+                                    AI Electrical Component Detection
+                                    <span class="text-xs text-primary-container font-technical-sm font-bold bg-primary-container/10 px-2 py-0.5 rounded border border-primary-container/30">78% ACTIVE</span>
+</h4>
+<p class="text-xs text-secondary-fixed-dim mt-1 font-technical-sm mb-2">1,240 symbols &amp; fixtures detected</p>
+<!-- Progress Bar -->
+<div class="h-1.5 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full progress-bar-active w-[78%]"></div>
+</div>
+</div>
+</div>
+<!-- Step 5: Queued -->
+<div class="flex items-start gap-4 opacity-50">
+<div class="flex flex-col items-center mt-1">
+<div class="w-6 h-6 rounded-full bg-surface-container border border-outline-variant flex items-center justify-center z-10">
+<span class="w-1.5 h-1.5 bg-outline-variant rounded-full"></span>
+</div>
+<div class="w-px h-12 bg-outline-variant/30 my-1 dashed border-l border-dashed border-outline-variant/30"></div>
+</div>
+<div class="flex-grow pt-1">
+<h4 class="font-body-md text-on-surface font-medium flex justify-between">
+                                    Cable Tray &amp; Raceway Polyline Measurement
+                                    <span class="text-xs text-secondary-fixed-dim font-technical-sm">In Queue</span>
+</h4>
+</div>
+</div>
+<!-- Step 6: Queued -->
+<div class="flex items-start gap-4 opacity-50">
+<div class="flex flex-col items-center mt-1">
+<div class="w-6 h-6 rounded-full bg-surface-container border border-outline-variant flex items-center justify-center z-10">
+<span class="w-1.5 h-1.5 bg-outline-variant rounded-full"></span>
+</div>
+</div>
+<div class="flex-grow pt-1">
+<h4 class="font-body-md text-on-surface font-medium flex justify-between">
+                                    Takeoff Compilation &amp; Cross-Validation
+                                    <span class="text-xs text-secondary-fixed-dim font-technical-sm">In Queue</span>
+</h4>
+</div>
+</div>
+</div>
+<!-- Processing Metrics -->
+<div class="mt-8 pt-6 border-t border-outline-variant/30 relative z-10">
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 font-technical-sm text-xs">
+<div class="flex flex-col gap-1">
+<span class="text-secondary-fixed-dim uppercase tracking-wider">Elapsed Time</span>
+<span class="text-on-surface text-sm">01m 42s</span>
+</div>
+<div class="flex flex-col gap-1">
+<span class="text-secondary-fixed-dim uppercase tracking-wider">Est. Remaining</span>
+<span class="text-primary-fixed text-sm">00m 28s</span>
+</div>
+<div class="flex flex-col gap-1">
+<span class="text-secondary-fixed-dim uppercase tracking-wider">Memory</span>
+<span class="text-on-surface text-sm">1.8 GB</span>
+</div>
+<div class="flex flex-col gap-1">
+<span class="text-secondary-fixed-dim uppercase tracking-wider">Throughput</span>
+<span class="text-on-surface text-sm">14.2 sht/s</span>
+</div>
+</div>
+</div>
+<!-- Bottom Actions -->
+<div class="mt-6 flex flex-wrap gap-4 items-center justify-between relative z-10">
+<div class="flex gap-3">
+<button class="px-4 py-2 bg-surface-container hover:bg-surface-container-high border border-outline-variant rounded-md text-sm font-medium transition-colors text-on-surface">
+                                Continue in Background
+                            </button>
+<button class="px-4 py-2 hover:bg-surface-container-low rounded-md text-sm font-medium transition-colors text-secondary-fixed-dim">
+                                Pause Pipeline
+                            </button>
+</div>
+<button class="px-6 py-2 bg-primary-container hover:bg-inverse-primary text-on-primary-container rounded-md text-sm font-bold shadow-[0_0_15px_rgba(221,2,0,0.4)] transition-all flex items-center gap-2">
+                            View Live Workspace
+                            <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+</div>
+</div>
+</section>
+<!-- Right Column (Uploaded Drawings & Documents) - 40% -->
+<aside class="lg:col-span-5 flex flex-col h-full gap-stack-md">
+<div class="glass-panel rounded-xl p-6 flex flex-col h-full bg-surface-container-lowest/50 border border-outline-variant/40">
+<div class="flex justify-between items-center mb-6">
+<h2 class="font-headline-md text-xl font-semibold text-on-surface">Uploaded Drawings &amp; Documents</h2>
+<button class="text-xs font-semibold text-primary hover:text-primary-fixed bg-surface-container hover:bg-surface-container-high px-3 py-1.5 rounded border border-outline-variant/50 transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-sm">add</span>
+                            Add More Files
+                        </button>
+</div>
+<!-- Supported Formats -->
+<div class="flex gap-2 mb-6 overflow-x-auto scrollbar-hide pb-2">
+<span class="text-[10px] font-technical-sm bg-surface-container-high text-secondary-fixed-dim px-2 py-1 rounded border border-outline-variant/30 whitespace-nowrap">PDF</span>
+<span class="text-[10px] font-technical-sm bg-surface-container-high text-secondary-fixed-dim px-2 py-1 rounded border border-outline-variant/30 whitespace-nowrap">DWG</span>
+<span class="text-[10px] font-technical-sm bg-surface-container-high text-secondary-fixed-dim px-2 py-1 rounded border border-outline-variant/30 whitespace-nowrap">DXF</span>
+<span class="text-[10px] font-technical-sm bg-surface-container-high text-secondary-fixed-dim px-2 py-1 rounded border border-outline-variant/30 whitespace-nowrap">Scanned PDF</span>
+<span class="text-[10px] font-technical-sm bg-surface-container-high text-secondary-fixed-dim px-2 py-1 rounded border border-outline-variant/30 whitespace-nowrap">TIFF</span>
+<span class="text-[10px] font-technical-sm bg-surface-container-high text-secondary-fixed-dim px-2 py-1 rounded border border-outline-variant/30 whitespace-nowrap">Excel</span>
+</div>
+<!-- File Ingestion List -->
+<div class="flex flex-col gap-2 flex-grow overflow-y-auto pr-2 custom-scrollbar">
+<!-- File 1: Complete -->
+<div class="bg-surface-container-low p-3 rounded-lg border border-outline-variant/30 flex items-center justify-between group hover:border-outline-variant transition-colors">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary-fixed-dim text-xl">picture_as_pdf</span>
+<div class="flex flex-col">
+<span class="text-sm font-medium text-on-surface group-hover:text-primary-fixed transition-colors">E-101_LightingPlan.pdf</span>
+<span class="text-[11px] font-technical-sm text-secondary-fixed-dim">2.4 MB • Complete</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-green-500 text-lg">check</span>
+</div>
+<!-- File 2: Complete -->
+<div class="bg-surface-container-low p-3 rounded-lg border border-outline-variant/30 flex items-center justify-between group hover:border-outline-variant transition-colors">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary-fixed-dim text-xl">picture_as_pdf</span>
+<div class="flex flex-col">
+<span class="text-sm font-medium text-on-surface group-hover:text-primary-fixed transition-colors">E-102_PowerPlan.pdf</span>
+<span class="text-[11px] font-technical-sm text-secondary-fixed-dim">3.1 MB • Complete</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-green-500 text-lg">check</span>
+</div>
+<!-- File 3: Processing (Active) -->
+<div class="bg-coffee-bean/50 p-3 rounded-lg border border-black-cherry flex flex-col gap-2 shadow-[inset_0_0_10px_rgba(85,16,13,0.2)]">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary text-xl">picture_as_pdf</span>
+<div class="flex flex-col">
+<span class="text-sm font-medium text-primary-fixed">E-103_SingleLine.pdf</span>
+<span class="text-[11px] font-technical-sm text-primary-fixed-dim/70">1.8 MB • Processing</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-primary-container animate-spin">autorenew</span>
+</div>
+<div class="flex items-center gap-2 mt-1">
+<div class="h-1 flex-grow bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full progress-bar-active w-[78%]"></div>
+</div>
+<span class="text-[10px] font-technical-sm text-primary-fixed">78%</span>
+</div>
+</div>
+<!-- File 4: Queued -->
+<div class="bg-surface-container-lowest p-3 rounded-lg border border-outline-variant/20 flex items-center justify-between opacity-60">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary-fixed-dim text-xl">picture_as_pdf</span>
+<div class="flex flex-col">
+<span class="text-sm font-medium text-on-surface">E-104_Details.pdf</span>
+<span class="text-[11px] font-technical-sm text-secondary-fixed-dim">4.2 MB • Queued</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-secondary-fixed-dim text-lg">schedule</span>
+</div>
+<!-- File 5: Parsed (Different Type) -->
+<div class="bg-surface-container-low p-3 rounded-lg border border-outline-variant/30 flex items-center justify-between group hover:border-outline-variant transition-colors">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary-fixed-dim text-xl">description</span>
+<div class="flex flex-col">
+<span class="text-sm font-medium text-on-surface group-hover:text-primary-fixed transition-colors">Spec_Division_26.pdf</span>
+<span class="text-[11px] font-technical-sm text-secondary-fixed-dim">12.5 MB • Parsed</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-tertiary-fixed text-lg">done_all</span>
+</div>
+</div>
+</div>
+</aside>
+</div>
+</main>
+<style>
+        /* Custom Scrollbar for file list */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #353535;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #5e3f3a;
+        }
+    </style>
+</body></html>

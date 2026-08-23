@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Vectoris - Takeoff Review</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&amp;family=Hanken+Grotesk:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        surface: '#131313',
+                        'surface-dim': '#131313',
+                        'surface-bright': '#393939',
+                        'surface-container-lowest': '#0e0e0e',
+                        'surface-container-low': '#1b1b1b',
+                        'surface-container': '#1f1f1f',
+                        'surface-container-high': '#2a2a2a',
+                        'surface-container-highest': '#353535',
+                        'on-surface': '#e2e2e2',
+                        'on-surface-variant': '#e9bcb5',
+                        'inverse-surface': '#e2e2e2',
+                        'inverse-on-surface': '#303030',
+                        outline: '#af8781',
+                        'outline-variant': '#5e3f3a',
+                        'surface-tint': '#ffb4a8',
+                        primary: '#ffb4a8',
+                        'on-primary': '#680100',
+                        'primary-container': '#dd0200',
+                        'on-primary-container': '#ffedea',
+                        'inverse-primary': '#c00200',
+                        secondary: '#ffb4ab',
+                        'on-secondary': '#5e1612',
+                        'secondary-container': '#7c2d26',
+                        'on-secondary-container': '#ff9a8e',
+                        tertiary: '#e5bdb9',
+                        'on-tertiary': '#432a27',
+                        'tertiary-container': '#876663',
+                        'on-tertiary-container': '#ffedeb',
+                        error: '#ffb4ab',
+                        'on-error': '#690005',
+                        'error-container': '#93000a',
+                        'on-error-container': '#ffdad6',
+                        background: '#131313',
+                        'on-background': '#e2e2e2',
+                        'surface-variant': '#353535'
+                    },
+                    borderRadius: {
+                        sm: '0.25rem',
+                        DEFAULT: '0.5rem',
+                        md: '0.75rem',
+                        lg: '1rem',
+                        xl: '1.5rem',
+                        full: '9999px'
+                    },
+                    spacing: {
+                        unit: '8px',
+                        'container-padding': '40px',
+                        gutter: '24px',
+                        'stack-sm': '12px',
+                        'stack-md': '24px',
+                        'stack-lg': '48px'
+                    },
+                    fontFamily: {
+                        display: ['Bricolage Grotesque', 'sans-serif'],
+                        headline: ['Bricolage Grotesque', 'sans-serif'],
+                        body: ['Hanken Grotesk', 'sans-serif'],
+                        technical: ['JetBrains Mono', 'monospace'],
+                        label: ['Hanken Grotesk', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        /* Custom scrollbar for table */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #353535;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #5e3f3a;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body h-screen overflow-hidden flex antialiased">
+<!-- SideNavBar (JSON Driven) -->
+<nav class="bg-surface-container-low/60 backdrop-blur-2xl border-r border-outline-variant/10 shadow-xl fixed left-0 top-0 h-full w-64 flex flex-col p-4 gap-y-4 z-40">
+<!-- Header -->
+<div class="flex items-center gap-3 mb-4 px-2">
+<div class="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">dataset</span>
+</div>
+<div class="flex flex-col overflow-hidden">
+<span class="font-display font-bold text-lg text-on-surface truncate">Project Alpha</span>
+<span class="text-sm text-on-surface-variant truncate">Engineering Core</span>
+</div>
+</div>
+<!-- CTA -->
+<button class="w-full bg-surface-container text-primary hover:bg-surface-container-high/50 transition-colors py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 font-medium mb-2 border border-outline-variant/20 shadow-sm">
+<span class="material-symbols-outlined text-[20px]">add</span>
+            New Analysis
+        </button>
+<!-- Main Navigation -->
+<div class="flex-1 flex flex-col gap-1 overflow-y-auto">
+<!-- Inactive -->
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high/50 transition-all font-medium" href="#">
+<span class="material-symbols-outlined">analytics</span>
+                Intelligence
+            </a>
+<!-- Inactive -->
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high/50 transition-all font-medium" href="#">
+<span class="material-symbols-outlined">calculate</span>
+                Calculations
+            </a>
+<!-- Active State Logic Applied: "Takeoffs" -->
+<a class="flex items-center gap-3 px-3 py-2.5 bg-primary-container text-on-primary-container rounded-lg shadow-lg shadow-primary/20 transition-all font-medium" href="#">
+<span class="material-symbols-outlined">straighten</span>
+                Takeoffs
+            </a>
+<!-- Inactive -->
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high/50 transition-all font-medium" href="#">
+<span class="material-symbols-outlined">architecture</span>
+                Drawings
+            </a>
+<!-- Inactive -->
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high/50 transition-all font-medium" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+                Archive
+            </a>
+<!-- Inactive -->
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high/50 transition-all font-medium" href="#">
+<span class="material-symbols-outlined">group</span>
+                Team
+            </a>
+</div>
+<!-- Footer Navigation -->
+<div class="pt-4 border-t border-outline-variant/10 flex flex-col gap-1 mt-auto">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high/50 transition-all text-sm font-medium" href="#">
+<span class="material-symbols-outlined text-[20px]">help_outline</span>
+                Help
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high/50 transition-all text-sm font-medium" href="#">
+<span class="material-symbols-outlined text-[20px]">sensors</span>
+                Status
+            </a>
+</div>
+</nav>
+<!-- Main Content Canvas -->
+<main class="ml-64 flex-1 flex flex-col h-full overflow-hidden bg-background">
+<!-- Global Header (Custom mapped to prompt requirements, referencing JSON aesthetic) -->
+<header class="h-16 flex justify-between items-center px-gutter border-b border-outline-variant/20 bg-surface/80 backdrop-blur-xl z-30 shrink-0">
+<div class="flex items-center gap-4">
+<img alt="Vectoris Logo" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1X4WNjxkLGBEm90jgnidPxtIdWDF204N-xoHyAKA-9PgloennJyA_r0ZyPGfmZNEIKUXnTN9BPpz4YIo_WVTEbBor9ogX_nRHqYgIGYfQUlJCrEjutZQcoR2F0REmdEPFhGq_Vg_Jr24DA8GS24wyscz494rKsd11GGILkFmdhs1WxqXZn5ywo_PwFSs0hBEk0Onlc391zvywYlHi91FU75_HESV_xGU7NW9zmOZO3iBFuGts_RZ7d3lj9f"/>
+<div class="h-5 w-px bg-outline-variant/30 mx-2"></div>
+<!-- Breadcrumbs -->
+<nav class="flex items-center text-sm font-medium text-on-surface-variant gap-2">
+<a class="hover:text-primary transition-colors" href="#">Projects</a>
+<span class="material-symbols-outlined text-[16px]">chevron_right</span>
+<a class="hover:text-primary transition-colors" href="#">ABC Data Center</a>
+<span class="material-symbols-outlined text-[16px]">chevron_right</span>
+<span class="text-on-surface">Takeoff Review &amp; Verification</span>
+</nav>
+</div>
+<div class="flex items-center gap-6">
+<!-- Status Badge -->
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container border border-outline-variant/20 shadow-sm">
+<div class="w-2 h-2 rounded-full bg-primary shadow-[0_0_8px_rgba(255,180,168,0.6)]"></div>
+<span class="text-xs font-technical text-on-surface tracking-wide uppercase">Local Engine Active</span>
+</div>
+<!-- Actions -->
+<button class="text-on-surface-variant hover:text-primary transition-colors flex items-center justify-center p-2 rounded-full hover:bg-surface-bright/20">
+<span class="material-symbols-outlined">search</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-surface-container-high border border-outline-variant/30 flex items-center justify-center overflow-hidden shrink-0 cursor-pointer hover:border-primary transition-colors">
+<span class="material-symbols-outlined text-on-surface text-[20px]">person</span>
+</div>
+</div>
+</header>
+<!-- Split View Layout -->
+<div class="flex-1 flex overflow-hidden">
+<!-- Left Column: Takeoff Table (65%) -->
+<div class="flex-[6.5] flex flex-col border-r border-outline-variant/20 bg-surface-container-lowest overflow-hidden">
+<!-- Table Header & Controls -->
+<div class="p-gutter pb-4 shrink-0 flex flex-col gap-4">
+<div class="flex justify-between items-end">
+<div>
+<h1 class="font-headline text-headline-md text-on-surface mb-1">Electrical Takeoff &amp; BOQ Verification</h1>
+<p class="text-on-surface-variant text-body-md">Human-in-the-loop review of AI-detected components across all project sheets.</p>
+</div>
+<div class="flex gap-3">
+<button class="px-4 py-2 bg-surface-container hover:bg-surface-container-high text-on-surface font-medium rounded-lg border border-outline-variant/30 transition-colors shadow-sm flex items-center gap-2 text-sm">
+<span class="material-symbols-outlined text-[18px]">checklist</span>
+                                Batch Approve
+                            </button>
+<button class="px-5 py-2 bg-primary-container text-on-primary-container font-medium rounded-lg hover:bg-primary-container/90 transition-all shadow-lg shadow-primary/10 flex items-center gap-2 text-sm">
+<span class="material-symbols-outlined text-[18px]">download</span>
+                                Export BOQ
+                            </button>
+</div>
+</div>
+<!-- Filters -->
+<div class="flex items-center gap-2 overflow-x-auto pb-2 border-b border-outline-variant/10">
+<button class="px-3 py-1.5 rounded-md bg-surface-variant text-on-surface text-sm font-medium border border-outline-variant/30">
+                            All <span class="text-on-surface-variant ml-1 font-technical">6</span>
+</button>
+<button class="px-3 py-1.5 rounded-md bg-surface border border-outline-variant/10 text-on-surface-variant hover:text-on-surface hover:bg-surface-variant transition-colors text-sm font-medium">
+                            Approved <span class="text-outline ml-1 font-technical">4</span>
+</button>
+<button class="px-3 py-1.5 rounded-md bg-secondary-container/20 border border-secondary-container/30 text-on-surface hover:bg-secondary-container/40 transition-colors text-sm font-medium">
+                            Needs Review <span class="text-secondary ml-1 font-technical">1</span>
+</button>
+<button class="px-3 py-1.5 rounded-md bg-surface border border-outline-variant/10 text-on-surface-variant hover:text-on-surface hover:bg-surface-variant transition-colors text-sm font-medium">
+                            Detected <span class="text-outline ml-1 font-technical">1</span>
+</button>
+</div>
+</div>
+<!-- High-Density Data Table -->
+<div class="flex-1 overflow-auto px-gutter pb-gutter">
+<table class="w-full text-left border-collapse">
+<thead class="sticky top-0 bg-surface-container-lowest/90 backdrop-blur-md z-10">
+<tr class="text-xs uppercase tracking-wider text-on-surface-variant font-label border-b border-outline-variant/20">
+<th class="pb-3 pt-2 pl-2 font-medium">Item Name</th>
+<th class="pb-3 pt-2 px-4 font-medium">Description</th>
+<th class="pb-3 pt-2 px-4 font-medium text-right">Qty</th>
+<th class="pb-3 pt-2 px-4 font-medium">Unit</th>
+<th class="pb-3 pt-2 px-4 font-medium">Source Sheet</th>
+<th class="pb-3 pt-2 px-4 font-medium">Status</th>
+<th class="pb-3 pt-2 pr-2 font-medium text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="text-sm divide-y divide-outline-variant/10">
+<!-- Row 1 (Active/Selected state mock) -->
+<tr class="group hover:bg-surface-container-low transition-colors bg-surface-container-low/50">
+<td class="py-3 pl-2 text-on-surface font-medium max-w-[200px] truncate">Recessed 2x4 LED Troffer</td>
+<td class="py-3 px-4 text-on-surface-variant truncate max-w-[200px]">Lithonia CPX 4000K</td>
+<td class="py-3 px-4 font-technical text-right">
+<div class="flex items-center justify-end gap-2">
+<span class="text-outline text-xs line-through">43</span>
+<span class="text-primary material-symbols-outlined text-[14px]">arrow_right_alt</span>
+<span class="text-on-surface font-bold">47</span>
+</div>
+</td>
+<td class="py-3 px-4 text-on-surface-variant font-technical">EA</td>
+<td class="py-3 px-4 text-on-surface-variant">
+<span class="inline-flex items-center gap-1 bg-surface py-0.5 px-2 rounded border border-outline-variant/20 font-technical text-xs">
+<span class="material-symbols-outlined text-[14px]">article</span> E-104 (Grid B-4)
+                                    </span>
+</td>
+<td class="py-3 px-4">
+<span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-[#132A1B] text-[#4ADE80] border border-[#4ADE80]/20 text-xs font-medium">
+<div class="w-1.5 h-1.5 rounded-full bg-[#4ADE80]"></div> Approved
+                                    </span>
+</td>
+<td class="py-3 pr-2 text-right">
+<div class="flex justify-end gap-1 opacity-100 transition-opacity">
+<button class="p-1.5 text-on-surface-variant hover:text-on-surface rounded-md hover:bg-surface-variant transition-colors" title="Inspect">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+</button>
+<button class="p-1.5 text-on-surface-variant hover:text-on-surface rounded-md hover:bg-surface-variant transition-colors" title="Edit">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="group hover:bg-surface-container-low transition-colors">
+<td class="py-3 pl-2 text-on-surface font-medium max-w-[200px] truncate">Ladder Cable Tray 600mm</td>
+<td class="py-3 px-4 text-on-surface-variant truncate max-w-[200px]">Aluminum NEMA 12B</td>
+<td class="py-3 px-4 font-technical text-on-surface text-right">127.4</td>
+<td class="py-3 px-4 text-on-surface-variant font-technical">MTR</td>
+<td class="py-3 px-4 text-on-surface-variant">
+<span class="inline-flex items-center gap-1 bg-surface py-0.5 px-2 rounded border border-outline-variant/20 font-technical text-xs">
+<span class="material-symbols-outlined text-[14px]">article</span> E-104 (Corridor A)
+                                    </span>
+</td>
+<td class="py-3 px-4">
+<span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-[#132A1B] text-[#4ADE80] border border-[#4ADE80]/20 text-xs font-medium">
+<div class="w-1.5 h-1.5 rounded-full bg-[#4ADE80]"></div> Approved
+                                    </span>
+</td>
+<td class="py-3 pr-2 text-right">
+<div class="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="p-1.5 text-on-surface-variant hover:text-on-surface rounded-md hover:bg-surface-variant transition-colors"><span class="material-symbols-outlined text-[18px]">visibility</span></button>
+<button class="p-1.5 text-on-surface-variant hover:text-on-surface rounded-md hover:bg-surface-variant transition-colors"><span class="material-symbols-outlined text-[18px]">edit</span></button>
+</div>
+</td>
+</tr>
+<!-- Row 3 (Needs Review) -->
+<tr class="group hover:bg-surface-container-low transition-colors bg-secondary-container/5 border-l-2 border-l-secondary">
+<td class="py-3 pl-2 text-on-surface font-medium max-w-[200px] truncate">Duplex Receptacle 20A</td>
+<td class="py-3 px-4 text-on-surface-variant truncate max-w-[200px]">Hubbell HBL5362</td>
+<td class="py-3 px-4 font-technical text-on-surface text-right">86</td>
+<td class="py-3 px-4 text-on-surface-variant font-technical">EA</td>
+<td class="py-3 px-4 text-on-surface-variant">
+<span class="inline-flex items-center gap-1 bg-surface py-0.5 px-2 rounded border border-outline-variant/20 font-technical text-xs">
+<span class="material-symbols-outlined text-[14px]">article</span> E-102 &amp; E-104
+                                    </span>
+</td>
+<td class="py-3 px-4">
+<span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-secondary-container text-on-secondary-container border border-secondary-container/50 text-xs font-medium">
+<div class="w-1.5 h-1.5 rounded-full bg-on-secondary-container animate-pulse"></div> Needs Review
+                                    </span>
+</td>
+<td class="py-3 pr-2 text-right">
+<div class="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="p-1.5 text-on-surface-variant hover:text-on-surface rounded-md hover:bg-surface-variant transition-colors"><span class="material-symbols-outlined text-[18px]">visibility</span></button>
+<button class="p-1.5 text-on-surface-variant hover:text-on-surface rounded-md hover:bg-surface-variant transition-colors"><span class="material-symbols-outlined text-[18px]">edit</span></button>
+</div>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="group hover:bg-surface-container-low transition-colors">
+<td class="py-3 pl-2 text-on-surface font-medium max-w-[200px] truncate">Smoke Detector</td>
+<td class="py-3 px-4 text-on-surface-variant truncate max-w-[200px]">Simplex 4098</td>
+<td class="py-3 px-4 font-technical text-on-surface text-right">34</td>
+<td class="py-3 px-4 text-on-surface-variant font-technical">EA</td>
+<td class="py-3 px-4 text-on-surface-variant">
+<span class="inline-flex items-center gap-1 bg-surface py-0.5 px-2 rounded border border-outline-variant/20 font-technical text-xs">
+<span class="material-symbols-outlined text-[14px]">article</span> E-101
+                                    </span>
+</td>
+<td class="py-3 px-4">
+<span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-[#132A1B] text-[#4ADE80] border border-[#4ADE80]/20 text-xs font-medium">
+<div class="w-1.5 h-1.5 rounded-full bg-[#4ADE80]"></div> Approved
+                                    </span>
+</td>
+<td class="py-3 pr-2 text-right">
+<div class="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="p-1.5 text-on-surface-variant hover:text-on-surface rounded-md hover:bg-surface-variant transition-colors"><span class="material-symbols-outlined text-[18px]">visibility</span></button>
+<button class="p-1.5 text-on-surface-variant hover:text-on-surface rounded-md hover:bg-surface-variant transition-colors"><span class="material-symbols-outlined text-[18px]">edit</span></button>
+</div>
+</td>
+</tr>
+<!-- Row 5 (Detected/Amber) -->
+<tr class="group hover:bg-surface-container-low transition-colors bg-tertiary-container/5 border-l-2 border-l-tertiary-container">
+<td class="py-3 pl-2 text-on-surface font-medium max-w-[200px] truncate">400A Main Panel</td>
+<td class="py-3 px-4 text-on-surface-variant truncate max-w-[200px]">MDP-01 Square D</td>
+<td class="py-3 px-4 font-technical text-on-surface text-right">2</td>
+<td class="py-3 px-4 text-on-surface-variant font-technical">EA</td>
+<td class="py-3 px-4 text-on-surface-variant">
+<span class="inline-flex items-center gap-1 bg-surface py-0.5 px-2 rounded border border-outline-variant/20 font-technical text-xs">
+<span class="material-symbols-outlined text-[14px]">article</span> E-103 SLD
+                                    </span>
+</td>
+<td class="py-3 px-4">
+<span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-[#331D08] text-[#FBBF24] border border-[#FBBF24]/20 text-xs font-medium">
+<div class="w-1.5 h-1.5 rounded-full bg-[#FBBF24]"></div> Detected
+                                    </span>
+</td>
+<td class="py-3 pr-2 text-right">
+<div class="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="p-1.5 text-on-surface-variant hover:text-on-surface rounded-md hover:bg-surface-variant transition-colors"><span class="material-symbols-outlined text-[18px]">visibility</span></button>
+<button class="p-1.5 text-on-surface-variant hover:text-on-surface rounded-md hover:bg-surface-variant transition-colors"><span class="material-symbols-outlined text-[18px]">edit</span></button>
+</div>
+</td>
+</tr>
+<!-- Row 6 -->
+<tr class="group hover:bg-surface-container-low transition-colors border-b-transparent">
+<td class="py-3 pl-2 text-on-surface font-medium max-w-[200px] truncate">3" Rigid EMT</td>
+<td class="py-3 px-4 text-on-surface-variant truncate max-w-[200px]">Wheatland Tube</td>
+<td class="py-3 px-4 font-technical text-on-surface text-right">184.6</td>
+<td class="py-3 px-4 text-on-surface-variant font-technical">MTR</td>
+<td class="py-3 px-4 text-on-surface-variant">
+<span class="inline-flex items-center gap-1 bg-surface py-0.5 px-2 rounded border border-outline-variant/20 font-technical text-xs">
+<span class="material-symbols-outlined text-[14px]">article</span> E-102 Server Rm B
+                                    </span>
+</td>
+<td class="py-3 px-4">
+<span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-[#132A1B] text-[#4ADE80] border border-[#4ADE80]/20 text-xs font-medium">
+<div class="w-1.5 h-1.5 rounded-full bg-[#4ADE80]"></div> Approved
+                                    </span>
+</td>
+<td class="py-3 pr-2 text-right">
+<div class="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="p-1.5 text-on-surface-variant hover:text-on-surface rounded-md hover:bg-surface-variant transition-colors"><span class="material-symbols-outlined text-[18px]">visibility</span></button>
+<button class="p-1.5 text-on-surface-variant hover:text-on-surface rounded-md hover:bg-surface-variant transition-colors"><span class="material-symbols-outlined text-[18px]">edit</span></button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Footer Summary -->
+<div class="h-12 bg-surface-container shrink-0 border-t border-outline-variant/20 px-gutter flex items-center justify-between text-xs font-technical text-on-surface-variant">
+<div class="flex items-center gap-4">
+<span>6 Categories</span>
+<div class="w-1 h-1 rounded-full bg-outline-variant/50"></div>
+<span>380 Total Items</span>
+<div class="w-1 h-1 rounded-full bg-outline-variant/50"></div>
+<span>312.0m Conduit &amp; Tray</span>
+</div>
+<div class="flex items-center gap-2 text-on-surface">
+<span class="text-on-surface-variant">Total Est:</span>
+<span class="font-bold text-sm">$184,200.00</span>
+</div>
+</div>
+</div>
+<!-- Right Column: Inspector & Export (35%) -->
+<div class="flex-[3.5] bg-surface-container-low flex flex-col overflow-y-auto">
+<!-- Inspector Section -->
+<div class="p-6 border-b border-outline-variant/10">
+<div class="flex items-start justify-between mb-4">
+<div>
+<h2 class="font-headline text-lg font-semibold text-on-surface">Line Item Evidence</h2>
+<p class="text-sm text-on-surface-variant mt-1">Traceability for selected item</p>
+</div>
+<div class="bg-surface p-2 rounded border border-outline-variant/20 font-technical text-xs text-on-surface shadow-sm">
+                            ID: #TR-4092
+                        </div>
+</div>
+<div class="bg-surface-container-highest p-3 rounded-lg border border-outline-variant/20 mb-6">
+<div class="font-medium text-on-surface mb-1">Recessed 2x4 LED Troffer</div>
+<div class="text-sm text-on-surface-variant mb-2">Lithonia CPX 4000K</div>
+<div class="flex items-center justify-between mt-3 pt-3 border-t border-outline-variant/20">
+<span class="text-sm text-on-surface-variant">Current Qty:</span>
+<span class="font-technical text-lg font-bold text-primary">47 EA</span>
+</div>
+</div>
+<!-- CAD Preview Viewport -->
+<div class="relative w-full h-48 bg-[#0a0a0a] rounded-lg border border-outline-variant/30 overflow-hidden group shadow-inner mb-6">
+<!-- Placeholder background simulating CAD drawing with glowing cyan boxes and red zoom -->
+<div class="absolute inset-0 bg-cover bg-center opacity-80 mix-blend-screen" data-alt="A dark mode engineering CAD drawing viewport showing a floor plan grid. In the center, a cluster of rectangular fixtures are highlighted with glowing cyan bounding boxes. One specific box is intensely highlighted in vibrant racing red, indicating the current selection. The overall style is high-tech, precise, and glassmorphic." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDnyEWlwHLpYtqHq8W4UmM1FTLloii9mZu0DPKGKrXhA8bI-5T20a3m_Y-nm2N2THf5IomVIUcvrO9IkMaONtiOOKB1GyI2ae36KzWSvCM1LMSXbE756BD4bBJAz1QEIPTsGMtlAQBGoXkhdks1G5f44wDfxJliLN_CrYxhbhd4P923oLP0MjbseI67FDvZYA2znquhKaCsYulZyDLQJaIbF7Ca00nhFrUohX9AZRgqe_aGebLAglI078DXKVYtXUc8bAjxkvWCWD8E')"></div>
+<!-- Overlay UI for CAD -->
+<div class="absolute top-2 left-2 bg-surface/80 backdrop-blur text-xs font-technical px-2 py-1 rounded border border-outline-variant/20 text-on-surface flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">layers</span> E-104
+                        </div>
+<div class="absolute bottom-2 right-2 flex gap-1">
+<button class="w-6 h-6 rounded bg-surface/80 backdrop-blur border border-outline-variant/20 text-on-surface flex items-center justify-center hover:bg-surface transition-colors">
+<span class="material-symbols-outlined text-[14px]">add</span>
+</button>
+<button class="w-6 h-6 rounded bg-surface/80 backdrop-blur border border-outline-variant/20 text-on-surface flex items-center justify-center hover:bg-surface transition-colors">
+<span class="material-symbols-outlined text-[14px]">remove</span>
+</button>
+</div>
+</div>
+<!-- Trust History Timeline -->
+<div>
+<h3 class="text-sm font-semibold text-on-surface mb-3 flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-outline">history</span>
+                            Trust History
+                        </h3>
+<div class="relative pl-3 border-l border-outline-variant/20 ml-2 space-y-4">
+<!-- Timeline Event 1 -->
+<div class="relative">
+<div class="absolute -left-[17px] top-1 w-2 h-2 rounded-full bg-outline-variant ring-4 ring-surface-container-low"></div>
+<div class="text-xs font-technical text-on-surface-variant mb-0.5">10:14 AM</div>
+<div class="text-sm text-on-surface bg-surface p-2 rounded-md border border-outline-variant/10">
+<span class="text-primary font-medium">AI Engine v2.4</span> detected <span class="font-technical text-outline">43</span> fixtures
+                                </div>
+</div>
+<!-- Timeline Event 2 -->
+<div class="relative">
+<div class="absolute -left-[17px] top-1 w-2 h-2 rounded-full bg-primary ring-4 ring-surface-container-low shadow-[0_0_8px_rgba(255,180,168,0.5)]"></div>
+<div class="text-xs font-technical text-on-surface-variant mb-0.5">11:32 AM</div>
+<div class="text-sm text-on-surface bg-primary/5 p-2 rounded-md border border-primary/20">
+<span class="font-medium text-on-surface">Rahul Mehta</span> added <span class="font-technical text-primary">+4</span> manual fixtures
+                                </div>
+</div>
+</div>
+</div>
+</div>
+<!-- Export Card Section -->
+<div class="p-6 mt-auto">
+<div class="bg-surface-container p-5 rounded-xl border border-outline-variant/20 shadow-lg">
+<h3 class="font-headline text-md font-semibold text-on-surface mb-4">Export Bill of Quantities (BOQ)</h3>
+<div class="flex gap-2 mb-4">
+<button class="flex-1 py-2 bg-primary/10 border border-primary/30 rounded-lg text-primary text-sm font-medium flex justify-center items-center gap-2 transition-colors">
+<span class="material-symbols-outlined text-[18px]">table_view</span> Excel
+                            </button>
+<button class="flex-1 py-2 bg-surface border border-outline-variant/20 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-variant text-sm font-medium flex justify-center items-center gap-2 transition-colors">
+<span class="material-symbols-outlined text-[18px]">picture_as_pdf</span> PDF
+                            </button>
+<button class="flex-1 py-2 bg-surface border border-outline-variant/20 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-variant text-sm font-medium flex justify-center items-center gap-2 transition-colors">
+<span class="material-symbols-outlined text-[18px]">integration_instructions</span> CSV
+                            </button>
+</div>
+<div class="space-y-3 mb-6">
+<label class="flex items-center gap-3 cursor-pointer group">
+<div class="w-4 h-4 rounded border border-primary bg-primary/20 flex items-center justify-center">
+<span class="material-symbols-outlined text-[12px] text-primary" style="font-variation-settings: 'wght' 700;">check</span>
+</div>
+<span class="text-sm text-on-surface group-hover:text-primary transition-colors">Include Spatial Coordinates</span>
+</label>
+<label class="flex items-center gap-3 cursor-pointer group">
+<div class="w-4 h-4 rounded border border-primary bg-primary/20 flex items-center justify-center">
+<span class="material-symbols-outlined text-[12px] text-primary" style="font-variation-settings: 'wght' 700;">check</span>
+</div>
+<span class="text-sm text-on-surface group-hover:text-primary transition-colors">Attach Human-in-the-loop Audit Log</span>
+</label>
+<label class="flex items-center gap-3 cursor-pointer group">
+<div class="w-4 h-4 rounded border border-outline-variant/50 bg-surface flex items-center justify-center group-hover:border-primary/50 transition-colors">
+</div>
+<span class="text-sm text-on-surface-variant group-hover:text-on-surface transition-colors">Embed Estimated Pricing Data</span>
+</label>
+</div>
+<button class="w-full py-3 bg-primary-container text-on-primary-container rounded-lg font-semibold flex items-center justify-center gap-2 hover:bg-primary-container/90 hover:scale-[0.98] transition-all shadow-[0_4px_14px_rgba(221,2,0,0.2)]">
+<span class="material-symbols-outlined">download</span>
+                            Download Takeoff_ABC_DataCenter_v2.xlsx
+                        </button>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

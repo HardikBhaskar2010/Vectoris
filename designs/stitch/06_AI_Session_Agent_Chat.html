@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Vectoris Engineering Intelligence - AI Session</title>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Configuration (Design System) -->
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        surface: '#131313',
+                        'surface-dim': '#131313',
+                        'surface-bright': '#393939',
+                        'surface-container-lowest': '#0e0e0e',
+                        'surface-container-low': '#1b1b1b',
+                        'surface-container': '#1f1f1f',
+                        'surface-container-high': '#2a2a2a',
+                        'surface-container-highest': '#353535',
+                        'on-surface': '#e2e2e2',
+                        'on-surface-variant': '#e9bcb5',
+                        'inverse-surface': '#e2e2e2',
+                        'inverse-on-surface': '#303030',
+                        outline: '#af8781',
+                        'outline-variant': '#5e3f3a',
+                        'surface-tint': '#ffb4a8',
+                        primary: '#ffb4a8',
+                        'on-primary': '#680100',
+                        'primary-container': '#dd0200',
+                        'on-primary-container': '#ffedea',
+                        'inverse-primary': '#c00200',
+                        secondary: '#ffb4ab',
+                        'on-secondary': '#5e1612',
+                        'secondary-container': '#7c2d26',
+                        'on-secondary-container': '#ff9a8e',
+                        tertiary: '#e5bdb9',
+                        'on-tertiary': '#432a27',
+                        'tertiary-container': '#876663',
+                        'on-tertiary-container': '#ffedeb',
+                        error: '#ffb4ab',
+                        'on-error': '#690005',
+                        'error-container': '#93000a',
+                        'on-error-container': '#ffdad6',
+                        'primary-fixed': '#ffdad4',
+                        'primary-fixed-dim': '#ffb4a8',
+                        'on-primary-fixed': '#410000',
+                        'on-primary-fixed-variant': '#930100',
+                        'secondary-fixed': '#ffdad6',
+                        'secondary-fixed-dim': '#ffb4ab',
+                        'on-secondary-fixed': '#400203',
+                        'on-secondary-fixed-variant': '#7c2d26',
+                        'tertiary-fixed': '#ffdad6',
+                        'tertiary-fixed-dim': '#e5bdb9',
+                        'on-tertiary-fixed': '#2c1514',
+                        'on-tertiary-fixed-variant': '#5c403d',
+                        background: '#131313',
+                        'on-background': '#e2e2e2',
+                        'surface-variant': '#353535'
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.5rem",
+                        "sm": "0.25rem",
+                        "md": "0.75rem",
+                        "lg": "1rem",
+                        "xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                    spacing: {
+                        unit: '8px',
+                        'container-padding': '40px',
+                        gutter: '24px',
+                        'stack-sm': '12px',
+                        'stack-md': '24px',
+                        'stack-lg': '48px'
+                    },
+                    fontFamily: {
+                        display: ["Bricolage Grotesque", "sans-serif"],
+                        headline: ["Bricolage Grotesque", "sans-serif"],
+                        body: ["Hanken Grotesk", "sans-serif"],
+                        technical: ["JetBrains Mono", "monospace"],
+                        label: ["Hanken Grotesk", "sans-serif"]
+                    },
+                    fontSize: {
+                        'display-lg': ['64px', { lineHeight: '1.1', letterSpacing: '-0.04em', fontWeight: '800' }],
+                        'headline-lg': ['40px', { lineHeight: '1.2', letterSpacing: '-0.02em', fontWeight: '700' }],
+                        'headline-md': ['24px', { lineHeight: '1.3', fontWeight: '600' }],
+                        'body-lg': ['18px', { lineHeight: '1.6', fontWeight: '400' }],
+                        'body-md': ['16px', { lineHeight: '1.5', fontWeight: '400' }],
+                        'technical-sm': ['13px', { lineHeight: '1.4', letterSpacing: '0.02em', fontWeight: '500' }],
+                        'label-caps': ['12px', { lineHeight: '1', letterSpacing: '0.1em', fontWeight: '700' }]
+                    }
+                }
+            }
+        }
+    </script>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&amp;family=Hanken+Grotesk:wght@400..700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        body { background-color: theme('colors.surface'); color: theme('colors.on-surface'); }
+        .glass-panel {
+            background: rgba(26, 7, 6, 0.4); /* Coffee Bean */
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid theme('colors.outline-variant');
+        }
+        .liquid-glass {
+            background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.2) 100%);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.05);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+        }
+        .glow-red {
+            box-shadow: 0 0 20px rgba(221, 2, 0, 0.2);
+            border: 1px solid theme('colors.primary-container');
+        }
+        .text-glow {
+            text-shadow: 0 0 10px rgba(221, 2, 0, 0.5);
+        }
+        
+        /* Smooth Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: theme('colors.surface-container-highest'); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: theme('colors.outline-variant'); }
+    </style>
+</head>
+<body class="font-body text-body-md h-screen overflow-hidden flex flex-col bg-surface selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopNavBar (Shared Component Shell) -->
+<nav class="fixed top-0 left-0 w-full flex justify-between items-center px-10 h-20 bg-surface/80 backdrop-blur-xl bg-surface-container-high/50 border-b border-outline-variant/30 shadow-2xl shadow-black/40 z-50">
+<!-- Brand & Breadcrumbs -->
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary-container text-3xl" style="font-variation-settings: 'FILL' 1;">dataset</span>
+<span class="font-headline text-2xl font-extrabold text-on-surface tracking-tighter">Vectoris</span>
+</div>
+<div class="h-6 w-px bg-outline-variant/50 mx-2"></div>
+<div class="flex items-center text-sm font-medium text-on-surface-variant gap-2">
+<a class="hover:text-primary transition-colors" href="#">Projects</a>
+<span class="material-symbols-outlined text-sm">chevron_right</span>
+<a class="hover:text-primary transition-colors" href="#">ABC Data Center</a>
+<span class="material-symbols-outlined text-sm">chevron_right</span>
+<a class="hover:text-primary transition-colors" href="#">Sessions</a>
+<span class="material-symbols-outlined text-sm">chevron_right</span>
+<span class="text-on-surface">Power Distribution Analysis</span>
+</div>
+</div>
+<!-- Global Actions -->
+<div class="flex items-center gap-6">
+<!-- Search -->
+<div class="relative group hidden lg:block">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/70 text-sm">search</span>
+<input class="w-64 bg-surface-container-highest/30 border border-outline-variant/30 rounded-full py-1.5 pl-9 pr-12 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary-container/50 focus:ring-1 focus:ring-primary-container/50 transition-all" placeholder="Search across project..." type="text"/>
+<div class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-70">
+<kbd class="font-technical text-[10px] bg-surface-container px-1.5 py-0.5 rounded text-on-surface-variant">⌘K</kbd>
+</div>
+</div>
+<!-- Engine Badge -->
+<div class="flex items-center gap-2 bg-surface-container-low border border-outline-variant/20 px-3 py-1.5 rounded-full">
+<div class="w-2 h-2 rounded-full bg-primary-container animate-pulse"></div>
+<span class="font-technical text-technical-sm text-on-surface-variant">Local Engine Active</span>
+</div>
+<!-- Icons -->
+<div class="flex items-center gap-2">
+<button class="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-bright/20 rounded-full transition-all duration-300 active:scale-95 duration-200" title="settings">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<button class="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-bright/20 rounded-full transition-all duration-300 active:scale-95 duration-200 relative" title="notifications">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-1 right-1 w-2 h-2 bg-primary-container rounded-full"></span>
+</button>
+<button class="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-bright/20 rounded-full transition-all duration-300 active:scale-95 duration-200" title="monitoring">
+<span class="material-symbols-outlined">monitoring</span>
+</button>
+</div>
+<button class="bg-primary-container text-on-primary-container px-4 py-1.5 rounded-md font-medium text-sm hover:bg-inverse-primary transition-colors active:scale-95 duration-200 flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">play_arrow</span>
+                Execute Analysis
+            </button>
+<!-- Profile -->
+<div class="w-8 h-8 rounded-full border border-outline-variant overflow-hidden cursor-pointer">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="A detailed headshot portrait of an engineer, neutral lighting, dark background, professional attire." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAjlLyThurjGTkbV0JRpt1cUn6y3W3Gr_kOc4bixauBcEaEtc5HXmNDY6-xohfTEZANg0AoR9_XrRim5q1k_tBB4iZ6PQ9GsrZLEwTa55m5z83BhUkhGmMwrnpTNPgo4S-hJ_ykYd_9eryLOh5qFl0f-E9q4Rwhg2QEA9kpoIxI_DhNVX2qeuV2k_tJ9XnrxuyA_m_MfYi_DyGDu33mQAtZ5-DLVglsmH0laUeuLFaSZu2vwtNQsFd81X-us62SvHI0bMg8BEc0O4Cf"/>
+</div>
+</div>
+</nav>
+<!-- Main Layout: 2-Column Split -->
+<main class="flex-1 mt-20 flex overflow-hidden">
+<!-- LEFT: Session List Sidebar (320px) -->
+<aside class="w-[320px] shrink-0 border-r border-outline-variant/20 bg-surface-container-lowest/50 flex flex-col relative z-10">
+<!-- Sidebar Header -->
+<div class="p-5 border-b border-outline-variant/10">
+<div class="flex justify-between items-center mb-4">
+<h2 class="font-headline font-semibold text-lg text-on-surface">AI Sessions</h2>
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-sm">filter_list</span>
+</button>
+</div>
+<button class="w-full py-2.5 px-4 rounded-md liquid-glass text-primary flex items-center justify-center gap-2 font-medium hover:bg-surface-bright/10 transition-colors mb-4 group border border-primary/20 hover:border-primary/50">
+<span class="material-symbols-outlined group-hover:rotate-90 transition-transform">add</span>
+                    New Session
+                </button>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">search</span>
+<input class="w-full bg-surface-container/50 border border-outline-variant/30 rounded-md py-1.5 pl-9 pr-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-outline-variant transition-colors" placeholder="Search sessions..." type="text"/>
+</div>
+</div>
+<!-- Session List -->
+<div class="flex-1 overflow-y-auto p-3 space-y-2">
+<!-- Active Session -->
+<div class="p-3 rounded-md bg-surface-container-high/40 border-l-4 border-primary-container cursor-pointer transition-colors relative overflow-hidden group">
+<div class="absolute inset-0 bg-gradient-to-r from-primary-container/10 to-transparent opacity-50"></div>
+<div class="flex justify-between items-start mb-1 relative z-10">
+<span class="font-headline font-semibold text-sm text-primary group-hover:text-primary-fixed-dim transition-colors line-clamp-2 pr-4">Power Distribution &amp; PAC Feeders</span>
+<div class="flex items-center gap-1 shrink-0 bg-primary-container/20 px-1.5 py-0.5 rounded text-[10px] font-label-caps text-primary">
+<span class="w-1.5 h-1.5 rounded-full bg-primary-container animate-ping"></span>
+                            LIVE
+                        </div>
+</div>
+<div class="flex justify-between items-center text-xs text-on-surface-variant relative z-10 mt-2">
+<span class="font-technical text-[10px]">Today, 10:42 AM</span>
+<span class="material-symbols-outlined text-[14px]">electrical_services</span>
+</div>
+</div>
+<!-- Inactive Session 1 -->
+<div class="p-3 rounded-md hover:bg-surface-container/50 border border-transparent hover:border-outline-variant/20 cursor-pointer transition-colors group">
+<div class="flex justify-between items-start mb-1">
+<span class="font-medium text-sm text-on-surface group-hover:text-on-surface-variant transition-colors line-clamp-2">Lighting Takeoff &amp; Fixture Audit</span>
+</div>
+<div class="flex justify-between items-center text-xs text-on-surface-variant/50 mt-2">
+<span class="font-technical text-[10px]">Yesterday</span>
+<span class="material-symbols-outlined text-[14px]">lightbulb</span>
+</div>
+</div>
+<!-- Inactive Session 2 -->
+<div class="p-3 rounded-md hover:bg-surface-container/50 border border-transparent hover:border-outline-variant/20 cursor-pointer transition-colors group">
+<div class="flex justify-between items-start mb-1">
+<span class="font-medium text-sm text-on-surface group-hover:text-on-surface-variant transition-colors line-clamp-2">Cable Tray Route &amp; Clearance Optimization</span>
+</div>
+<div class="flex justify-between items-center text-xs text-on-surface-variant/50 mt-2">
+<span class="font-technical text-[10px]">Oct 24, 2023</span>
+<span class="material-symbols-outlined text-[14px]">route</span>
+</div>
+</div>
+</div>
+<!-- Bottom Resource Card -->
+<div class="p-4 border-t border-outline-variant/10 bg-[#1A0706]/40 backdrop-blur-md">
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-primary text-sm">memory</span>
+<span class="font-label-caps text-xs text-on-surface-variant">Local LLM &amp; CAD Engine v2.4</span>
+</div>
+<div class="space-y-1.5 font-technical text-technical-sm">
+<div class="flex justify-between text-on-surface-variant/70">
+<span>GPU Mem:</span>
+<span class="text-secondary-fixed">14.2 / 24 GB</span>
+</div>
+<div class="flex justify-between text-on-surface-variant/70">
+<span>Latency:</span>
+<span class="text-tertiary">42ms</span>
+</div>
+</div>
+<!-- Progress Bar -->
+<div class="h-1 w-full bg-surface-container mt-2 rounded-full overflow-hidden">
+<div class="h-full bg-secondary-container w-[60%] rounded-full"></div>
+</div>
+</div>
+</aside>
+<!-- RIGHT: Flexible Viewport (Chat Canvas) -->
+<section class="flex-1 flex flex-col relative bg-surface-dim overflow-hidden">
+<!-- Decorative Background Element -->
+<div class="absolute inset-0 pointer-events-none opacity-20" style="background-image: radial-gradient(circle at 100% 0%, #3a0a08 0%, transparent 40%);"></div>
+<!-- Viewport Header -->
+<header class="px-8 py-5 border-b border-outline-variant/10 flex justify-between items-center shrink-0 backdrop-blur-md bg-surface/50 z-20">
+<div class="flex items-center gap-4">
+<h1 class="font-headline text-headline-md text-on-surface">Power Distribution &amp; PAC Feeders</h1>
+<div class="flex -space-x-2">
+<div class="w-6 h-6 rounded-full border border-surface overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Small avatar, female engineer looking focused, high quality portrait" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDdr8GG1WocqQgQ9gLNmGivsaGXnCSHL6qtm-WOMIwEl3hLWVYfkhrW1ug3ua4reV3SrAEmqWvc8253n9zTza_ay8IkMYSnR_8VVhDomrHKvJy__HYJQQv6xLtD8a0SvesdBsDwwAmwoCR4p2zA_3fgHyzxtsPfuhuxJDlGsNmxjN7T_az8GI84m57Zp1yKfEXO9avNIphchykh-FhxBuGqD23JycQ8rC4fqU6wivNysE__7UtMBLMJ77GmISzFbj9g3FC9HaQjCvn7"/>
+</div>
+<div class="w-6 h-6 rounded-full border border-surface bg-surface-container-high flex items-center justify-center text-[10px] font-bold text-on-surface">
+                            +2
+                        </div>
+</div>
+</div>
+<div class="flex gap-2">
+<button class="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container rounded-md transition-colors" title="Export">
+<span class="material-symbols-outlined">ios_share</span>
+</button>
+<button class="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container rounded-md transition-colors" title="Settings">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+</header>
+<!-- Chat Stream Area -->
+<div class="flex-1 overflow-y-auto px-8 py-6 space-y-8 pb-32 relative z-10 scroll-smooth">
+<!-- User Request -->
+<div class="flex gap-4 max-w-4xl mx-auto">
+<div class="w-8 h-8 rounded-full border border-outline-variant overflow-hidden shrink-0 mt-1">
+<img class="w-full h-full object-cover" data-alt="A detailed headshot portrait of an engineer, neutral lighting, dark background, professional attire." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB-uew7IHASRz8IWuLBQhwGXs-ynAXmqV3TL_y-IaJumgoIueLzkRc39Jxjee8lL73m-p0CKTUx4-H-leCAj3j4cXKE_p7V9kEmsWnJYLFOQxqbVWtlVZ3rg6wavC0HGW2kppc0im9DHPGy-KUgRr5GUVbzU1RsN1qWOWIio5aWGD8VxEKHJ-BLh9akKTVO7hFVr1UuSJEaFS_BVv21kiEtsjUeHrLYBbGZKs_AVOF7xq7bkptpi5n7QEVDcLV0VZaQnyamB5gGoHK3"/>
+</div>
+<div class="flex-1">
+<div class="flex items-baseline gap-2 mb-1">
+<span class="font-medium text-on-surface">Alex Carter</span>
+<span class="text-xs text-on-surface-variant/50 font-technical">10:42 AM</span>
+</div>
+<div class="text-on-surface-variant leading-relaxed">
+                            Analyze Server Room B drawing [@E-104]. I need the cable calculations for the new PAC feeders. Please identify the equipment, measure the runs, check voltage drop, and propose the takeoff items.
+                        </div>
+</div>
+</div>
+<!-- Agent Response -->
+<div class="flex gap-4 max-w-4xl mx-auto">
+<div class="w-8 h-8 rounded-md bg-primary-container/20 border border-primary-container/50 flex items-center justify-center shrink-0 mt-1 relative">
+<span class="material-symbols-outlined text-primary-container text-sm" style="font-variation-settings: 'FILL' 1;">smart_toy</span>
+<div class="absolute -top-1 -right-1 w-2.5 h-2.5 bg-primary-container rounded-full animate-pulse"></div>
+</div>
+<div class="flex-1 space-y-5">
+<div class="flex items-baseline gap-2 mb-1">
+<span class="font-headline font-bold text-primary text-glow">Vectoris Agent</span>
+<span class="text-xs text-on-surface-variant/50 font-technical">10:42 AM</span>
+</div>
+<!-- Tool Execution Accordion Chain -->
+<div class="space-y-2 font-technical text-sm">
+<div class="flex items-center gap-3 text-on-surface-variant">
+<span class="material-symbols-outlined text-sm">check_circle</span>
+<span>Understanding Request: Context established for Server Room B (E-104)</span>
+</div>
+<div class="flex items-center gap-3 text-on-surface-variant">
+<span class="material-symbols-outlined text-sm">check_circle</span>
+<span>Inspecting Drawings: Loaded sheet E-104</span>
+</div>
+<div class="flex items-center gap-3 text-on-surface-variant">
+<span class="material-symbols-outlined text-sm">check_circle</span>
+<span>Identifying Equipment: Found PAC-B1, PAC-B2, PAC-B3 (480V, 3-Phase)</span>
+</div>
+<div class="flex items-center gap-3 text-primary">
+<span class="material-symbols-outlined text-sm animate-spin">sync</span>
+<span>Measuring Cable Runs &amp; Calculating Voltage Drop...</span>
+</div>
+</div>
+<!-- Main Response Text -->
+<div class="text-on-surface leading-relaxed">
+                            I've analyzed the PAC feeder routes on sheet E-104. Based on the equipment ratings (125A MCA) and the measured routing distance to MDP-B, here is the telemetry and the proposed takeoff.
+                        </div>
+<!-- Interactive Evidence Card -->
+<div class="liquid-glass rounded-lg overflow-hidden border border-outline-variant/30 flex flex-col md:flex-row">
+<!-- Visual Snippet -->
+<div class="md:w-1/2 h-48 relative border-b md:border-b-0 md:border-r border-outline-variant/30">
+<div class="absolute inset-0 bg-cover bg-center mix-blend-screen opacity-80" data-alt="A detailed, abstract top-down schematic blueprint of a server room, with dark background and glowing neon cyan and red geometric lines indicating electrical cable routes, high tech aesthetic, precise engineering style." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAnYviICVRl2IBJKp3srS7wyIGsh4WoFPc3jWd2aqfCLruQh4eQEbk1hyhxv0JUyFz6vpX8ePhOgiE8sNHWhDZYwhL13f34FbQqpwg3C-mRWzUyAqIp29GjZoIwjNXRYC8zaSXq3tD_vwQvILJVYR8olaCfdJ7pBzGK_bTWqPB0dZrbKAd-XiKNxKStnhMVUZhGWGURRZr5Lwol5ZP1MmTwHozwGuI81aeJggT9ovqoG-UNqyixsUz4Dn-lUpvycnF5XB4w1Lq-T8oK')"></div>
+<div class="absolute inset-0 bg-gradient-to-t from-surface-dim to-transparent"></div>
+<div class="absolute bottom-3 left-3 bg-surface-container/80 backdrop-blur text-xs font-technical px-2 py-1 rounded border border-outline-variant/50 text-on-surface">Sheet: E-104 (Server Room B)</div>
+</div>
+<!-- Telemetry Metrics -->
+<div class="md:w-1/2 p-4 flex flex-col justify-center bg-[#1A0706]/20">
+<h4 class="font-label-caps text-on-surface-variant mb-3">Route Telemetry (PAC-B1)</h4>
+<div class="grid grid-cols-2 gap-y-3 gap-x-4 font-technical text-sm">
+<div>
+<div class="text-on-surface-variant/50 text-[10px] uppercase mb-0.5">Meas. Length</div>
+<div class="text-on-surface">142 ft</div>
+</div>
+<div>
+<div class="text-on-surface-variant/50 text-[10px] uppercase mb-0.5">Voltage Drop</div>
+<div class="text-tertiary">1.2% (Pass)</div>
+</div>
+<div>
+<div class="text-on-surface-variant/50 text-[10px] uppercase mb-0.5">Min Conduit</div>
+<div class="text-on-surface">3" EMT</div>
+</div>
+<div>
+<div class="text-on-surface-variant/50 text-[10px] uppercase mb-0.5">Feeder Size</div>
+<div class="text-on-surface">4#350 kcmil, 1#3G</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Action Module -->
+<div class="glow-red rounded-lg p-5 bg-[#1A0706]/60 backdrop-blur-md relative overflow-hidden">
+<!-- Subtle striped background pattern -->
+<div class="absolute inset-0 opacity-5 pointer-events-none" style="background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, theme('colors.primary-container') 10px, theme('colors.primary-container') 20px);"></div>
+<div class="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+<div>
+<h4 class="font-headline font-semibold text-primary mb-1 flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">add_task</span> Action Proposed
+                                    </h4>
+<p class="text-sm text-on-surface-variant">Add (3) PAC Feeder assemblies to Bill of Quantities.</p>
+<div class="mt-2 font-technical text-xs text-on-surface-variant/70 border-l-2 border-outline-variant/30 pl-2 space-y-1">
+<div>3x 142ft - 4#350 kcmil CU THHN</div>
+<div>3x 142ft - 3" EMT Conduit</div>
+</div>
+</div>
+<button class="bg-primary-container text-on-primary-container px-5 py-2.5 rounded-md font-medium text-sm hover:bg-inverse-primary transition-colors active:scale-95 shrink-0 shadow-[0_0_15px_rgba(221,2,0,0.4)]">
+                                    Approve &amp; Commit to BOQ
+                                </button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Command Bar (Bottom) -->
+<div class="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-surface via-surface/95 to-transparent z-30">
+<div class="max-w-4xl mx-auto">
+<!-- Quick Chips -->
+<div class="flex gap-2 mb-3 overflow-x-auto pb-1 hide-scrollbar">
+<button class="bg-surface-container hover:bg-surface-container-high border border-outline-variant/30 text-xs font-technical text-on-surface-variant px-3 py-1.5 rounded-full transition-colors whitespace-nowrap">
+                            [/takeoff-summary]
+                        </button>
+<button class="bg-surface-container hover:bg-surface-container-high border border-outline-variant/30 text-xs font-technical text-on-surface-variant px-3 py-1.5 rounded-full transition-colors whitespace-nowrap">
+                            [@E-104]
+                        </button>
+<button class="bg-surface-container hover:bg-surface-container-high border border-outline-variant/30 text-xs font-technical text-on-surface-variant px-3 py-1.5 rounded-full transition-colors whitespace-nowrap">
+                            Generate RFI Draft
+                        </button>
+</div>
+<!-- Input Area -->
+<div class="relative glass-panel rounded-xl flex items-end p-2 focus-within:ring-1 focus-within:ring-primary/50 transition-all">
+<div class="flex flex-col gap-1 px-2 pb-1.5">
+<button class="text-on-surface-variant hover:text-primary transition-colors p-1" title="Attach Drawing">
+<span class="material-symbols-outlined text-[20px]">attach_file</span>
+</button>
+<button class="text-on-surface-variant hover:text-primary transition-colors p-1" title="Voice Input">
+<span class="material-symbols-outlined text-[20px]">mic</span>
+</button>
+</div>
+<textarea class="flex-1 bg-transparent border-none text-on-surface placeholder:text-on-surface-variant/50 focus:ring-0 resize-none py-2 px-3 text-sm font-body max-h-32 min-h-[40px]" placeholder="Ask Vectoris anything... (e.g. 'What is the total copper weight?')" rows="1"></textarea>
+<button class="bg-primary/10 text-primary hover:bg-primary hover:text-on-primary p-2 rounded-lg transition-colors mb-0.5 mr-0.5">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">send</span>
+</button>
+</div>
+<div class="text-center mt-2">
+<span class="text-[10px] text-on-surface-variant/40 font-technical">AI can make mistakes. Verify critical engineering values.</span>
+</div>
+</div>
+</div>
+</section>
+</main>
+<script>
+        // Simple auto-resize for textarea
+        const tx = document.getElementsByTagName("textarea");
+        for (let i = 0; i < tx.length; i++) {
+            tx[i].setAttribute("style", "height:" + (tx[i].scrollHeight) + "px;overflow-y:hidden;");
+            tx[i].addEventListener("input", OnInput, false);
+        }
+        function OnInput() {
+            this.style.height = "auto";
+            this.style.height = (this.scrollHeight) + "px";
+        }
+    </script>
+</body></html>
