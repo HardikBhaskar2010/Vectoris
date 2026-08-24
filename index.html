@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -12,6 +12,17 @@
       content="Vectoris — Local-first electrical drawing takeoff and AI-assisted component detection for engineering workflows."
     />
     <title>Vectoris</title>
+    <script>
+      (function() {
+        try {
+          var params = new URLSearchParams(window.location.search);
+          var theme = params.get('theme') || localStorage.getItem('vectoris.themePreference');
+          if (theme === 'light' || theme === 'dark') {
+            document.documentElement.setAttribute('data-theme', theme);
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

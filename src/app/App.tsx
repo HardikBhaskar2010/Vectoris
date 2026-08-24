@@ -30,15 +30,25 @@ import ProjectDocumentsPage from "../pages/ProjectDocumentsPage";
 import ProjectTakeoffPage from "../pages/ProjectTakeoffPage";
 import ProjectReportsPage from "../pages/ProjectReportsPage";
 import SessionsPage from "../pages/SessionsPage";
+import SettingsPage from "../pages/SettingsPage";
 import ProjectWorkspacePage from "../pages/ProjectWorkspacePage";
 
 export function App() {
   const path = window.location.pathname;
 
-  // Sync ?theme param to document for global CSS overrides
+  // Sync theme to document for global CSS overrides
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const theme = params.get("theme");
+    let theme = params.get("theme");
+
+    if (!theme) {
+      try {
+        theme = window.localStorage.getItem("vectoris.themePreference");
+      } catch {
+        // Ignore storage errors
+      }
+    }
+
     if (theme === "light" || theme === "dark") {
       document.documentElement.setAttribute("data-theme", theme);
     } else {
@@ -55,7 +65,7 @@ export function App() {
   if (path === "/projects")           return <ProjectsPage />;
   if (path.startsWith("/projects"))   return <ProjectsPage />;
   if (path.startsWith("/sessions"))   return <SessionsPage />;
-  if (path.startsWith("/settings"))   return <div>Settings — coming soon</div>;
+  if (path.startsWith("/settings"))   return <SettingsPage />;
 
   // ── Project sub-routes (order: most specific first) ─────────────────────────
   if (path.match(/^\/project\/[^/]+\/documents/))  return <ProjectDocumentsPage />;

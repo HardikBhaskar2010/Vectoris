@@ -1,4 +1,4 @@
-﻿/**
+/**
  * BlueprintViewport — Demo SVG preview panel.
  *
  * CONTRACT (strictly enforced):
@@ -103,12 +103,12 @@ export function BlueprintViewport() {
           <polygon points="510,142 542,157 532,170 500,155" stroke="#00b4d8" strokeWidth="1.6" fill="rgba(0,180,216,0.18)" />
 
           {/* Flagged component — needs review (red) */}
-          <polygon points="382,200 414,215 404,228 372,213" stroke="var(--color-racing-red,#dd0200)" strokeWidth="1.8" fill="rgba(221,2,0,0.22)" />
-          <text x="388" y="210" fill="var(--color-racing-red,#dd0200)" fontSize="8" fontFamily="monospace" fontWeight="600">!</text>
+          <polygon points="382,200 414,215 404,228 372,213" stroke="#f87171" strokeWidth="1.8" fill="rgba(248,113,113,0.25)" />
+          <text x="388" y="210" fill="#f87171" fontSize="8" fontFamily="monospace" fontWeight="600">!</text>
 
           {/* Dimension tag */}
-          <rect x="240" y="248" width="68" height="16" rx="3" fill="var(--blueprint-canvas-bg,#09090c)" stroke="var(--color-racing-red,#dd0200)" strokeWidth="0.8" />
-          <text x="246" y="259" fill="#e8b4b0" fontSize="9.5" fontFamily="monospace" fontWeight="700">127.4 m</text>
+          <rect x="240" y="248" width="68" height="16" rx="3" fill="#0d0d0f" stroke="#f87171" strokeWidth="1" />
+          <text x="246" y="259" fill="#fca5a5" fontSize="9.5" fontFamily="monospace" fontWeight="700">127.4 m</text>
 
           {/* Feeder routing line */}
           <polyline points="420,240 420,300 600,300 600,190" stroke="#6b7280" strokeWidth="1.2" strokeDasharray="4 3" opacity="0.5" />
