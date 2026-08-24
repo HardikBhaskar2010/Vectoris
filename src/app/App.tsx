@@ -20,6 +20,7 @@
  *   /project/:id/bid          → ProjectBidPage (future — disabled)
  */
 
+import { useEffect } from "react";
 import { LandingPage } from "../pages/LandingPage";
 import { AuthPage } from "../pages/AuthPage";
 import { DashboardPage } from "../pages/DashboardPage";
@@ -29,9 +30,21 @@ import ProjectDocumentsPage from "../pages/ProjectDocumentsPage";
 import ProjectTakeoffPage from "../pages/ProjectTakeoffPage";
 import ProjectReportsPage from "../pages/ProjectReportsPage";
 import SessionsPage from "../pages/SessionsPage";
+import ProjectWorkspacePage from "../pages/ProjectWorkspacePage";
 
 export function App() {
   const path = window.location.pathname;
+
+  // Sync ?theme param to document for global CSS overrides
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const theme = params.get("theme");
+    if (theme === "light" || theme === "dark") {
+      document.documentElement.setAttribute("data-theme", theme);
+    } else {
+      document.documentElement.removeAttribute("data-theme");
+    }
+  }, []);
 
   // ── Auth ────────────────────────────────────────────────────────────────────
   if (path.startsWith("/auth"))       return <AuthPage />;
@@ -46,7 +59,7 @@ export function App() {
 
   // ── Project sub-routes (order: most specific first) ─────────────────────────
   if (path.match(/^\/project\/[^/]+\/documents/))  return <ProjectDocumentsPage />;
-  if (path.match(/^\/project\/[^/]+\/workspace/))  return <ProjectWorkspaceStub />;
+  if (path.match(/^\/project\/[^/]+\/workspace/))  return <ProjectWorkspacePage />;
   if (path.match(/^\/project\/[^/]+\/takeoff/))    return <ProjectTakeoffPage />;
   if (path.match(/^\/project\/[^/]+\/reports/))    return <ProjectReportsPage />;
   if (path.match(/^\/project\/[^/]+\/estimate/))   return <ProjectFutureStub tab="estimate" label="Estimate" />;
@@ -62,20 +75,7 @@ export function App() {
 // ── Temporary stubs for future/unbuilt project tabs ────────────────────────────
 import { ProjectShell } from "../components/ProjectShell";
 
-function ProjectWorkspaceStub() {
-  const id = getProjectId();
-  return (
-    <ProjectShell
-      project={{ id, name: "ABC Data Center", client: "ABC Corp" }}
-      activeTab="workspace"
-    >
-      <div style={{ padding: "40px 32px", textAlign: "center", color: "var(--text-secondary)" }}>
-        <p style={{ fontSize: 14 }}>Workspace — drawing canvas and detection overlay.</p>
-        <p style={{ fontSize: 13, marginTop: 8 }}>This tab is under construction.</p>
-      </div>
-    </ProjectShell>
-  );
-}
+// ProjectWorkspaceStub removed — replaced by ProjectWorkspacePage
 
 function ProjectFutureStub({ tab, label }: { tab: string; label: string }) {
   const id = getProjectId();
