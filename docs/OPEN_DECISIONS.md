@@ -21,12 +21,14 @@
 | OD-09 | **Takeoff Run scope fields:** whether `Takeoff Run` stores a `documents_in_scope[]` or `sheets_in_scope[]` field for multi-document projects | `03_ARCHITECTURE/DATA_MODEL.md` §2 (Takeoff Run entity) | Engineering | `DATA_MODEL.md` | **Open — required before multi-document processing phase** |
 | OD-11 | **Encryption at rest (local files):** whether and how local drawing files on the user's device are encrypted | `03_ARCHITECTURE/SECURITY.md` §2 | Engineering / Founder | `SECURITY.md` | **Open — TBD; OS keychain-based options via Tauri** |
 | OD-13 | **Desktop app auto-update strategy:** how the Tauri application receives and applies updates | `05_IMPLEMENTATION/DEPLOYMENT.md` §2 | Engineering | `DEPLOYMENT.md` | **Open — TBD** |
-| OD-14 | **Dashboard vs. Projects as merged/separate surface:** whether Dashboard and Projects pages merge into one | `06_PAGES/DASHBOARD.md` Open Questions, `01_PRODUCT/APP_FLOW.md` | Founder (design decision) | `DASHBOARD.md` | **Open — currently modeled as separate per APP_FLOW.md; may merge in design** |
+
 | OD-15 | **Create Project: modal vs. dedicated page** | `06_PAGES/CREATE_PROJECT.md` Open Questions | Founder (design decision) | `CREATE_PROJECT.md` | **Open — currently listed as a page; likely modal in final design** |
 | OD-16 | **Line Item Details: panel/drawer vs. full page** | `06_PAGES/LINE_ITEM_DETAILS.md` Open Questions | Founder (design decision) | `LINE_ITEM_DETAILS.md` | **Open — contextual surface preferred per founder direction** |
 | OD-17 | **Takeoff Review: bulk-approve at MVP** | `06_PAGES/TAKEOFF_REVIEW.md` Open Questions | Product | `TAKEOFF_REVIEW.md` | **Open — TBD** |
 | OD-18 | **Takeoff Review: inline AI Q&A vs. side-panel session** | `06_PAGES/TAKEOFF_REVIEW.md` Open Questions | Product / Design | `TAKEOFF_REVIEW.md` | **Open — TBD** |
 | OD-19 | **Processing page: auto-navigate vs. prompt on completion** | `06_PAGES/PROCESSING.md` Open Questions | Product / Design | `PROCESSING.md` | **Open — TBD** |
+| OD-22 | **Estimate entity model:** separate `Estimate` table with FK to TakeoffRun, or derived fields on TakeoffRun? | `03_ARCHITECTURE/DATA_MODEL.md` §3, future Estimate feature | Engineering | `DATA_MODEL.md` | **Open — must resolve before building Estimate** |
+| OD-23 | **Bid/Proposal mechanics:** what does a Bid contain? pricing adjustments, alternates, terms, proposal format — entirely unspecified | `06_PAGES/PROJECT_NAVIGATION.md` | Founder / Product | `PROJECT_NAVIGATION.md`, `LONG_TERM_VISION.md` | **Open — requires discovery + spec. Do not design until resolved** |
 
 ---
 
@@ -40,6 +42,7 @@
 | OD-02 | Job queue technology (Redis + Celery) | 2026-08-23 | `EVENT_SYSTEM.md`, `TECH_STACK.md` |
 | OD-10 | Auth provider (Supabase Auth) | 2026-08-23 | `SECURITY.md`, `TECH_STACK.md` |
 | OD-12 | Retention / deletion policy (30-day grace period) | 2026-08-23 | `DATA_LIFECYCLE.md` |
+| OD-14 | Dashboard vs. Projects as separate surfaces | 2026-08-24 | `02_DESIGN/NAVIGATION.md` §5 — locked as separate (Dashboard = org pulse; Projects = library) |
 | OD-20 | Typography (Urbanist + Plex Mono) | 2026-08-23 | `DESIGN_SYSTEM.md` |
 | OD-21 | Spacing scale (8px base) | 2026-08-23 | `DESIGN_SYSTEM.md` |
 

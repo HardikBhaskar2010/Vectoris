@@ -4,7 +4,9 @@
 RECOMMENDED
 
 ## Purpose
-A project-scoped conversational workspace where a user interacts with the Vectoris Agent to reason over project documents, request analysis, review evidence, and approve proposed actions.
+The global conversational workspace for interacting with the Vectoris Agent. Sessions may be general (no project context) or project-attached (scoped to a specific project). Both are first-class session types in the same unified interface.
+
+There is ONE AI Session system. There is ONE AI Session UI. Project context is a metadata field on the session entity — not a separate system or page.
 
 ## Design Reference
 
@@ -26,27 +28,57 @@ Visual and UX reference for the AI Session layout — session sidebar, chat canv
 ---
 
 ## User Goal
-Ask the Vectoris Agent questions about the current project, request analysis of specific drawings or documents, review AI-proposed actions with evidence, and approve or reject them.
+Ask the Vectoris Agent questions — either in a general engineering context or scoped to a specific project's drawings, documents, and takeoff data. Review AI-proposed actions with evidence. Approve or reject proposed changes to project data.
 
 ## Entry Conditions
-From Project Overview — "Open Session" (existing) or "New Session". A session is always scoped to a specific project.
+- From the global sidebar → **AI Sessions** (opens the full global sessions surface)
+- From Project Overview → **New session** (opens composer with the project pre-selected)
+- From Project Overview → **Existing session** (opens that session with project context loaded)
+- From Drawing Workspace → **Open AI Session** action (opens composer or active session, sheet context pre-loaded)
+
+A session does NOT require a project. `project_id` is nullable. General conversations are valid entry points from the global AI Sessions nav item.
 
 ## Exit Conditions
-Returns to Project Overview. The session persists — closing it does not delete it. Users can return to any session from Project Overview's session list.
+The session persists — closing it does not delete it. From a project-attached session, the breadcrumb and back navigation returns to Project Overview. From a general session, navigation returns to the global AI Sessions list.
 
 ## Information Architecture
 
-**Two-panel layout:**
+**Global Sessions Surface (route: `/sessions`):**
+- Filter tabs: All · Project Sessions · General
+- Session list — each item shows: project label (if attached), title, timestamp, message count
+- "New session" button → opens the composer
+- Search across all sessions
+- Local engine status indicator (bottom)
+
+**Session Composer (new session entry point):**
+```
+New Session
+
+Project context:
+[ General — No Project  ▼ ]    ← dropdown; pre-fills if opened from within a project
+
+[Start conversation]
+```
+
+The project context dropdown lists:
+- General — No Project
+- All projects the user has access to
+
+If opened from within a project, that project is pre-selected. The user may override it.
+
+**Two-panel layout (active session):**
 
 **Left: Session Sidebar (persistent)**
 - "New Session" button
 - Session search
-- Session list — each session shows: title, timestamp, and a topic icon
+- Session list — all sessions (general and project-attached), filterable
+  - Project-attached sessions show a project name label
+  - General sessions show no project label
 - Active session highlighted with left-border accent
-- Local engine status indicator (bottom of sidebar) — TBD exact format; design shows engine name, resource metrics; at minimum a live/idle status indicator is needed
+- Local engine status indicator (bottom of sidebar)
 
 **Right: Chat Canvas (main area)**
-- Session title + collaborator avatars (if shared session)
+- Session title + project context label (if attached) + collaborator avatars (if shared)
 - Message stream (scrollable)
 - Command bar (pinned to bottom)
 

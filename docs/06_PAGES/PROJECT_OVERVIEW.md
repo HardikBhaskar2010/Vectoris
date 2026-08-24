@@ -4,7 +4,9 @@
 RECOMMENDED
 
 ## Purpose
-Central hub for a single project — documents, takeoff status, and chat sessions.
+The Overview tab of a project — the first thing a user sees when they open a project. It answers: **"What is happening with this project right now?"**
+
+Overview is one tab within the project shell. The full project information architecture is: Overview · Documents · Workspace · Takeoff · Reports (+ future: Estimate, Bid). See `PROJECT_NAVIGATION.md` for the complete IA.
 
 ## User Goal
 Understand project state and navigate to the relevant next action (upload, review takeoff, open a session).
@@ -16,7 +18,15 @@ From Projects list, Dashboard, or immediately after Create Project.
 Navigates to Document Upload, Drawing/Takeoff Workspace (if data exists), or a Chat Session.
 
 ## Information Architecture
-Project metadata (name, description, inferred/user-provided/verified type — see `../03_ARCHITECTURE/DATA_MODEL.md`), document list, takeoff status summary, session list.
+Project metadata (name, description, inferred/user-provided/verified type — see `../03_ARCHITECTURE/DATA_MODEL.md`), current workflow stage indicator, processing status (if running), recent document activity, takeoff progress summary, recent AI sessions (last 3–5), team, quick actions.
+
+What Overview does NOT contain:
+- The full document list (lives in the Documents tab)
+- The full line-item table (lives in the Takeoff tab)
+- The drawing canvas (lives in the Workspace tab)
+- The full session list (links to global AI Sessions, filtered to this project)
+
+The Overview must remain scannable. It summarises; it does not duplicate the content of other tabs.
 
 ## Layout
 TBD.

@@ -20,9 +20,12 @@ erDiagram
     DETECTION ||--o| LINE_ITEM : "becomes / links to"
     LINE_ITEM ||--o{ CORRECTION_EVENT : "has history"
     PROJECT ||--o{ EXPORT : generates
-    PROJECT ||--o{ CHAT_SESSION : contains
+    PROJECT ||--o{ CHAT_SESSION : "optionally attaches to"
     CHAT_SESSION ||--o{ MESSAGE : contains
     MEMBER ||--o{ PROJECT : "assigned role on"
+    PROJECT ||--o| ESTIMATE : "[FUTURE] generates"
+    ESTIMATE ||--o{ ESTIMATE_LINE_ITEM : "[FUTURE] contains"
+    ESTIMATE ||--o| BID : "[FUTURE] produces"
 ```
 
 This is a **conceptual** model per the founder brief §28 — not a final schema. Refinement into concrete tables/collections happens during implementation, informed by the DB ADR below.
@@ -55,7 +58,14 @@ Project type distinguishes **AI-inferred context**, **user-provided context**, a
 `id, takeoff_run_id, sheet_id, component_type, quantity_or_geometry, source_coordinates, confidence (internal only), model_version, created_at`
 
 ### Line Item
-`id, project_id, source (ai_detection | human_created), current_value, unit_of_measure, status (proposed | approved), linked_detection_id (nullable)`
+`id, project_id, source (ai_detection | human_created), current_value, unit_of_measure, status (proposed | approved | rejected), linked_detection_id (nullable)`
+
+Status values:
+- `proposed` — AI-produced candidate; not yet human-reviewed
+- `approved` — explicitly accepted by a human; forms the verified takeoff
+- `rejected` — explicitly rejected by a human; retained for audit, never silently deleted
+
+Only `approved` items are used as the basis for export or [FUTURE] estimation.
 
 ### Correction Event
 `id, line_item_id, ai_value, human_value, delta, correction_type, correction_reason, user_id, timestamp, source, model_version`
@@ -66,12 +76,40 @@ Mirrors the legacy README MVP Data Model record structure and correction taxonom
 `id, project_id, format, generated_by, generated_at, storage_reference`
 
 ### Chat Session
-`id, project_id, title, created_by, created_at, sharing_permissions[]`
+`id, project_id (nullable — NULL = general conversation), title, created_by, created_at, updated_at, sharing_permissions[]`
+
+`project_id` is explicitly nullable:
+- `project_id = NULL` → general conversation (no project context)
+- `project_id = <uuid>` → attached to that project; AI context is scoped to project data
+
+Both types are the same entity. There is no separate "general session" model.
 
 ### Message
 `id, session_id, role (user | agent), content, tool_calls[], evidence_links[], timestamp`
 
-## 3. Critical Principle — Correction ≠ Training Data
+## 3. Future Entity Stubs (NOT MVP — do not implement)
+
+The following entities are architecturally planned as downstream stages in the project pipeline. They are documented here to provide the skeleton before the features are built. They must NOT be implemented until the relevant Open Decision is resolved and this section is updated to RECOMMENDED.
+
+### Estimate [FUTURE — not MVP]
+`id, project_id, takeoff_run_id, created_by, created_at, status`
+
+Consumes approved Line Items from a Takeoff Run. Source of truth for all cost calculation. See OD-22 for entity model decision.
+
+### Estimate Line Item [FUTURE — not MVP]
+`id, estimate_id, line_item_id, unit_rate, quantity, subtotal, ...`
+
+Exact fields TBD pending OD-22 resolution. Do not invent pricing logic.
+
+### Bid [FUTURE — not MVP]
+`id, project_id, estimate_id, created_by, created_at, status`
+
+Consumes an Estimate. Entirely unspecified — see OD-23. Do not design or build until OD-23 is resolved with a full product specification.
+
+---
+
+## 4. Critical Principle — Correction ≠ Training Data
+
 
 A correction event is a record of what happened. It does **not** automatically become AI training data. Classification and validation (see `../04_AI/TRAINING.md`) is a separate downstream pipeline step. This mirrors the legacy README's explicit warning against "human correction → automatic retraining."
 

@@ -18,12 +18,19 @@ Visual and UX reference for the Takeoff Review table and BOQ Export interaction.
 - The design combines Takeoff Review and Export in one view — the export action is accessed from the Takeoff Review page header, consistent with the documented `ExportMenu` component approach
 - Table column structure in the design: Item, Description, Specification, Quantity, UOM, Source, Status, Actions — aligns with the documented data model.
 - **The Information Hierarchy is LOCKED:** `Item`, `Description`, `Quantity`, `Unit` (UOM), `Source`, `Status`, `Actions`. (Pricing/labor columns remain outside the MVP unless explicitly introduced later).
-- Status badges shown: "Verified" (green), "Review" (amber) — maps to the documented proposed/approved distinction. Note: the label "Verified" is consistent with Vectoris terminology; do not use "Approved" and "Verified" interchangeably without a product decision
+- Status badges: `Proposed` (default/grey), `Verified` (green / approved by human), `Rejected` (muted / struck). Note: the label "Verified" maps to the `approved` status value in the data model. Do not use "Approved" and "Verified" interchangeably without a product decision — this remains OD-17 adjacent.
 - Any specific line-item values, quantities, and specifications shown are visual demo content
 - Liquid Glass is **not** applied to the table body — consistent with the Liquid Glass usage rules in `../02_DESIGN/DESIGN_SYSTEM.md` §5 (dense data tables are solid surfaces)
 
 
 Tabular, structured review/correction/approval surface for the full takeoff.
+
+**Three-state item model:**
+- `proposed` — AI-produced candidate; not yet reviewed by a human
+- `approved` — explicitly accepted; forms the verified takeoff used for export/estimation
+- `rejected` — explicitly rejected; retained in the system (never silently deleted); shown with a dismissed visual state
+
+Only `approved` items are included in exports and [FUTURE] estimation. `rejected` items remain in the ledger for audit and potential re-evaluation.
 
 ## User Goal
 Efficiently review, correct, and approve all line items before export.
