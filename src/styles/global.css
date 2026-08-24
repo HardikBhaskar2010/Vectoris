@@ -92,18 +92,311 @@ html[data-theme="light"] {
   box-sizing: border-box;
 }
 
-html {
-  min-width: 320px;
+html, body {
+  height: 100vh;
+  width: 100vw;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
   background: var(--page-bg);
   color: var(--text-primary);
   font-family: var(--font-ui);
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+  user-select: none;
 }
 
-body {
-  min-height: 100vh;
-  margin: 0;
+#root {
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Desktop Application Frame ────────────────────────────────── */
+.desktop-app-frame {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background: var(--page-bg);
+  color: var(--text-primary);
+  position: relative;
+}
+
+.desktop-app-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  min-height: 0;
+}
+
+/* ── Integrated Desktop Titlebar ───────────────────────────────── */
+.desktop-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 38px;
+  min-height: 38px;
+  background: #110504;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0 0 0 12px;
+  user-select: none;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  z-index: 1000;
+  position: relative;
+}
+
+:root[data-theme="light"] .desktop-titlebar,
+html[data-theme="light"] .desktop-titlebar {
+  background: #eae3db;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.09);
+}
+
+.desktop-titlebar__left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.desktop-titlebar__brand {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.desktop-titlebar__name {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.desktop-titlebar__version {
+  font-family: var(--font-technical);
+  font-size: 10px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--border-subtle);
+}
+
+:root[data-theme="light"] .desktop-titlebar__version {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.desktop-titlebar__sep {
+  color: var(--text-secondary);
+  opacity: 0.35;
+}
+
+.desktop-titlebar__context {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 280px;
+}
+
+.desktop-titlebar__center {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  padding: 0 16px;
+}
+
+.desktop-titlebar__status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-family: var(--font-technical);
+  color: var(--text-secondary);
+}
+
+:root[data-theme="light"] .desktop-titlebar__status-pill {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.desktop-titlebar__status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+}
+
+.desktop-titlebar__pill-static {
+  font-size: 11px;
+  font-family: var(--font-technical);
+  color: var(--text-secondary);
+  opacity: 0.75;
+  letter-spacing: 0.03em;
+}
+
+.desktop-titlebar__right {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  margin-left: auto;
+}
+
+.desktop-titlebar__org-badge {
+  font-size: 10.5px;
+  font-weight: 600;
+  font-family: var(--font-technical);
+  color: var(--text-secondary);
+  padding: 2px 8px;
+  margin-right: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+}
+
+.desktop-theme-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  cursor: pointer;
+  margin-right: 8px;
+  transition: background 120ms ease, color 120ms ease, transform 120ms ease;
+}
+
+:root[data-theme="light"] .desktop-theme-btn {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.desktop-theme-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-primary);
+}
+
+.desktop-theme-btn:active {
+  transform: scale(0.90);
+}
+
+:root[data-theme="light"] .desktop-theme-btn:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+/* ── Theme Switch View Transition ────────────────────────────── */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+  display: block;
+}
+
+::view-transition-image-pair(root) {
+  isolation: isolate;
+}
+
+::view-transition-old(root) {
+  z-index: 1;
+}
+
+::view-transition-new(root) {
+  z-index: 9999;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none !important;
+    clip-path: none !important;
+  }
+}
+
+/* ── Native Windows Window Control Buttons ────────────────────── */
+.desktop-window-controls {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+}
+
+.desktop-win-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: default;
+  transition: background-color 100ms ease, color 100ms ease;
+  outline: none;
+}
+
+.desktop-win-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+:root[data-theme="light"] .desktop-win-btn:hover,
+html[data-theme="light"] .desktop-win-btn:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.desktop-win-btn--close:hover {
+  background: #e81123 !important;
+  color: #ffffff !important;
+}
+
+/* ── Desktop Native Scrollbars ────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+:root[data-theme="light"] ::-webkit-scrollbar-thumb,
+html[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.18);
+}
+
+:root[data-theme="light"] ::-webkit-scrollbar-thumb:hover,
+html[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.32);
+}
+
+/* ── Desktop Selection Rules ──────────────────────────────────── */
+input, textarea, [contenteditable="true"], .code-block, pre, code, table td {
+  user-select: text;
 }
 
 a {
@@ -113,18 +406,15 @@ a {
 
 a:focus-visible,
 button:focus-visible {
-  outline: 3px solid var(--focus-ring);
-  outline-offset: 4px;
-}
-
-#root {
-  min-height: 100vh;
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .landing-shell {
   position: relative;
   display: grid;
-  min-height: 100vh;
+  height: 100%;
+  min-height: 0;
   grid-template-columns: minmax(420px, 0.84fr) minmax(440px, 1fr);
   gap: var(--space-12);
   align-items: center;
@@ -345,26 +635,42 @@ button:focus-visible {
   backdrop-filter: blur(22px);
 }
 
-.preview-frame__topbar {
+.preview-frame__technical-header {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  justify-content: space-between;
   border-bottom: 1px solid var(--border-subtle);
-  padding: var(--space-4) var(--space-5);
+  padding: var(--space-3) var(--space-5);
+  background: color-mix(in srgb, var(--surface-primary) 80%, transparent);
 }
 
-.preview-frame__topbar span {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--text-secondary) 56%, transparent);
+.preview-frame__cad-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.preview-frame__topbar p {
-  margin: 0 0 0 var(--space-3);
-  color: var(--text-secondary);
+.preview-frame__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+}
+
+.preview-frame__file-label {
   font-family: var(--font-technical);
-  font-size: 0.78rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-primary);
+}
+
+.preview-frame__scale-tag {
+  font-family: var(--font-technical);
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  opacity: 0.75;
 }
 
 .preview-grid {
@@ -582,7 +888,7 @@ button:focus-visible {
 
 /* System dark mode */
 @media (prefers-color-scheme: dark) {
-  .auth-shell:not([data-theme="light"]) {
+  :root:not([data-theme="light"]) .auth-shell:not([data-theme="light"]) {
     --tabs-text-muted: rgba(217, 217, 217, 0.52);
     --tabs-text-active: var(--color-alabaster-grey);
     --tabs-bar-bg: rgba(255, 255, 255, 0.07);
@@ -590,7 +896,9 @@ button:focus-visible {
   }
 }
 
-/* Explicit ?theme=dark override */
+/* Explicit dark override */
+:root[data-theme="dark"] .auth-shell,
+html[data-theme="dark"] .auth-shell,
 .auth-shell[data-theme="dark"] {
   --tabs-text-muted: rgba(217, 217, 217, 0.52);
   --tabs-text-active: var(--color-alabaster-grey);
@@ -598,7 +906,9 @@ button:focus-visible {
   --tabs-pill-bg: rgba(85, 16, 13, 0.7);
 }
 
-/* Explicit ?theme=light override — wins over any system dark query */
+/* Explicit light override — wins over any system dark query */
+:root[data-theme="light"] .auth-shell,
+html[data-theme="light"] .auth-shell,
 .auth-shell[data-theme="light"] {
   --tabs-text-muted: rgba(46, 46, 46, 0.68);
   --tabs-text-active: var(--color-charcoal-espresso);
@@ -606,7 +916,7 @@ button:focus-visible {
   --tabs-pill-bg: #ffffff;
 }
 
-/* transitions-dev Â§12 â€” error shake keyframes */
+/* transitions-dev §12 — error shake keyframes */
 @keyframes t-input-shake {
   0%      { transform: translateX(0); animation-timing-function: var(--shake-ease); }
   28.57%  { transform: translateX(var(--shake-distance)); animation-timing-function: var(--shake-ease); }
@@ -616,15 +926,15 @@ button:focus-visible {
 }
 
 .auth-shell {
-  /* System-adaptive â€” light default, dark via @media below */
+  /* System-adaptive — light default, dark via @media below */
   color-scheme: light dark;
 
-  /* â”€â”€ Light palette â”€â”€ */
+  /* ── Light palette ── */
   --auth-bg: var(--color-alabaster-cream);
   --auth-surface: #ffffff;
   --auth-border: rgba(46, 46, 46, 0.12);
   --auth-text-primary: var(--color-charcoal-espresso);
-  --auth-text-secondary: rgba(46, 46, 46, 0.72); /* bumped: 0.6 was ~3.8:1 on cream, below WCAG AA */
+  --auth-text-secondary: rgba(46, 46, 46, 0.72);
   --auth-accent: var(--color-vintage-rosewood);
   --auth-accent-hover: #643138;
   --auth-art-bg: color-mix(in srgb, var(--color-warm-greige) 60%, var(--color-alabaster-cream));
@@ -640,17 +950,17 @@ button:focus-visible {
 
   display: grid;
   grid-template-columns: 1fr 1fr;
-  min-height: 100vh;
+  height: 100%;
+  min-height: 0;
   background: var(--auth-bg);
   color: var(--auth-text-primary);
   font-family: var(--font-ui);
   caret-color: var(--auth-accent);
 }
 
-/* ── Dark theme — system-adaptive: off when user forces light via ?theme=light ── */
+/* ── Dark theme — system-adaptive: off when user forces light ── */
 @media (prefers-color-scheme: dark) {
-  .auth-shell:not([data-theme="light"]) {
-    /* Deep Coffee Bean bg — drawn from the locked Vectoris dark palette */
+  :root:not([data-theme="light"]) .auth-shell:not([data-theme="light"]) {
     --auth-bg: #120404;
     --auth-surface: #1c0808;
     --auth-border: rgba(221, 2, 0, 0.14);
@@ -671,7 +981,9 @@ button:focus-visible {
   }
 }
 
-/* ── Dark theme — explicit ?theme=dark URL param override ── */
+/* ── Explicit dark theme override ── */
+:root[data-theme="dark"] .auth-shell,
+html[data-theme="dark"] .auth-shell,
 .auth-shell[data-theme="dark"] {
   --auth-bg: #120404;
   --auth-surface: #1c0808;
@@ -690,6 +1002,29 @@ button:focus-visible {
   --auth-focus-ring: rgba(221, 2, 0, 0.32);
   --auth-divider: rgba(221, 2, 0, 0.1);
   --auth-card-shadow: 0 24px 80px rgba(0, 0, 0, 0.5), 0 2px 12px rgba(0, 0, 0, 0.35);
+}
+
+/* ── Explicit light theme override ── */
+:root[data-theme="light"] .auth-shell,
+html[data-theme="light"] .auth-shell,
+.auth-shell[data-theme="light"] {
+  --auth-bg: var(--color-alabaster-cream);
+  --auth-surface: #ffffff;
+  --auth-border: rgba(46, 46, 46, 0.12);
+  --auth-text-primary: var(--color-charcoal-espresso);
+  --auth-text-secondary: rgba(46, 46, 46, 0.72);
+  --auth-accent: var(--color-vintage-rosewood);
+  --auth-accent-hover: #643138;
+  --auth-art-bg: color-mix(in srgb, var(--color-warm-greige) 60%, var(--color-alabaster-cream));
+  --auth-input-bg: #ffffff;
+  --auth-input-border: rgba(46, 46, 46, 0.18);
+  --auth-input-border-focus: var(--color-vintage-rosewood);
+  --auth-input-border-error: #b91c1c;
+  --auth-error-text: #b91c1c;
+  --auth-error-bg: rgba(185, 28, 28, 0.06);
+  --auth-focus-ring: rgba(125, 64, 71, 0.35);
+  --auth-divider: rgba(46, 46, 46, 0.09);
+  --auth-card-shadow: 0 24px 80px rgba(46, 46, 46, 0.10), 0 2px 12px rgba(46, 46, 46, 0.06);
 }
 
 /* craft-floor: theme text selection — both modes */
@@ -1321,83 +1656,70 @@ button:focus-visible {
 
 /* ── System dark: applies when OS is dark AND user hasn't forced light ── */
 @media (prefers-color-scheme: dark) {
-  .auth-shell:not([data-theme="light"]) .auth-art-panel::after {
+  :root:not([data-theme="light"]) .auth-shell:not([data-theme="light"]) .auth-art-panel::after {
     background:
       linear-gradient(90deg, rgba(221, 2, 0, 0.05) 1px, transparent 1px),
       linear-gradient(rgba(221, 2, 0, 0.05) 1px, transparent 1px);
   }
 
-  /* Art panel: atmospheric treatment for dark bg.
-     Guarded with :not([data-theme="light"]) — without this, Edge/Chrome on a dark OS
-     applies saturate(0.6)/luminosity even when ?theme=light is explicitly set,
-     causing the image to appear grayscale in light mode on dark OS machines. */
-  .auth-shell:not([data-theme="light"]) .auth-art-panel__image {
+  :root:not([data-theme="light"]) .auth-shell:not([data-theme="light"]) .auth-art-panel__image {
     opacity: 0.88;
     mix-blend-mode: luminosity;
     filter: saturate(0.6) brightness(0.85);
   }
 
-  /* Form panel: scoped consistently */
-  .auth-shell:not([data-theme="light"]) .auth-form-panel {
+  :root:not([data-theme="light"]) .auth-shell:not([data-theme="light"]) .auth-form-panel {
     border-left: 1px solid rgba(221, 2, 0, 0.08);
   }
 
-  /* Invite card: Rosewood -> Racing Red */
-  .auth-shell:not([data-theme="light"]) .invite-card {
+  :root:not([data-theme="light"]) .auth-shell:not([data-theme="light"]) .invite-card {
     border-color: rgba(221, 2, 0, 0.22);
     background: rgba(221, 2, 0, 0.06);
   }
 
-  .auth-shell:not([data-theme="light"]) .invite-card--denied {
+  :root:not([data-theme="light"]) .auth-shell:not([data-theme="light"]) .invite-card--denied {
     border-color: rgba(255, 84, 73, 0.28);
     background: rgba(221, 2, 0, 0.1);
   }
 
-  /* Sliding pill shadow on dark */
-  .auth-shell:not([data-theme="light"]) .auth-mode-switch__pill {
+  :root:not([data-theme="light"]) .auth-shell:not([data-theme="light"]) .auth-mode-switch__pill {
     box-shadow:
       0 1px 4px rgba(0, 0, 0, 0.35),
       0 0 0 1px rgba(221, 2, 0, 0.12);
   }
 
-  /* Form alert on dark */
-  .auth-shell:not([data-theme="light"]) .auth-alert {
+  :root:not([data-theme="light"]) .auth-shell:not([data-theme="light"]) .auth-alert {
     border-color: rgba(255, 84, 73, 0.28);
   }
 
-  /* Success alert: green on dark */
-  .auth-shell:not([data-theme="light"]) .auth-alert--success {
+  :root:not([data-theme="light"]) .auth-shell:not([data-theme="light"]) .auth-alert--success {
     border-color: rgba(52, 211, 153, 0.22);
     background: rgba(52, 211, 153, 0.07);
     color: #34d399;
   }
 
-  .auth-shell:not([data-theme="light"]) .auth-alert--success::before {
+  :root:not([data-theme="light"]) .auth-shell:not([data-theme="light"]) .auth-alert--success::before {
     background: #34d399;
   }
 
-  /* Input placeholder on dark */
-  .auth-shell:not([data-theme="light"]) .auth-field input::placeholder {
+  :root:not([data-theme="light"]) .auth-shell:not([data-theme="light"]) .auth-field input::placeholder {
     color: rgba(217, 217, 217, 0.28);
   }
 
-  /* Password toggle on dark */
-  .auth-shell:not([data-theme="light"]) .password-control__toggle {
+  :root:not([data-theme="light"]) .auth-shell:not([data-theme="light"]) .password-control__toggle {
     color: rgba(217, 217, 217, 0.48);
   }
 
-  .auth-shell:not([data-theme="light"]) .password-control__toggle:hover {
+  :root:not([data-theme="light"]) .auth-shell:not([data-theme="light"]) .password-control__toggle:hover {
     color: var(--auth-text-primary);
   }
 
-  /* Secondary actions on dark */
-  .auth-shell:not([data-theme="light"]) .auth-secondary-actions a,
-  .auth-shell:not([data-theme="light"]) .auth-secondary-actions button {
+  :root:not([data-theme="light"]) .auth-shell:not([data-theme="light"]) .auth-secondary-actions a,
+  :root:not([data-theme="light"]) .auth-shell:not([data-theme="light"]) .auth-secondary-actions button {
     color: rgba(217, 217, 217, 0.52);
   }
 
-  /* Shimmer on dark: Racing Red */
-  .auth-shell:not([data-theme="light"])[data-submitting="true"] .auth-submit {
+  :root:not([data-theme="light"]) .auth-shell:not([data-theme="light"])[data-submitting="true"] .auth-submit {
     background: linear-gradient(
       90deg,
       var(--color-racing-red) 0%,
@@ -1460,7 +1782,10 @@ button:focus-visible {
   grid-template-areas:
     "sidebar header"
     "sidebar main";
-  min-height: 100dvh;
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
   background: var(--app-bg);
   color: var(--app-text-primary);
   font-family: var(--font-ui);
@@ -1547,11 +1872,11 @@ html[data-theme="dark"] .app-shell,
 /* ── Sidebar ─────────────────────────────────────────────────────────────────*/
 .app-sidebar {
   grid-area: sidebar;
-  position: fixed;
-  top: 0;
-  left: 0;
+  position: relative;
+  top: auto;
+  left: auto;
   width: var(--app-sidebar-w);
-  height: 100dvh;
+  height: 100%;
   display: flex;
   flex-direction: column;
   background: var(--app-sidebar-bg);
@@ -1559,7 +1884,6 @@ html[data-theme="dark"] .app-shell,
   overflow-y: auto;
   overflow-x: hidden;
   z-index: 40;
-  /* Subtle backdrop for glass feel */
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
 }
@@ -1740,13 +2064,14 @@ html[data-theme="dark"] .app-shell,
   color: var(--app-text-muted);
 }
 
-/* ── Fixed Header ────────────────────────────────────────────────────────────*/
+/* ── Workstation Header ──────────────────────────────────────────────────────*/
 .app-header {
   grid-area: header;
-  position: fixed;
-  top: 0;
-  left: var(--app-sidebar-w);
-  right: 0;
+  position: relative;
+  top: auto;
+  left: auto;
+  right: auto;
+  width: 100%;
   height: var(--app-header-h);
   display: flex;
   align-items: center;
@@ -1754,7 +2079,6 @@ html[data-theme="dark"] .app-shell,
   padding: 0 24px;
   background: var(--app-header-bg);
   border-bottom: 1px solid var(--app-header-border);
-  /* Liquid glass — header is a floating surface per design direction */
   backdrop-filter: blur(20px) saturate(1.4);
   -webkit-backdrop-filter: blur(20px) saturate(1.4);
   z-index: 30;
@@ -1916,11 +2240,11 @@ html[data-theme="dark"] .app-shell,
 /* ── Scrollable Main Content ─────────────────────────────────────────────────*/
 .app-main {
   grid-area: main;
-  padding-top: 0;
-  padding-left: 0;
-  min-height: calc(100vh - var(--app-header-h));
+  height: 100%;
+  min-height: 0;
   background: var(--app-bg);
   overflow-y: auto;
+  overflow-x: hidden;
   outline: none;
 }
 

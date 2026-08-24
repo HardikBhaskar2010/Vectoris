@@ -750,7 +750,7 @@ function SettingsSwitch({
   );
 }
 
-function IconPalette(props: { "aria-hidden"?: true }) {
+function IconPalette(props: { "aria-hidden"?: boolean | "true" | "false" }) {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" {...props}>
       <path d="M9 2.4a6.6 6.6 0 0 0-2.1 12.85c.48.16.93-.23.93-.74v-.78c0-.6.49-1.08 1.08-1.08h1.38c2.18 0 3.71-1.48 3.71-3.64A6.6 6.6 0 0 0 9 2.4Z" stroke="currentColor" strokeWidth="1.45" />
@@ -761,7 +761,7 @@ function IconPalette(props: { "aria-hidden"?: true }) {
   );
 }
 
-function IconCpu(props: { "aria-hidden"?: true }) {
+function IconCpu(props: { "aria-hidden"?: boolean | "true" | "false" }) {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" {...props}>
       <rect x="4.5" y="4.5" width="9" height="9" rx="1.7" stroke="currentColor" strokeWidth="1.45" />
@@ -771,7 +771,7 @@ function IconCpu(props: { "aria-hidden"?: true }) {
   );
 }
 
-function IconUser(props: { "aria-hidden"?: true }) {
+function IconUser(props: { "aria-hidden"?: boolean | "true" | "false" }) {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" {...props}>
       <circle cx="9" cy="6" r="2.6" stroke="currentColor" strokeWidth="1.45" />
@@ -780,7 +780,7 @@ function IconUser(props: { "aria-hidden"?: true }) {
   );
 }
 
-function IconBell(props: { "aria-hidden"?: true }) {
+function IconBell(props: { "aria-hidden"?: boolean | "true" | "false" }) {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" {...props}>
       <path d="M9 2.6a4.5 4.5 0 0 0-4.5 4.5v2.3L3 12h12l-1.5-2.6V7.1A4.5 4.5 0 0 0 9 2.6Z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
@@ -815,7 +815,7 @@ function IconSun() {
   );
 }
 
-function IconPulse(props: { "aria-hidden"?: true }) {
+function IconPulse(props: { "aria-hidden"?: boolean | "true" | "false" }) {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" {...props}>
       <path d="M2.5 9h3l1.5-4 3 8 1.6-4H15.5" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round" />
@@ -823,7 +823,7 @@ function IconPulse(props: { "aria-hidden"?: true }) {
   );
 }
 
-function IconCheck(props: { "aria-hidden"?: true }) {
+function IconCheck(props: { "aria-hidden"?: boolean | "true" | "false" }) {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" {...props}>
       <path d="m4 9.4 3.1 3.1L14 5.6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />

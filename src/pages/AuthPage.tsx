@@ -62,11 +62,37 @@ export function AuthPage() {
   const inviteContext = useMemo(() => readInviteContext(), []);
   const [mode, setMode] = useState<AuthMode>(() => getInitialMode());
 
-  // ?theme=dark | ?theme=light — URL param overrides system preference.
-  // Derived once at render; no state needed (URL doesn't change mid-session).
-  const themeOverride = useMemo<"dark" | "light" | undefined>(() => {
-    const t = new URLSearchParams(window.location.search).get("theme");
-    return t === "dark" ? "dark" : t === "light" ? "light" : undefined;
+  // Theme sync: URL param overrides -> document data-theme -> localStorage -> OS preference
+  const [currentTheme, setCurrentTheme] = useState<"dark" | "light">(() => {
+    const urlParam = new URLSearchParams(window.location.search).get("theme");
+    if (urlParam === "dark" || urlParam === "light") return urlParam;
+    const docTheme = document.documentElement.getAttribute("data-theme");
+    if (docTheme === "dark" || docTheme === "light") return docTheme;
+    try {
+      const stored = window.localStorage.getItem("vectoris.themePreference");
+      if (stored === "dark" || stored === "light") return stored;
+    } catch {
+      // Ignore storage errors
+    }
+    return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  });
+
+  useEffect(() => {
+    const handleThemeChange = () => {
+      const docTheme = document.documentElement.getAttribute("data-theme");
+      if (docTheme === "dark" || docTheme === "light") {
+        setCurrentTheme(docTheme);
+      }
+    };
+
+    const observer = new MutationObserver(handleThemeChange);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    window.addEventListener("themechange", handleThemeChange);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("themechange", handleThemeChange);
+    };
   }, []);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState(inviteContext.email);
@@ -236,7 +262,7 @@ export function AuthPage() {
   return (
     <main
       className="auth-shell"
-      data-theme={themeOverride}
+      data-theme={currentTheme}
       data-submitting={isSubmitting ? "true" : undefined}
     >
       {/* ── Art Panel (left) ─────────────────────────────────────── */}
@@ -470,6 +496,37 @@ export function AuthPage() {
             <button type="button" onClick={() => switchMode(isSignup ? "signin" : "signup")}>
               {isSignup ? "Already have an account? Sign in" : "Need access? Create an account"}
             </button>
+          </div>
+
+          {/* Dev / QA Testing Bypass */}
+          <div
+            className="auth-dev-bypass"
+            style={{
+              marginTop: "20px",
+              paddingTop: "16px",
+              borderTop: "1px dashed var(--border-subtle, rgba(255, 255, 255, 0.1))",
+              textAlign: "center",
+            }}
+          >
+            <a
+              href="/dashboard"
+              className="button button--secondary"
+              style={{
+                display: "inline-flex",
+                width: "100%",
+                justifyContent: "center",
+                alignItems: "center",
+                gap: "8px",
+                fontSize: "13px",
+                fontWeight: 600,
+                minHeight: "40px",
+                borderRadius: "8px",
+                textDecoration: "none",
+              }}
+            >
+              <span>Skip to Dashboard (Testing / Dev)</span>
+              <span aria-hidden="true">&rarr;</span>
+            </a>
           </div>
         </div>
       </section>

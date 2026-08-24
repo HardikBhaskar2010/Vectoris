@@ -58,11 +58,12 @@ export function LandingPage() {
 
       <section className="landing-workspace-preview" aria-label="Vectoris workflow preview">
         <div className="preview-frame">
-          <div className="preview-frame__topbar">
-            <span />
-            <span />
-            <span />
-            <p>project_root / takeoff.review</p>
+          <div className="preview-frame__technical-header">
+            <div className="preview-frame__cad-status">
+              <span className="preview-frame__dot" aria-hidden="true" />
+              <span className="preview-frame__file-label">SHEET_E104_LIGHTING_PLAN.DWG</span>
+            </div>
+            <span className="preview-frame__scale-tag">SCALE 1/8" = 1'-0" · LAYER 04-ELEC</span>
           </div>
 
           <div className="preview-grid">

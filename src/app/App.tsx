@@ -21,6 +21,7 @@
  */
 
 import { useEffect } from "react";
+import { DesktopTitleBar } from "../components/DesktopTitleBar";
 import { LandingPage } from "../pages/LandingPage";
 import { AuthPage } from "../pages/AuthPage";
 import { DashboardPage } from "../pages/DashboardPage";
@@ -56,30 +57,78 @@ export function App() {
     }
   }, []);
 
-  // ── Auth ────────────────────────────────────────────────────────────────────
-  if (path.startsWith("/auth"))       return <AuthPage />;
+  // Global desktop keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // ⌘K or Ctrl+K -> Focus global search input if present
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        const searchInput = document.querySelector<HTMLInputElement>(".app-search__input");
+        if (searchInput) {
+          e.preventDefault();
+          searchInput.focus();
+          searchInput.select();
+        }
+      }
+    };
 
-  // ── Top-level nav ───────────────────────────────────────────────────────────
-  if (path === "/dashboard")          return <DashboardPage />;
-  if (path.startsWith("/dashboard"))  return <DashboardPage />;
-  if (path === "/projects")           return <ProjectsPage />;
-  if (path.startsWith("/projects"))   return <ProjectsPage />;
-  if (path.startsWith("/sessions"))   return <SessionsPage />;
-  if (path.startsWith("/settings"))   return <SettingsPage />;
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
-  // ── Project sub-routes (order: most specific first) ─────────────────────────
-  if (path.match(/^\/project\/[^/]+\/documents/))  return <ProjectDocumentsPage />;
-  if (path.match(/^\/project\/[^/]+\/workspace/))  return <ProjectWorkspacePage />;
-  if (path.match(/^\/project\/[^/]+\/takeoff/))    return <ProjectTakeoffPage />;
-  if (path.match(/^\/project\/[^/]+\/reports/))    return <ProjectReportsPage />;
-  if (path.match(/^\/project\/[^/]+\/estimate/))   return <ProjectFutureStub tab="estimate" label="Estimate" />;
-  if (path.match(/^\/project\/[^/]+\/bid/))        return <ProjectFutureStub tab="bid" label="Bid" />;
+  const isUnauthenticated = path === "/" || path.startsWith("/auth");
 
-  // ── Project overview (catch-all for /project/* without sub-route) ────────────
-  if (path.startsWith("/project"))    return <ProjectOverviewPage />;
+  const getPageTitle = () => {
+    if (path === "/") return "Welcome";
+    if (path.startsWith("/auth")) return "Workstation Login";
+    if (path.startsWith("/dashboard")) return "Command Dashboard";
+    if (path.startsWith("/projects")) return "Project Index";
+    if (path.startsWith("/sessions")) return "AI Copilot Sessions";
+    if (path.startsWith("/settings")) return "Engine Settings";
+    if (path.startsWith("/project")) {
+      const match = path.match(/^\/project\/([^/]+)/);
+      return match ? `Project: ${match[1]}` : "Project Workspace";
+    }
+    return "Engineering Workstation";
+  };
 
-  // ── Default ─────────────────────────────────────────────────────────────────
-  return <LandingPage />;
+  const renderContent = () => {
+    // ── Auth ────────────────────────────────────────────────────────────────────
+    if (path.startsWith("/auth"))       return <AuthPage />;
+
+    // ── Top-level nav ───────────────────────────────────────────────────────────
+    if (path === "/dashboard")          return <DashboardPage />;
+    if (path.startsWith("/dashboard"))  return <DashboardPage />;
+    if (path === "/projects")           return <ProjectsPage />;
+    if (path.startsWith("/projects"))   return <ProjectsPage />;
+    if (path.startsWith("/sessions"))   return <SessionsPage />;
+    if (path.startsWith("/settings"))   return <SettingsPage />;
+
+    // ── Project sub-routes (order: most specific first) ─────────────────────────
+    if (path.match(/^\/project\/[^/]+\/documents/))  return <ProjectDocumentsPage />;
+    if (path.match(/^\/project\/[^/]+\/workspace/))  return <ProjectWorkspacePage />;
+    if (path.match(/^\/project\/[^/]+\/takeoff/))    return <ProjectTakeoffPage />;
+    if (path.match(/^\/project\/[^/]+\/reports/))    return <ProjectReportsPage />;
+    if (path.match(/^\/project\/[^/]+\/estimate/))   return <ProjectFutureStub tab="estimate" label="Estimate" />;
+    if (path.match(/^\/project\/[^/]+\/bid/))        return <ProjectFutureStub tab="bid" label="Bid" />;
+
+    // ── Project overview (catch-all for /project/* without sub-route) ────────────
+    if (path.startsWith("/project"))    return <ProjectOverviewPage />;
+
+    // ── Default ─────────────────────────────────────────────────────────────────
+    return <LandingPage />;
+  };
+
+  return (
+    <div className="desktop-app-frame">
+      <DesktopTitleBar
+        title={getPageTitle()}
+        isAuthenticated={!isUnauthenticated}
+      />
+      <div className="desktop-app-body">
+        {renderContent()}
+      </div>
+    </div>
+  );
 }
 
 // ── Temporary stubs for future/unbuilt project tabs ────────────────────────────
