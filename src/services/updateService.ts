@@ -65,7 +65,7 @@ export interface UpdateCheckResult {
 }
 
 const LAST_CHECK_KEY = "vectoris.lastUpdateCheckTime";
-export const UPDATE_ENDPOINT_DOCS = "https://github.com/HardikBhaskar2010/Vectoris/releases/latest/download/latest.json";
+export const UPDATE_ENDPOINT_DOCS = "https://github.com/VectorisAI/Vectoris/releases/latest/download/latest.json";
 
 /**
  * Compare two Semantic Version strings according to SemVer 2.0 (major.minor.patch).
