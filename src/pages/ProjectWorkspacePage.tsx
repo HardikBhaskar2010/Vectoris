@@ -18,43 +18,26 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
+import { Link, useRouter } from "../router";
 import { ProjectShell } from "../components/ProjectShell";
 import type { ProjectMeta } from "../components/ProjectShell";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type DetectionStatus = "proposed" | "approved" | "rejected";
+import type {
+  Sheet,
+  LayerDef,
+  Detection,
+  LineItemStatus as DetectionStatus,
+} from "../data";
+import {
+  INITIAL_PROJECTS,
+  INITIAL_SHEETS as SHEETS,
+  INITIAL_LAYERS as LAYERS,
+  INITIAL_DETECTIONS as INIT_DETECTIONS,
+} from "../data";
+
 type ToolMode = "select" | "pan" | "measure";
-
-interface Sheet {
-  id: string;
-  sheet_id: string;
-  name: string;
-  type: "floor_plan" | "schedule" | "single_line" | "legend" | "notes";
-  detection_count: number;
-  document_name: string;
-  is_empty: boolean;
-}
-
-interface LayerDef {
-  id: string;
-  name: string;
-  color: string;
-}
-
-interface Detection {
-  id: string;
-  label: string;
-  category: string;
-  layer_id: string;
-  status: DetectionStatus;
-  quantity: number;
-  unit: string;
-  model_version: string;
-  sheet_id: string;
-  document_name: string;
-  reviewed_by?: string;
-}
 
 interface TakeoffItem {
   id: string;
@@ -67,49 +50,7 @@ interface TakeoffItem {
   layer_id: string;
 }
 
-// ── Mock Data ─────────────────────────────────────────────────────────────────
-
-const DEMO_PROJECT: ProjectMeta = {
-  id: "p1",
-  name: "ABC Data Center",
-  client: "Equinix",
-  sector: "Data Center",
-  discipline: "Electrical HV",
-  displayType: "Data Center · Electrical",
-  typeProvenance: "ai_inferred",
-};
-
-const SHEETS: Sheet[] = [
-  { id: "s1", sheet_id: "E-101", name: "Lighting Plan",      type: "floor_plan", detection_count: 142, document_name: "E-101_LightingPlan.pdf",     is_empty: false },
-  { id: "s2", sheet_id: "E-102", name: "Power Distribution", type: "floor_plan", detection_count: 98,  document_name: "E-102_PowerDistribution.dwg", is_empty: false },
-  { id: "s3", sheet_id: "E-104", name: "Cable Tray Layout",  type: "floor_plan", detection_count: 47,  document_name: "E-104_CableTrayLayout.dwg",   is_empty: false },
-  { id: "s4", sheet_id: "E-110", name: "Panel Schedules",    type: "schedule",   detection_count: 0,   document_name: "E-102_PowerDistribution.dwg", is_empty: true  },
-];
-
-const LAYERS: LayerDef[] = [
-  { id: "LT", name: "Lighting (LT)",       color: "#34d399" },
-  { id: "CT", name: "Cable Tray (CT)",     color: "#38bdf8" },
-  { id: "PF", name: "Power Feeder",        color: "#dd0200" },
-  { id: "AW", name: "Architectural Walls", color: "rgba(226,226,226,0.35)" },
-];
-
-const INIT_DETECTIONS: Record<string, Detection[]> = {
-  s3: [
-    { id: "det-1", label: "LT-01 (Active)", category: "Lighting",          layer_id: "LT", status: "approved", quantity: 47,    unit: "EA",  model_version: "v2.4-native", sheet_id: "E-104", document_name: "E-104_CableTrayLayout.dwg", reviewed_by: "Hardik Bhaskar" },
-    { id: "det-2", label: "CT-TRAY-A",      category: "Cable Tray",        layer_id: "CT", status: "approved", quantity: 127.4, unit: "m",   model_version: "v2.4-native", sheet_id: "E-104", document_name: "E-104_CableTrayLayout.dwg", reviewed_by: "Hardik Bhaskar" },
-    { id: "det-3", label: "FEEDER-DP1",     category: "Power Distribution", layer_id: "PF", status: "proposed", quantity: 1,     unit: "SET", model_version: "v2.4-native", sheet_id: "E-104", document_name: "E-104_CableTrayLayout.dwg" },
-    { id: "det-4", label: "LT-01 [45]",     category: "Lighting",          layer_id: "LT", status: "proposed", quantity: 45,    unit: "EA",  model_version: "v2.4-native", sheet_id: "E-104", document_name: "E-104_CableTrayLayout.dwg" },
-    { id: "det-5", label: "CT-TRAY-B",      category: "Cable Tray",        layer_id: "CT", status: "proposed", quantity: 84.2,  unit: "m",   model_version: "v2.4-native", sheet_id: "E-104", document_name: "E-104_CableTrayLayout.dwg" },
-  ],
-  s1: [
-    { id: "det-e101-1", label: "2x4 Troffer LED", category: "Lighting", layer_id: "LT", status: "approved", quantity: 142, unit: "EA", model_version: "v2.4-native", sheet_id: "E-101", document_name: "E-101_LightingPlan.pdf", reviewed_by: "Hardik Bhaskar" },
-    { id: "det-e101-2", label: "Emergency LED",   category: "Lighting", layer_id: "LT", status: "proposed", quantity: 24,  unit: "EA", model_version: "v2.4-native", sheet_id: "E-101", document_name: "E-101_LightingPlan.pdf" },
-  ],
-  s2: [
-    { id: "det-e102-1", label: "Duplex 20A",       category: "Power Distribution", layer_id: "PF", status: "proposed", quantity: 86,    unit: "EA", model_version: "v2.4-native", sheet_id: "E-102", document_name: "E-102_PowerDistribution.dwg" },
-    { id: "det-e102-2", label: '3" EMT Conduit',   category: "Conduit",           layer_id: "PF", status: "approved", quantity: 184.6, unit: "m",  model_version: "v2.4-native", sheet_id: "E-102", document_name: "E-102_PowerDistribution.dwg", reviewed_by: "Rina Mehta" },
-  ],
-};
+import { useProject } from "../services/dataService";
 
 const TAKEOFF_ITEMS: Record<string, TakeoffItem[]> = {
   s3: [
@@ -129,15 +70,22 @@ const TAKEOFF_ITEMS: Record<string, TakeoffItem[]> = {
   ],
 };
 
-function getProjectId(): string {
-  const m = window.location.pathname.match(/^\/project\/([^/]+)/);
-  return m ? m[1] : "demo";
-}
-
 // ── Main Component ─────────────────────────────────────────────────────────────
 
 export default function ProjectWorkspacePage() {
-  const projectId = getProjectId();
+  const { params, navigate } = useRouter();
+  const projectId = params.id || "p1";
+  const project = useProject(projectId);
+
+  const projectMeta: ProjectMeta = {
+    id: projectId,
+    name: project?.name || "ABC Data Center",
+    client: project?.client || "Equinix",
+    sector: project?.sector,
+    discipline: project?.discipline,
+    displayType: project?.displayType || "Data Center · Electrical",
+    typeProvenance: project?.typeProvenance || "ai_inferred",
+  };
 
   const [isLoading,      setIsLoading]      = useState(true);
   const [activeSheetId,  setActiveSheetId]  = useState("s3");
@@ -268,7 +216,7 @@ export default function ProjectWorkspacePage() {
   const cursorClass = toolMode === "pan" ? "wks-canvas--pan" : toolMode === "measure" ? "wks-canvas--measure" : "wks-canvas--select";
 
   if (isLoading) return (
-    <ProjectShell project={DEMO_PROJECT} activeTab="workspace">
+    <ProjectShell project={projectMeta} activeTab="workspace">
       <style>{`.project-shell__content{padding:0!important;overflow:hidden}`}</style>
       <WorkspaceSkeleton />
     </ProjectShell>
@@ -276,12 +224,12 @@ export default function ProjectWorkspacePage() {
 
   return (
     <ProjectShell
-      project={DEMO_PROJECT}
+      project={projectMeta}
       activeTab="workspace"
       headerActions={
-        <a href={`/project/${projectId}/sessions`} className="btn btn--secondary btn--sm">
+        <Link to={`/sessions?project=${projectId}`} className="btn btn--secondary btn--sm">
           <IconSession /> AI Session
-        </a>
+        </Link>
       }
     >
       <style>{`.project-shell__content{padding:0!important;overflow:hidden}`}</style>
@@ -357,7 +305,7 @@ export default function ProjectWorkspacePage() {
 
           {/* Sheet context bar — liquid glass pill */}
           <div className="wks-sheet-bar" aria-label="Active sheet">
-            <span className="wks-sheet-bar__project">Project: {DEMO_PROJECT.name}</span>
+            <span className="wks-sheet-bar__project">Project: {projectMeta.name}</span>
             <span className="wks-sheet-bar__sep">/</span>
             <span className="wks-sheet-bar__sheet">{activeSheet.sheet_id} · {activeSheet.name}</span>
           </div>
@@ -377,7 +325,7 @@ export default function ProjectWorkspacePage() {
             <button type="button" className={`wks-toolbar__btn${toolMode === "pan" ? " wks-toolbar__btn--active" : ""}`} onClick={() => setToolMode(m => m === "pan" ? "select" : "pan")} aria-label="Pan" aria-pressed={toolMode === "pan"}><IconPan /></button>
             <div className="wks-toolbar__sep" aria-hidden="true" />
             <button type="button" className={`wks-toolbar__btn${toolMode === "measure" ? " wks-toolbar__btn--active" : ""}`} onClick={() => { setToolMode(m => m === "measure" ? "select" : "measure"); setMeasureStart(null); setMeasureLine(null); }} aria-label="Measure (M)" aria-pressed={toolMode === "measure"} title="Measure (M)"><IconMeasure /></button>
-            <button type="button" className="wks-toolbar__btn" onClick={() => { window.location.href = `/project/${projectId}/reports`; }} aria-label="Export"><IconExport /></button>
+            <button type="button" className="wks-toolbar__btn" onClick={() => { navigate(`/project/${projectId}/reports`); }} aria-label="Export"><IconExport /></button>
           </div>
 
           {/* Measure mode banner */}
@@ -528,7 +476,7 @@ export default function ProjectWorkspacePage() {
               <div className="wks-agent-card">
                 <div className="wks-agent-header">
                   <span className="wks-agent-title"><IconAgent /> AI Engineering Agent</span>
-                  <a href={`/sessions?project=${projectId}`} className="wks-agent-session-btn">Active Session</a>
+                  <Link to={`/sessions?project=${projectId}`} className="wks-agent-session-btn">Active Session</Link>
                 </div>
                 <div className="wks-agent-finding">
                   <div className="wks-agent-finding__dot" aria-hidden="true" />
@@ -566,9 +514,9 @@ export default function ProjectWorkspacePage() {
               {/* Live Takeoff Table */}
               <div className="wks-takeoff-header">
                 <span className="wks-takeoff-title"><IconTable /> Live Takeoff</span>
-                <a href={`/project/${projectId}/reports`} className="wks-takeoff-export-link">
+                <Link to={`/project/${projectId}/reports`} className="wks-takeoff-export-link">
                   Export .xlsx <IconArrowRight size={10} />
-                </a>
+                </Link>
               </div>
               <div className="wks-takeoff-cols" aria-hidden="true">
                 <span className="wks-takeoff-col-label">Description</span>
@@ -611,9 +559,9 @@ export default function ProjectWorkspacePage() {
                 <span className="wks-takeoff-sum-label">{activeTakeoff.length} items</span>
                 <span className="wks-takeoff-sum-value">{activeTakeoff.filter(i => i.status === "approved").length} approved</span>
               </div>
-              <a href={`/project/${projectId}/takeoff`} className="wks-full-review-link">
+              <Link to={`/project/${projectId}/takeoff`} className="wks-full-review-link">
                 Full Takeoff Review <IconArrowRight size={12} />
-              </a>
+              </Link>
             </>
           )}
         </aside>

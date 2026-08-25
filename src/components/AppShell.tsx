@@ -6,7 +6,6 @@
  * - Contains ZERO page-specific logic or content.
  * - Every authenticated page renders inside <AppShell>. Pages own their content.
  * - Sidebar nav is derived from docs/02_DESIGN/NAVIGATION.md — LOCKED Aug 2026.
- *   Stitch designs are visual references only. The documentation is authoritative.
  *
  * CANONICAL GLOBAL NAV (source: docs/02_DESIGN/NAVIGATION.md §1 — LOCKED):
  * - Dashboard     /dashboard
@@ -14,17 +13,24 @@
  * - AI Sessions   /sessions
  * - Settings      /settings
  *
- * INTENTIONALLY EXCLUDED from global sidebar (live inside Project shell):
- * - Drawing Workspace — project sub-nav tab: /project/:id/workspace
- * - Documents         — project sub-nav tab: /project/:id/documents
- * - Takeoff           — project sub-nav tab: /project/:id/takeoff
- * - Reports / BOQ     — project sub-nav tab: /project/:id/reports
- * - Estimate          — project sub-nav tab: /project/:id/estimate [FUTURE]
- * - Bid / Proposal    — project sub-nav tab: /project/:id/bid [FUTURE]
+ * FUNCTIONAL CHROME (Phase 6):
+ * - Global Command & Quick Search (⌘K / Ctrl+K) -> GlobalCommandSearch
+ * - Workspace / Org Popover -> OrgSwitcherPopover
+ * - Notifications Popover -> NotificationsPopover
+ * - User Profile Menu -> UserProfileMenu
+ * - Local Engine Diagnostics Dialog -> EngineStatusDialog
  */
 
-import type { ReactNode } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
+import { Link } from "../router";
 import { BrandMark } from "./BrandMark";
+import { useEngineStatus, useAllDocuments } from "../services/dataService";
+import { GlobalCommandSearch } from "./GlobalCommandSearch";
+import { OrgSwitcherPopover } from "./OrgSwitcherPopover";
+import { NotificationsPopover } from "./NotificationsPopover";
+import { UserProfileMenu } from "./UserProfileMenu";
+import { EngineStatusDialog } from "./EngineStatusDialog";
+import { updateService, type UpdateState } from "../services/updateService";
 
 // ── Canonical global nav — LOCKED (docs/02_DESIGN/NAVIGATION.md §1) ──────────
 const NAV_ITEMS = [
@@ -33,7 +39,6 @@ const NAV_ITEMS = [
   { label: "AI Sessions", path: "/sessions",  icon: <IconSessions /> },
   { label: "Settings",    path: "/settings",  icon: <IconSettings /> },
 ] as const;
-
 
 // ── Types ────────────────────────────────────────────────────────────────────
 interface AppShellProps {
@@ -44,6 +49,58 @@ interface AppShellProps {
 
 // ── Component ────────────────────────────────────────────────────────────────
 export function AppShell({ children, activePath }: AppShellProps) {
+  const engine = useEngineStatus();
+  const allDocs = useAllDocuments();
+  const totalSheets = allDocs.reduce((sum, d) => sum + (d.sheet_count || 0), 0);
+  const queuedDocs = allDocs.filter(
+    (d) => d.upload_status === "queued" || d.upload_status === "ingesting" || d.upload_status === "detecting"
+  );
+  const isTauri =
+    typeof window !== "undefined" &&
+    Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__);
+
+  // Chrome interaction states
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isOrgOpen, setIsOrgOpen] = useState(false);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [isUserOpen, setIsUserOpen] = useState(false);
+  const [isEngineDialogOpen, setIsEngineDialogOpen] = useState(false);
+  const [updateState, setUpdateState] = useState<UpdateState>(() => updateService.getState());
+
+  const orgAnchorRef = useRef<HTMLButtonElement>(null);
+  const notifAnchorRef = useRef<HTMLButtonElement>(null);
+  const userAnchorRef = useRef<HTMLDivElement>(null);
+
+  // Subscribe to updater state
+  useEffect(() => {
+    return updateService.subscribe((state) => {
+      setUpdateState(state);
+    });
+  }, []);
+
+  // Quiet background check on application launch (throttled, non-blocking)
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      updateService.checkForUpdate({ isBackground: true }).catch(() => {
+        // Silently catch background errors
+      });
+    }, 3000);
+
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  // Global ⌘K / Ctrl+K shortcut listener
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setIsSearchOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   return (
     <div className="app-shell">
       {/* ── Fixed Left Sidebar ──────────────────────────────── */}
@@ -54,60 +111,91 @@ export function AppShell({ children, activePath }: AppShellProps) {
           <BrandMark />
         </div>
 
-        {/* Org Switcher */}
-        <button type="button" className="app-org-switcher" aria-label="Switch workspace — Apex Engineering">
-          <span className="app-org-switcher__avatar" aria-hidden="true">A</span>
-          <div className="app-org-switcher__info">
-            <span className="app-org-switcher__name">Apex Engineering</span>
-            <span className="app-org-switcher__meta">12 members</span>
-          </div>
-          <IconChevronUpDown aria-hidden="true" />
-        </button>
+        {/* Org Switcher with Popover */}
+        <div style={{ position: "relative", width: "100%" }}>
+          <button
+            ref={orgAnchorRef}
+            type="button"
+            className="app-org-switcher"
+            aria-label="Workspace options — Apex Engineering"
+            aria-haspopup="dialog"
+            aria-expanded={isOrgOpen}
+            onClick={() => setIsOrgOpen((prev) => !prev)}
+          >
+            <span className="app-org-switcher__avatar" aria-hidden="true">A</span>
+            <div className="app-org-switcher__info">
+              <span className="app-org-switcher__name">Apex Engineering</span>
+              <span className="app-org-switcher__meta">12 members</span>
+            </div>
+            <IconChevronUpDown aria-hidden="true" />
+          </button>
+
+          <OrgSwitcherPopover
+            isOpen={isOrgOpen}
+            onClose={() => setIsOrgOpen(false)}
+            anchorRef={orgAnchorRef}
+          />
+        </div>
 
         {/* Nav */}
         <nav className="app-sidebar__nav" aria-label="Primary navigation">
           {NAV_ITEMS.map((item) => {
-          const isActive =
-            item.path === "/projects"
-              // Projects stays active for all project sub-routes
-              ? activePath.startsWith("/projects") || activePath.startsWith("/project")
-              : item.path === "/dashboard"
-              ? activePath === "/dashboard" || activePath === "/"
-              : activePath.startsWith(item.path);
+            const isActive =
+              item.path === "/projects"
+                // Projects stays active for all project sub-routes
+                ? activePath.startsWith("/projects") || activePath.startsWith("/project")
+                : item.path === "/dashboard"
+                ? activePath === "/dashboard" || activePath === "/"
+                : activePath.startsWith(item.path);
             return (
-              <a
+              <Link
                 key={item.path}
-                href={item.path}
+                to={item.path}
                 className={`app-nav-item${isActive ? " app-nav-item--active" : ""}`}
                 aria-current={isActive ? "page" : undefined}
               >
                 {item.icon}
                 <span>{item.label}</span>
-              </a>
+              </Link>
             );
           })}
         </nav>
 
-        {/* Local Engine Status — bottom of sidebar */}
-        <div className="app-engine-card" role="status" aria-label="Local engine status: ready">
+        {/* Local Engine Status — bottom of sidebar (Interactive diagnostics) */}
+        <div
+          className="app-engine-card"
+          role="button"
+          tabIndex={0}
+          aria-label={`Local engine status: ${engine.status}. Click for diagnostics.`}
+          onClick={() => setIsEngineDialogOpen(true)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setIsEngineDialogOpen(true);
+            }
+          }}
+          style={{ cursor: "pointer" }}
+        >
           <div className="app-engine-card__header">
             <span className="app-engine-card__label">Active Workspace</span>
             <span className="app-engine-card__badge">
               <span className="app-engine-card__dot" aria-hidden="true" />
-              Local Ready
+              {engine.status === "ready" ? "Local Ready" : "Standby"}
             </span>
           </div>
           <div
             className="app-engine-card__bar"
             role="progressbar"
-            aria-valuenow={60}
+            aria-valuenow={totalSheets}
             aria-valuemin={0}
             aria-valuemax={100}
-            aria-label="60% of sheets indexed"
+            aria-label={`${totalSheets} sheets indexed`}
           >
-            <div className="app-engine-card__bar-fill" style={{ width: "60%" }} />
+            <div className="app-engine-card__bar-fill" style={{ width: `${Math.min(100, totalSheets)}%` }} />
           </div>
-          <span className="app-engine-card__meta">436 sheets indexed</span>
+          <span className="app-engine-card__meta">
+            {totalSheets > 0 ? `${totalSheets} sheets indexed` : "0 sheets indexed · Standby"}
+          </span>
         </div>
       </aside>
 
@@ -115,8 +203,13 @@ export function AppShell({ children, activePath }: AppShellProps) {
       <header className="app-header">
         <a href="#app-main" className="skip-link">Skip to main content</a>
 
-        {/* Global Search — visual; ⌘K handler wired in each page if needed */}
-        <div className="app-search" role="search" aria-label="Global search">
+        {/* Global Search Button -> Opens Command Palette */}
+        <div
+          className="app-search"
+          role="search"
+          aria-label="Global search (Click or press ⌘K)"
+          onClick={() => setIsSearchOpen(true)}
+        >
           <IconSearch className="app-search__icon" aria-hidden="true" />
           <input
             className="app-search__input"
@@ -124,38 +217,134 @@ export function AppShell({ children, activePath }: AppShellProps) {
             placeholder="Search blueprints, sheets, component tags… (⌘K)"
             aria-label="Search"
             readOnly
+            onClick={() => setIsSearchOpen(true)}
           />
           <kbd className="app-search__kbd" aria-hidden="true">⌘K</kbd>
         </div>
 
-        {/* Header right: engine badge + notifications + user */}
+        {/* Header right: update indicator + engine badge + notifications + user */}
         <div className="app-header__actions">
-          <div className="app-engine-badge" role="status" aria-label="Local Core Engine active">
-            <span className="app-engine-badge__dot" aria-hidden="true" />
-            <span>Local Core Engine</span>
-          </div>
+          {updateState.status === "update-available" && updateState.availableRelease && (
+            <Link
+              to="/settings"
+              className="settings-chip settings-chip--ready"
+              style={{
+                textDecoration: "none",
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "3px 8px",
+              }}
+              title={`Update v${updateState.availableRelease.version} is available. Click to review in Settings.`}
+            >
+              <span
+                style={{
+                  width: "6px",
+                  height: "6px",
+                  borderRadius: "50%",
+                  backgroundColor: "#10b981",
+                }}
+                aria-hidden="true"
+              />
+              <span>Update v{updateState.availableRelease.version}</span>
+            </Link>
+          )}
 
-          <button type="button" className="app-icon-btn" aria-label="Notifications — 1 unread">
-            <IconBell aria-hidden="true" />
-            <span className="app-icon-btn__badge" aria-hidden="true" />
+          <button
+            type="button"
+            className="app-engine-badge"
+            role="status"
+            aria-label="Local Core Engine status. Click for diagnostics."
+            onClick={() => setIsEngineDialogOpen(true)}
+            style={{ cursor: "pointer", border: "1px solid var(--app-border)" }}
+          >
+            <span className="app-engine-badge__dot" aria-hidden="true" />
+            <span>{isTauri ? "Local Desktop Core" : "Local Core Engine"}</span>
           </button>
+
+          {/* Notifications button with Popover */}
+          <div style={{ position: "relative" }}>
+            <button
+              ref={notifAnchorRef}
+              type="button"
+              className="app-icon-btn"
+              aria-label={
+                queuedDocs.length > 0 || updateState.status === "update-available"
+                  ? "Notifications — active alerts"
+                  : "Notifications — up to date"
+              }
+              aria-haspopup="dialog"
+              aria-expanded={isNotifOpen}
+              onClick={() => setIsNotifOpen((prev) => !prev)}
+            >
+              <IconBell aria-hidden="true" />
+              {(queuedDocs.length > 0 || updateState.status === "update-available") && (
+                <span className="app-icon-btn__badge" aria-hidden="true" />
+              )}
+            </button>
+
+            <NotificationsPopover
+              isOpen={isNotifOpen}
+              onClose={() => setIsNotifOpen(false)}
+              anchorRef={notifAnchorRef}
+            />
+          </div>
 
           <div className="app-header__sep" aria-hidden="true" />
 
-          <div className="app-user-chip">
-            <div className="app-user-chip__avatar" aria-hidden="true">HB</div>
-            <div className="app-user-chip__info" aria-hidden="true">
-              <span className="app-user-chip__name">Hardik Bhaskar</span>
-              <span className="app-user-chip__role">Owner · Apex Eng</span>
+          {/* User Profile Chip with Popover Menu */}
+          <div style={{ position: "relative" }}>
+            <div
+              ref={userAnchorRef}
+              className="app-user-chip"
+              role="button"
+              tabIndex={0}
+              aria-label="User profile and workstation actions"
+              aria-haspopup="menu"
+              aria-expanded={isUserOpen}
+              onClick={() => setIsUserOpen((prev) => !prev)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setIsUserOpen((prev) => !prev);
+                }
+              }}
+            >
+              <div className="app-user-chip__avatar" aria-hidden="true">HB</div>
+              <div className="app-user-chip__info" aria-hidden="true">
+                <span className="app-user-chip__name">Hardik Bhaskar</span>
+                <span className="app-user-chip__role">Owner · Apex Eng</span>
+              </div>
             </div>
+
+            <UserProfileMenu
+              isOpen={isUserOpen}
+              onClose={() => setIsUserOpen(false)}
+              anchorRef={userAnchorRef}
+            />
           </div>
         </div>
       </header>
 
       {/* ── Scrollable Main Content ─────────────────────────── */}
       <main className="app-main" id="app-main" tabIndex={-1}>
-        {children}
+        <div key={activePath} className="page-transition-view">
+          {children}
+        </div>
       </main>
+
+      {/* ── Global Search Dialog ────────────────────────────── */}
+      <GlobalCommandSearch
+        isOpen={isSearchOpen}
+        onClose={() => setIsSearchOpen(false)}
+      />
+
+      {/* ── Engine Diagnostics Dialog ───────────────────────── */}
+      <EngineStatusDialog
+        isOpen={isEngineDialogOpen}
+        onClose={() => setIsEngineDialogOpen(false)}
+      />
     </div>
   );
 }

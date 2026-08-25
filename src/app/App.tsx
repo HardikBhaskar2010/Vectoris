@@ -1,28 +1,28 @@
 /**
- * App.tsx — Client-side router.
+ * App.tsx — Client-side SPA route dispatcher.
  *
  * Route table (canonical — docs/01_PRODUCT/APP_FLOW.md + docs/02_DESIGN/NAVIGATION.md):
  *
- *   /                         → LandingPage
+ *   /                         → AuthPage (Direct Entry Surface)
  *   /auth                     → AuthPage
  *   /dashboard                → DashboardPage
  *   /projects                 → ProjectsPage
  *   /sessions                 → SessionsPage (global AI Sessions)
  *   /sessions/:id             → SessionsPage (active session)
- *   /settings                 → SettingsPage (stub)
+ *   /settings                 → SettingsPage (workstation configuration)
  *
  *   /project/:id              → ProjectOverviewPage (Overview tab)
  *   /project/:id/documents    → ProjectDocumentsPage (Documents tab)
- *   /project/:id/workspace    → ProjectWorkspacePage (Workspace tab — stub)
+ *   /project/:id/workspace    → ProjectWorkspacePage (Workspace tab)
  *   /project/:id/takeoff      → ProjectTakeoffPage (Takeoff tab)
  *   /project/:id/reports      → ProjectReportsPage (Reports tab)
- *   /project/:id/estimate     → ProjectEstimatePage (future — disabled)
- *   /project/:id/bid          → ProjectBidPage (future — disabled)
+ *   /project/:id/estimate     → ProjectFutureStub (disabled)
+ *   /project/:id/bid          → ProjectFutureStub (disabled)
  */
 
 import { useEffect } from "react";
+import { RouterProvider, useRouter } from "../router";
 import { DesktopTitleBar } from "../components/DesktopTitleBar";
-import { LandingPage } from "../pages/LandingPage";
 import { AuthPage } from "../pages/AuthPage";
 import { DashboardPage } from "../pages/DashboardPage";
 import ProjectsPage from "../pages/ProjectsPage";
@@ -33,14 +33,14 @@ import ProjectReportsPage from "../pages/ProjectReportsPage";
 import SessionsPage from "../pages/SessionsPage";
 import SettingsPage from "../pages/SettingsPage";
 import ProjectWorkspacePage from "../pages/ProjectWorkspacePage";
+import { ProjectShell } from "../components/ProjectShell";
 
-export function App() {
-  const path = window.location.pathname;
+function AppContent() {
+  const { currentPath, searchParams, navigate } = useRouter();
 
   // Sync theme to document for global CSS overrides
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    let theme = params.get("theme");
+    let theme = searchParams.get("theme");
 
     if (!theme) {
       try {
@@ -55,7 +55,7 @@ export function App() {
     } else {
       document.documentElement.removeAttribute("data-theme");
     }
-  }, []);
+  }, [searchParams]);
 
   // Global desktop keyboard shortcuts
   useEffect(() => {
@@ -75,47 +75,52 @@ export function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  const isUnauthenticated = path === "/" || path.startsWith("/auth");
+  const isUnauthenticated = currentPath === "/" || currentPath.startsWith("/auth");
 
   const getPageTitle = () => {
-    if (path === "/") return "Welcome";
-    if (path.startsWith("/auth")) return "Workstation Login";
-    if (path.startsWith("/dashboard")) return "Command Dashboard";
-    if (path.startsWith("/projects")) return "Project Index";
-    if (path.startsWith("/sessions")) return "AI Copilot Sessions";
-    if (path.startsWith("/settings")) return "Engine Settings";
-    if (path.startsWith("/project")) {
-      const match = path.match(/^\/project\/([^/]+)/);
+    if (currentPath === "/" || currentPath.startsWith("/auth")) return "Workstation Login";
+    if (currentPath.startsWith("/dashboard")) return "Command Dashboard";
+    if (currentPath.startsWith("/projects")) return "Project Index";
+    if (currentPath.startsWith("/sessions")) return "AI Copilot Sessions";
+    if (currentPath.startsWith("/settings")) return "Engine Settings";
+    if (currentPath.startsWith("/project")) {
+      const match = currentPath.match(/^\/project\/([^/]+)/);
       return match ? `Project: ${match[1]}` : "Project Workspace";
     }
     return "Engineering Workstation";
   };
 
   const renderContent = () => {
-    // ── Auth ────────────────────────────────────────────────────────────────────
-    if (path.startsWith("/auth"))       return <AuthPage />;
+    // ── Root Entry Surface & Auth ──────────────────────────────────────────────
+    if (currentPath === "/" || currentPath.startsWith("/auth")) return <AuthPage />;
 
     // ── Top-level nav ───────────────────────────────────────────────────────────
-    if (path === "/dashboard")          return <DashboardPage />;
-    if (path.startsWith("/dashboard"))  return <DashboardPage />;
-    if (path === "/projects")           return <ProjectsPage />;
-    if (path.startsWith("/projects"))   return <ProjectsPage />;
-    if (path.startsWith("/sessions"))   return <SessionsPage />;
-    if (path.startsWith("/settings"))   return <SettingsPage />;
+    if (currentPath === "/dashboard" || currentPath.startsWith("/dashboard")) return <DashboardPage />;
+    if (currentPath === "/projects" || currentPath.startsWith("/projects")) return <ProjectsPage />;
+    if (currentPath.startsWith("/sessions")) return <SessionsPage />;
+    if (currentPath.startsWith("/settings")) return <SettingsPage />;
+
+    // ── Legacy/redirect alias routes ────────────────────────────────────────────
+    if (currentPath === "/workspace" || currentPath.startsWith("/workspace")) {
+      const doc = searchParams.get("doc");
+      const tab = searchParams.get("tab");
+      if (tab === "takeoff") return <ProjectTakeoffPage />;
+      return <ProjectWorkspacePage />;
+    }
 
     // ── Project sub-routes (order: most specific first) ─────────────────────────
-    if (path.match(/^\/project\/[^/]+\/documents/))  return <ProjectDocumentsPage />;
-    if (path.match(/^\/project\/[^/]+\/workspace/))  return <ProjectWorkspacePage />;
-    if (path.match(/^\/project\/[^/]+\/takeoff/))    return <ProjectTakeoffPage />;
-    if (path.match(/^\/project\/[^/]+\/reports/))    return <ProjectReportsPage />;
-    if (path.match(/^\/project\/[^/]+\/estimate/))   return <ProjectFutureStub tab="estimate" label="Estimate" />;
-    if (path.match(/^\/project\/[^/]+\/bid/))        return <ProjectFutureStub tab="bid" label="Bid" />;
+    if (currentPath.match(/^\/project\/[^/]+\/documents/))  return <ProjectDocumentsPage />;
+    if (currentPath.match(/^\/project\/[^/]+\/workspace/))  return <ProjectWorkspacePage />;
+    if (currentPath.match(/^\/project\/[^/]+\/takeoff/))    return <ProjectTakeoffPage />;
+    if (currentPath.match(/^\/project\/[^/]+\/reports/))    return <ProjectReportsPage />;
+    if (currentPath.match(/^\/project\/[^/]+\/estimate/))   return <ProjectFutureStub tab="estimate" label="Estimate" />;
+    if (currentPath.match(/^\/project\/[^/]+\/bid/))        return <ProjectFutureStub tab="bid" label="Bid" />;
 
     // ── Project overview (catch-all for /project/* without sub-route) ────────────
-    if (path.startsWith("/project"))    return <ProjectOverviewPage />;
+    if (currentPath.startsWith("/project"))    return <ProjectOverviewPage />;
 
-    // ── Default ─────────────────────────────────────────────────────────────────
-    return <LandingPage />;
+    // ── Default fallback ────────────────────────────────────────────────────────
+    return <DashboardPage />;
   };
 
   return (
@@ -131,13 +136,20 @@ export function App() {
   );
 }
 
+export function App() {
+  return (
+    <RouterProvider>
+      <AppContent />
+    </RouterProvider>
+  );
+}
+
 // ── Temporary stubs for future/unbuilt project tabs ────────────────────────────
-import { ProjectShell } from "../components/ProjectShell";
-
-// ProjectWorkspaceStub removed — replaced by ProjectWorkspacePage
-
 function ProjectFutureStub({ tab, label }: { tab: string; label: string }) {
-  const id = getProjectId();
+  const { currentPath, searchParams } = useRouter();
+  const match = currentPath.match(/^\/project\/([^/]+)/);
+  const id = match ? match[1] : searchParams.get("project") ?? "p1";
+
   return (
     <ProjectShell
       project={{ id, name: "ABC Data Center", client: "ABC Corp" }}
@@ -151,13 +163,4 @@ function ProjectFutureStub({ tab, label }: { tab: string; label: string }) {
       </div>
     </ProjectShell>
   );
-}
-
-/** Extract project ID from URL path /project/:id/... or /project?project=:id */
-function getProjectId(): string {
-  const path = window.location.pathname;
-  const match = path.match(/^\/project\/([^/]+)/);
-  if (match) return match[1];
-  const params = new URLSearchParams(window.location.search);
-  return params.get("project") ?? "demo";
 }

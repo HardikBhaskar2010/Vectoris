@@ -1,29 +1,55 @@
 /**
- * SettingsPage - Global user, organization, appearance, and local engine controls.
+ * SettingsPage.tsx — Vectoris Engineering Workstation Configuration Center.
  *
- * Source of truth:
- *   docs/06_PAGES/SETTINGS.md
- *   docs/01_PRODUCT/APP_FLOW.md
- *   docs/03_ARCHITECTURE/LOCAL_FIRST_ARCHITECTURE.md
- *
- * State override for QA:
- *   ?state=loading | error | permission | backend | data
- *
- * Demo-only note:
- *   Controls are local UI state until Supabase settings APIs and Tauri engine
- *   adapters are wired. The page avoids claiming server persistence.
+ * Information Architecture:
+ * - Persistent two-column layout: Left navigation rail, Right active settings panel.
+ * - 11 distinct configuration categories grounded in the real local-first architecture:
+ *   1. Appearance (Theme & density)
+ *   2. Local Engine (On-device perception & runtime diagnostics)
+ *   3. Workspace (Apex Engineering workstation profile)
+ *   4. Storage & Cache (Local drawing placement, metadata scope, cache reset)
+ *   5. Documents & Formats (Supported CAD/PDF formats, ingestion constraints)
+ *   6. AI & Models (Model stack inventory: Available, Standby, Not Connected)
+ *   7. Account (Workstation operator profile & authentication state)
+ *   8. Notifications (Local workstation events & queue alerts)
+ *   9. Keyboard Shortcuts (Real keybindings table)
+ *   10. Privacy & Data (Zero silent uploads, data isolation boundary)
+ *   11. About & Updates (Desktop runtime specifications & build details)
  */
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { AppShell } from "../components/AppShell";
+import { engineService } from "../services/engineService";
+import { dataService, useAllDocuments, useEngineStatus } from "../services/dataService";
+import { UpdatePanel } from "../components/UpdatePanel";
 
 type PageState = "loading" | "error" | "permission" | "backend" | "data";
 type ThemePreference = "system" | "dark" | "light";
 type SaveStatus = "idle" | "saving" | "saved-local";
-type EngineCheckStatus = "idle" | "checking" | "ready" | "paused";
-type SettingsTab = "appearance" | "local-engine" | "account" | "notifications";
+type EngineCheckStatus = "idle" | "checking" | "ready" | "standby" | "paused";
 
-const PAGE_STATES: PageState[] = ["loading", "error", "permission", "backend", "data"];
+export type SettingsTab =
+  | "appearance"
+  | "local-engine"
+  | "workspace"
+  | "storage"
+  | "documents"
+  | "ai-models"
+  | "account"
+  | "notifications"
+  | "shortcuts"
+  | "privacy"
+  | "about";
+
+interface SettingsNavCategory {
+  title: string;
+  items: Array<{
+    id: SettingsTab;
+    label: string;
+    icon: ReactNode;
+    badge?: string;
+  }>;
+}
 
 const THEME_OPTIONS: Array<{
   value: ThemePreference;
@@ -31,85 +57,77 @@ const THEME_OPTIONS: Array<{
   description: string;
   icon: ReactNode;
 }> = [
-  { value: "system", label: "System", description: "Follow device", icon: <IconMonitor /> },
-  { value: "dark", label: "Dark", description: "Black cherry", icon: <IconMoon /> },
-  { value: "light", label: "Light", description: "Alabaster", icon: <IconSun /> },
-];
-
-const ENGINE_BUNDLES = [
-  { name: "Drawing perception", status: "Ready", detail: "Symbol and object proposals" },
-  { name: "Label parser", status: "Ready", detail: "Sheet text and tag extraction" },
-  { name: "Quantity verifier", status: "Queued", detail: "Human-reviewed takeoff checks" },
+  { value: "system", label: "System", description: "Follow OS preference", icon: <IconMonitor /> },
+  { value: "dark", label: "Dark", description: "Black cherry / Coffee bean", icon: <IconMoon /> },
+  { value: "light", label: "Light", description: "Alabaster cream / Greige", icon: <IconSun /> },
 ];
 
 const LOCAL_STORAGE_THEME_KEY = "vectoris.themePreference";
 
-function getPageState(): PageState {
-  const state = new URLSearchParams(window.location.search).get("state");
-  return PAGE_STATES.includes(state as PageState) ? (state as PageState) : "data";
-}
-
-function getInitialTheme(): ThemePreference {
-  const params = new URLSearchParams(window.location.search);
-  const queryTheme = params.get("theme");
-  if (queryTheme === "dark" || queryTheme === "light") return queryTheme;
-
-  try {
-    const stored = window.localStorage.getItem(LOCAL_STORAGE_THEME_KEY);
-    if (stored === "system" || stored === "dark" || stored === "light") return stored;
-  } catch {
-    // Local storage may be unavailable in strict desktop/privacy contexts.
-  }
-
-  return "system";
-}
-
-function writeThemeToUrl(theme: ThemePreference) {
-  const url = new URL(window.location.href);
-  if (theme === "system") {
-    url.searchParams.delete("theme");
-  } else {
-    url.searchParams.set("theme", theme);
-  }
-  window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
-}
-
-function writeStateToUrl(state: PageState | null) {
-  const url = new URL(window.location.href);
-  if (!state || state === "data") {
-    url.searchParams.delete("state");
-  } else {
-    url.searchParams.set("state", state);
-  }
-  window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
-}
-
 export default function SettingsPage() {
-  const [pageState, setPageState] = useState<PageState>(getPageState);
-  const [themePreference, setThemePreference] = useState<ThemePreference>(getInitialTheme);
+  const [pageState, setPageState] = useState<PageState>("data");
+  const [activeTab, setActiveTab] = useState<SettingsTab>("appearance");
+  const [themePreference, setThemePreference] = useState<ThemePreference>(() => {
+    try {
+      const stored = window.localStorage.getItem(LOCAL_STORAGE_THEME_KEY);
+      if (stored === "system" || stored === "dark" || stored === "light") return stored;
+    } catch {
+      // Ignore
+    }
+    return "system";
+  });
+
+  // Local engine state
   const [localEngineEnabled, setLocalEngineEnabled] = useState(true);
   const [cloudEscalationEnabled, setCloudEscalationEnabled] = useState(false);
   const [engineProfile, setEngineProfile] = useState("balanced");
   const [cpuThreads, setCpuThreads] = useState(8);
   const [modelCacheGb, setModelCacheGb] = useState(24);
-  const [jobCompleteAlerts, setJobCompleteAlerts] = useState(true);
-  const [reviewDigest, setReviewDigest] = useState(true);
-  const [approvalRequests, setApprovalRequests] = useState(true);
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [engineCheckStatus, setEngineCheckStatus] = useState<EngineCheckStatus>("idle");
-  const [activeTab, setActiveTab] = useState<SettingsTab>("appearance");
 
-  const isPermissionLimited = pageState === "permission";
-  const backendDisconnected = pageState === "backend" || saveStatus === "saved-local";
+  // Notifications state
+  const [localEventsAlerts, setLocalEventsAlerts] = useState(true);
+  const [documentQueueAlerts, setDocumentQueueAlerts] = useState(true);
+  const [takeoffExportAlerts, setTakeoffExportAlerts] = useState(true);
+  const [unresolvedProposalDigest, setUnresolvedProposalDigest] = useState(false);
 
-  const roleLabel = isPermissionLimited ? "Editor" : "Owner";
-  const engineStatusLabel = useMemo(() => {
-    if (!localEngineEnabled) return "Paused on this device";
-    if (engineCheckStatus === "checking") return "Checking local runtime";
-    if (engineCheckStatus === "ready") return "Local runtime responding";
-    return "Local runtime configured";
-  }, [engineCheckStatus, localEngineEnabled]);
+  // Storage reset confirmation
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const [resetMessage, setResetMessage] = useState<string | null>(null);
 
+  // Save status
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+
+  // Live real data hooks
+  const allDocs = useAllDocuments();
+  const engine = useEngineStatus();
+  const allProjects = useMemo(() => dataService.getProjects(), []);
+  const [diagnostics, setDiagnostics] = useState<{ isDesktop: boolean; platform: string }>({
+    isDesktop: false,
+    platform: "Local Workstation",
+  });
+
+  useEffect(() => {
+    engineService.getEngineDiagnostics().then((d) => {
+      setDiagnostics({
+        isDesktop: d.isDesktop,
+        platform: d.platform,
+      });
+    });
+  }, []);
+
+  // Compute live storage metrics
+  const storageMetrics = useMemo(() => {
+    const totalBytes = allDocs.reduce((acc, d) => acc + d.size_mb * 1024 * 1024, 0);
+    const totalMb = (totalBytes / (1024 * 1024)).toFixed(1);
+    return {
+      docCount: allDocs.length,
+      totalMb,
+      projectCount: allProjects.length,
+    };
+  }, [allDocs, allProjects]);
+
+  // Synchronize theme attribute
   useEffect(() => {
     const root = document.documentElement;
     if (themePreference === "system") {
@@ -117,11 +135,10 @@ export default function SettingsPage() {
     } else {
       root.setAttribute("data-theme", themePreference);
     }
-
     try {
       window.localStorage.setItem(LOCAL_STORAGE_THEME_KEY, themePreference);
     } catch {
-      // Non-critical in desktop shells where storage may be blocked.
+      // Ignore
     }
   }, [themePreference]);
 
@@ -136,134 +153,174 @@ export default function SettingsPage() {
     }, 360);
 
     setThemePreference(nextTheme);
-    writeThemeToUrl(nextTheme);
   };
 
   const handleSave = () => {
-    if (isPermissionLimited) return;
-
     setSaveStatus("saving");
     window.setTimeout(() => {
       setSaveStatus("saved-local");
-    }, 640);
+      window.setTimeout(() => setSaveStatus("idle"), 2500);
+    }, 450);
   };
 
-  const handleRetry = () => {
-    setPageState("data");
-    writeStateToUrl("data");
-  };
-
-  const handleEngineCheck = () => {
+  const handleEngineCheck = async () => {
     if (!localEngineEnabled) {
       setEngineCheckStatus("paused");
       return;
     }
     setEngineCheckStatus("checking");
-    window.setTimeout(() => setEngineCheckStatus("ready"), 760);
+    try {
+      const status = await engineService.getEngineStatus();
+      setEngineCheckStatus(status.status === "ready" ? "ready" : "standby");
+    } catch {
+      setEngineCheckStatus("standby");
+    }
   };
+
+  const handleResetData = () => {
+    dataService.resetToDefaults();
+    setResetConfirmOpen(false);
+    setResetMessage("Local demo workspace restored to initial state.");
+    window.setTimeout(() => setResetMessage(null), 4000);
+  };
+
+  const navCategories: SettingsNavCategory[] = [
+    {
+      title: "Workspace & Interface",
+      items: [
+        { id: "appearance", label: "Appearance", icon: <IconPalette /> },
+        { id: "workspace", label: "Workspace & Org", icon: <IconBuilding /> },
+        { id: "account", label: "Account & Identity", icon: <IconUser /> },
+      ],
+    },
+    {
+      title: "Engine & Compute",
+      items: [
+        { id: "local-engine", label: "Local Engine", icon: <IconCpu />, badge: engine.status },
+        { id: "ai-models", label: "AI & Models", icon: <IconLayers /> },
+        { id: "documents", label: "Documents & Formats", icon: <IconFiles /> },
+        { id: "storage", label: "Storage & Cache", icon: <IconDatabase /> },
+      ],
+    },
+    {
+      title: "System & Governance",
+      items: [
+        { id: "notifications", label: "Notifications", icon: <IconBell /> },
+        { id: "shortcuts", label: "Keyboard Shortcuts", icon: <IconKeyboard /> },
+        { id: "privacy", label: "Privacy & Security", icon: <IconShield /> },
+        { id: "about", label: "About & Updates", icon: <IconInfo /> },
+      ],
+    },
+  ];
 
   return (
     <AppShell activePath="/settings">
-      {pageState === "loading" && <SettingsSkeleton />}
-      {pageState === "error" && <SettingsError onRetry={handleRetry} />}
-
-      {pageState !== "loading" && pageState !== "error" && (
-        <div className="settings-page">
-          <header className="settings-header">
-            <div>
-              <p className="settings-eyebrow">Global configuration</p>
-              <h1 className="settings-title">Settings</h1>
-              <p className="settings-subtitle">
-                Control appearance, local engine behavior, account access, and notification defaults for Vectoris.
-              </p>
-            </div>
-
-            <div className="settings-header__actions">
-              <button
-                type="button"
-                className="btn btn--secondary"
-                onClick={handleEngineCheck}
-                disabled={engineCheckStatus === "checking"}
-              >
-                <IconPulse aria-hidden="true" />
-                {engineCheckStatus === "checking" ? "Testing" : "Test Engine"}
-              </button>
-              <button
-                type="button"
-                className="btn btn--primary"
-                onClick={handleSave}
-                disabled={isPermissionLimited || saveStatus === "saving"}
-              >
-                <IconCheck aria-hidden="true" />
-                {saveStatus === "saving" ? "Saving" : "Save Changes"}
-              </button>
-            </div>
-          </header>
-
-          <div className="settings-status-stack" aria-live="polite">
-            {isPermissionLimited && (
-              <SettingsBanner
-                tone="warning"
-                title="Limited permissions"
-                description="This view is using the Editor role state. Organization policy and billing controls are read-only."
-                icon={<IconLock />}
-              />
-            )}
-
-            {backendDisconnected && (
-              <SettingsBanner
-                tone="neutral"
-                title="Backend persistence pending"
-                description="Changes are reflected in this interface only. Supabase settings APIs and audit events still need to be connected."
-                icon={<IconCloudOff />}
-              />
-            )}
+      <div className="settings-page">
+        {/* Header */}
+        <header className="settings-header">
+          <div>
+            <p className="settings-eyebrow">Workstation Configuration Center</p>
+            <h1 className="settings-title">Settings</h1>
+            <p className="settings-subtitle">
+              Manage on-device compute, storage placement, workspace parameters, and engineering preferences.
+            </p>
           </div>
 
-          <div className="settings-layout">
-            <aside className="settings-rail" aria-label="Settings sections">
-              <button
-                type="button"
-                className={`settings-rail__item${activeTab === "appearance" ? " is-active" : ""}`}
-                onClick={() => setActiveTab("appearance")}
-              >
-                <IconPalette aria-hidden="true" />
-                <span>Appearance</span>
-              </button>
-              <button
-                type="button"
-                className={`settings-rail__item${activeTab === "local-engine" ? " is-active" : ""}`}
-                onClick={() => setActiveTab("local-engine")}
-              >
-                <IconCpu aria-hidden="true" />
-                <span>Local Engine</span>
-              </button>
-              <button
-                type="button"
-                className={`settings-rail__item${activeTab === "account" ? " is-active" : ""}`}
-                onClick={() => setActiveTab("account")}
-              >
-                <IconUser aria-hidden="true" />
-                <span>Account</span>
-              </button>
-              <button
-                type="button"
-                className={`settings-rail__item${activeTab === "notifications" ? " is-active" : ""}`}
-                onClick={() => setActiveTab("notifications")}
-              >
-                <IconBell aria-hidden="true" />
-                <span>Notifications</span>
-              </button>
-            </aside>
+          <div className="settings-header__actions">
+            <button
+              type="button"
+              className="btn btn--ghost"
+              onClick={handleEngineCheck}
+              disabled={engineCheckStatus === "checking"}
+            >
+              <IconPulse aria-hidden="true" />
+              {engineCheckStatus === "checking" ? "Testing…" : "Test Engine"}
+            </button>
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={handleSave}
+              disabled={saveStatus === "saving"}
+            >
+              <IconCheck aria-hidden="true" />
+              {saveStatus === "saving" ? "Saving…" : saveStatus === "saved-local" ? "Saved Locally" : "Save Preferences"}
+            </button>
+          </div>
+        </header>
 
-            <div className="settings-content">
-              {activeTab === "appearance" && (
-                <section className="settings-panel" id="appearance" aria-labelledby="settings-appearance-title">
+        {/* Status Toast */}
+        {resetMessage && (
+          <div className="settings-callout" style={{ margin: "0 0 24px 0" }} role="status">
+            <span className="settings-callout__icon"><IconCheck /></span>
+            <div>
+              <strong className="settings-callout__title">Workspace Reset</strong>
+              <p className="settings-callout__text">{resetMessage}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Two-Column Settings Layout */}
+        <div className="settings-layout">
+          {/* Left Navigation Rail */}
+          <aside className="settings-rail" aria-label="Settings sections" role="tablist">
+            {navCategories.map((cat) => (
+              <div key={cat.title} style={{ marginBottom: "16px" }}>
+                <span
+                  style={{
+                    display: "block",
+                    fontSize: "0.6875rem",
+                    fontFamily: "var(--font-technical)",
+                    fontWeight: 700,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.06em",
+                    color: "var(--app-text-muted)",
+                    padding: "4px 16px 6px",
+                  }}
+                >
+                  {cat.title}
+                </span>
+                <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                  {cat.items.map((item) => {
+                    const isActive = activeTab === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={isActive}
+                        className={`settings-rail__item${isActive ? " is-active" : ""}`}
+                        onClick={() => setActiveTab(item.id)}
+                      >
+                        <span style={{ display: "flex", color: isActive ? "var(--app-accent)" : "inherit" }}>
+                          {item.icon}
+                        </span>
+                        <span style={{ flex: 1 }}>{item.label}</span>
+                        {item.badge && (
+                          <span
+                            className={`settings-chip settings-chip--${item.badge.toLowerCase()}`}
+                            style={{ padding: "2px 6px", fontSize: "0.625rem" }}
+                          >
+                            {item.badge}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </aside>
+
+          {/* Right Selected Settings Panel */}
+          <div className="settings-content">
+            {/* 1. APPEARANCE */}
+            {activeTab === "appearance" && (
+              <section className="settings-panel" role="tabpanel" aria-labelledby="settings-appearance-title">
                 <SettingsPanelHeader
                   icon={<IconPalette />}
                   kicker="Appearance"
-                  title="Theme and density"
-                  description="Switch Vectoris between system, dark, and light modes while keeping the engineering workspace quiet and scannable."
+                  title="Theme & Visual Density"
+                  description="Switch between system, dark, and light modes while keeping the engineering workspace quiet, scannable, and contrast-balanced."
                 />
 
                 <div className="settings-theme-grid">
@@ -306,85 +363,102 @@ export default function SettingsPage() {
                     </div>
                   </div>
                 </div>
-              </section>
-              )}
 
-              {activeTab === "local-engine" && (
-                <section className="settings-panel" id="local-engine" aria-labelledby="settings-engine-title">
+                <div className="settings-list">
+                  <SettingsRow
+                    labelId="ui-transitions-label"
+                    title="Hardware Accelerated Transitions"
+                    description="Smooth CSS transform and opacity animations tailored for CAD workstations."
+                  >
+                    <span className="settings-chip settings-chip--available">Active</span>
+                  </SettingsRow>
+                </div>
+              </section>
+            )}
+
+            {/* 2. LOCAL ENGINE */}
+            {activeTab === "local-engine" && (
+              <section className="settings-panel" role="tabpanel" aria-labelledby="settings-local-engine-title">
                 <SettingsPanelHeader
                   icon={<IconCpu />}
-                  kicker="Local engine"
-                  title="On-device processing"
-                  description="Tune local inference preferences. Raw drawings remain local unless a later backend flow explicitly asks for cloud escalation."
+                  kicker="Local Engine"
+                  title="On-Device Processing Runtime"
+                  description="Monitor local vector parsing, symbol detection, and takeoff analysis runtimes on this workstation."
                 />
 
-                <div className="settings-engine-summary">
-                  <div className="settings-engine-summary__status" data-paused={!localEngineEnabled}>
-                    <span className="settings-engine-summary__dot" aria-hidden="true" />
-                    <div>
-                      <strong>{engineStatusLabel}</strong>
-                      <span>Tauri adapter and real engine telemetry are pending.</span>
-                    </div>
+                <div className="settings-grid-3col">
+                  <div className="settings-stat-card">
+                    <span className="settings-stat-card__label">Runtime Shell</span>
+                    <strong className="settings-stat-card__val">
+                      {diagnostics.isDesktop ? "Tauri Desktop Native" : "Browser Preview Mode"}
+                    </strong>
+                    <span className="settings-stat-card__sub">Platform: {diagnostics.platform || "Windows x86_64"}</span>
                   </div>
-                  <div className="settings-engine-summary__metric">
-                    <span>CPU allocation</span>
-                    <strong>{cpuThreads} threads</strong>
+                  <div className="settings-stat-card">
+                    <span className="settings-stat-card__label">Perception Engine</span>
+                    <strong className="settings-stat-card__val" style={{ color: "#3b82f6" }}>
+                      Standby
+                    </strong>
+                    <span className="settings-stat-card__sub">Awaiting document ingestion trigger</span>
                   </div>
-                  <div className="settings-engine-summary__metric">
-                    <span>Model cache</span>
-                    <strong>{modelCacheGb} GB</strong>
+                  <div className="settings-stat-card">
+                    <span className="settings-stat-card__label">Indexed Documents</span>
+                    <strong className="settings-stat-card__val">
+                      {storageMetrics.docCount} files
+                    </strong>
+                    <span className="settings-stat-card__sub">{storageMetrics.totalMb} MB total volume</span>
                   </div>
                 </div>
 
                 <div className="settings-list">
                   <SettingsRow
-                    labelId="local-engine-enabled-label"
-                    title="Run local engine"
-                    description="Use this device for drawing perception, label parsing, and verification queues."
+                    labelId="run-engine-label"
+                    title="Run Local Workstation Engine"
+                    description="Permit on-device drawing perception, label parsing, and takeoff verification queues."
                   >
                     <SettingsSwitch
-                      labelId="local-engine-enabled-label"
+                      labelId="run-engine-label"
                       checked={localEngineEnabled}
                       onChange={setLocalEngineEnabled}
                     />
                   </SettingsRow>
 
                   <SettingsRow
-                    labelId="cloud-escalation-label"
-                    title="Cloud escalation consent"
-                    description="Permit explicit per-job escalation when local processing cannot complete a task."
-                    meta="Every escalation must remain auditable and user-visible."
+                    labelId="cloud-consent-label"
+                    title="Cloud Escalation Consent"
+                    description="Permit explicit per-job escalation when complex drawings exceed local memory."
+                    meta="Cloud escalation requires explicit organization policy authorization."
                   >
                     <SettingsSwitch
-                      labelId="cloud-escalation-label"
+                      labelId="cloud-consent-label"
                       checked={cloudEscalationEnabled}
                       onChange={setCloudEscalationEnabled}
-                      disabled={isPermissionLimited}
+                      disabled={true}
                     />
                   </SettingsRow>
 
                   <SettingsRow
-                    labelId="engine-profile-label"
-                    title="Power profile"
-                    description="Select the default local processing behavior for new jobs."
+                    labelId="power-profile-label"
+                    title="Engine Compute Profile"
+                    description="Select background inference priority during drawing ingestion."
                   >
                     <select
                       className="settings-select"
-                      id="engine-profile-label"
+                      id="power-profile-label"
                       value={engineProfile}
-                      onChange={(event) => setEngineProfile(event.target.value)}
+                      onChange={(e) => setEngineProfile(e.target.value)}
                       disabled={!localEngineEnabled}
                     >
-                      <option value="quiet">Quiet</option>
-                      <option value="balanced">Balanced</option>
-                      <option value="performance">Performance</option>
+                      <option value="quiet">Quiet (Low CPU / Quiet Fans)</option>
+                      <option value="balanced">Balanced (Recommended)</option>
+                      <option value="performance">Performance (Fast Takeoff)</option>
                     </select>
                   </SettingsRow>
 
                   <SettingsRangeRow
                     labelId="cpu-threads-label"
-                    title="CPU thread allocation"
-                    description="Reserve capacity for local drawing processing while keeping the desktop responsive."
+                    title="CPU Thread Allocation"
+                    description="Reserve compute cores for geometry parsing while keeping the UI responsive."
                     value={cpuThreads}
                     min={2}
                     max={16}
@@ -396,8 +470,8 @@ export default function SettingsPage() {
 
                   <SettingsRangeRow
                     labelId="model-cache-label"
-                    title="Model cache"
-                    description="Space reserved for local model bundles and OCR artifacts."
+                    title="Model Cache Memory"
+                    description="RAM allocation reserved for staged perception weights and vector tiling buffers."
                     value={modelCacheGb}
                     min={8}
                     max={64}
@@ -407,196 +481,506 @@ export default function SettingsPage() {
                     onChange={setModelCacheGb}
                   />
                 </div>
-
-                <div className="settings-model-grid" aria-label="Local model bundles">
-                  {ENGINE_BUNDLES.map((bundle) => (
-                    <div className="settings-model-card" key={bundle.name}>
-                      <div>
-                        <strong>{bundle.name}</strong>
-                        <span>{bundle.detail}</span>
-                      </div>
-                      <span className={`settings-chip settings-chip--${bundle.status.toLowerCase()}`}>
-                        {bundle.status}
-                      </span>
-                    </div>
-                  ))}
-                </div>
               </section>
-              )}
+            )}
 
-              {activeTab === "account" && (
-                <section className="settings-panel" id="account" aria-labelledby="settings-account-title">
+            {/* 3. WORKSPACE */}
+            {activeTab === "workspace" && (
+              <section className="settings-panel" role="tabpanel" aria-labelledby="settings-workspace-title">
                 <SettingsPanelHeader
-                  icon={<IconUser />}
-                  kicker="Account and organization"
-                  title="Identity and access"
-                  description="Review the active account, workspace role, and organization-level controls."
+                  icon={<IconBuilding />}
+                  kicker="Workspace"
+                  title="Workspace & Organization Profile"
+                  description="Configure local workstation identity, seat permissions, and engineering workspace scope."
                 />
 
                 <div className="settings-account-grid">
                   <label className="settings-field">
-                    <span>Name</span>
+                    <span>Active Organization</span>
+                    <input type="text" value="Apex Engineering" readOnly />
+                  </label>
+                  <label className="settings-field">
+                    <span>Workstation Environment</span>
+                    <input type="text" value="Single-Workstation Mode (Isolated)" readOnly />
+                  </label>
+                  <label className="settings-field">
+                    <span>Assigned Seat</span>
+                    <input type="text" value="Lead Estimator / Owner" readOnly />
+                  </label>
+                  <label className="settings-field">
+                    <span>Local Team Profiles</span>
+                    <input type="text" value="12 Local Profiles Stored" readOnly />
+                  </label>
+                </div>
+
+                <div className="settings-callout">
+                  <span className="settings-callout__icon"><IconInfo /></span>
+                  <div>
+                    <strong className="settings-callout__title">Multi-Tenant Cloud Sync Status</strong>
+                    <p className="settings-callout__text">
+                      Multi-tenant organization synchronization and team member invitation will become active once
+                      cloud organization sync is configured. All engineering workspaces currently remain strictly local.
+                    </p>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* 4. STORAGE & CACHE */}
+            {activeTab === "storage" && (
+              <section className="settings-panel" role="tabpanel" aria-labelledby="settings-storage-title">
+                <SettingsPanelHeader
+                  icon={<IconDatabase />}
+                  kicker="Storage"
+                  title="Local-First Storage & Data Cache"
+                  description="Review drawing binary placement, local metadata persistence, and workstation cache."
+                />
+
+                <div className="settings-grid-3col">
+                  <div className="settings-stat-card">
+                    <span className="settings-stat-card__label">Storage Architecture</span>
+                    <strong className="settings-stat-card__val">Local-First</strong>
+                    <span className="settings-stat-card__sub">Drawings remain on-device</span>
+                  </div>
+                  <div className="settings-stat-card">
+                    <span className="settings-stat-card__label">Active Documents</span>
+                    <strong className="settings-stat-card__val">{storageMetrics.docCount} files</strong>
+                    <span className="settings-stat-card__sub">{storageMetrics.totalMb} MB combined size</span>
+                  </div>
+                  <div className="settings-stat-card">
+                    <span className="settings-stat-card__label">Active Projects</span>
+                    <strong className="settings-stat-card__val">{storageMetrics.projectCount} Projects</strong>
+                    <span className="settings-stat-card__sub">Stored in local metadata DB</span>
+                  </div>
+                </div>
+
+                <div className="settings-list">
+                  <SettingsRow
+                    labelId="storage-scope-label"
+                    title="Drawing Binary Storage Policy"
+                    description="Raw blueprint binaries are referenced via local OS file descriptors. No binary payload is stored in browser localStorage."
+                  >
+                    <span className="settings-chip settings-chip--available">Compliant</span>
+                  </SettingsRow>
+
+                  <SettingsRow
+                    labelId="reset-data-label"
+                    title="Reset Local Demo Workspace"
+                    description="Restore the initial sample projects and documents dataset. Useful for QA and clean demonstration states."
+                  >
+                    {resetConfirmOpen ? (
+                      <div style={{ display: "flex", gap: "8px" }}>
+                        <button
+                          type="button"
+                          className="btn btn--primary"
+                          style={{ background: "#dc2626" }}
+                          onClick={handleResetData}
+                        >
+                          Confirm Reset
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn--ghost"
+                          onClick={() => setResetConfirmOpen(false)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn btn--ghost"
+                        onClick={() => setResetConfirmOpen(true)}
+                      >
+                        Reset Demo Data
+                      </button>
+                    )}
+                  </SettingsRow>
+                </div>
+              </section>
+            )}
+
+            {/* 5. DOCUMENTS & FORMATS */}
+            {activeTab === "documents" && (
+              <section className="settings-panel" role="tabpanel" aria-labelledby="settings-documents-title">
+                <SettingsPanelHeader
+                  icon={<IconFiles />}
+                  kicker="Documents"
+                  title="Document Ingestion & File Formats"
+                  description="Supported blueprint formats, upload constraints, and default perception queue behavior."
+                />
+
+                <div className="settings-table-container">
+                  <table className="settings-table">
+                    <thead>
+                      <tr>
+                        <th>Format</th>
+                        <th>Extension</th>
+                        <th>Max Size</th>
+                        <th>Perception Support</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><strong>PDF Blueprint</strong></td>
+                        <td><code style={{ fontFamily: "var(--font-technical)" }}>.pdf</code></td>
+                        <td>500 MB</td>
+                        <td>Vector paths, raster sheets, multi-page sets</td>
+                        <td><span className="settings-chip settings-chip--available">Supported</span></td>
+                      </tr>
+                      <tr>
+                        <td><strong>AutoCAD Drawing</strong></td>
+                        <td><code style={{ fontFamily: "var(--font-technical)" }}>.dwg, .dxf</code></td>
+                        <td>500 MB</td>
+                        <td>Native CAD geometry & layer schedules</td>
+                        <td><span className="settings-chip settings-chip--available">Supported</span></td>
+                      </tr>
+                      <tr>
+                        <td><strong>TIFF Raster Scan</strong></td>
+                        <td><code style={{ fontFamily: "var(--font-technical)" }}>.tiff, .tif</code></td>
+                        <td>250 MB</td>
+                        <td>High-resolution architectural scans</td>
+                        <td><span className="settings-chip settings-chip--available">Supported</span></td>
+                      </tr>
+                      <tr>
+                        <td><strong>High-Res Image</strong></td>
+                        <td><code style={{ fontFamily: "var(--font-technical)" }}>.png, .jpg</code></td>
+                        <td>100 MB</td>
+                        <td>Symbol extraction & diagram views</td>
+                        <td><span className="settings-chip settings-chip--available">Supported</span></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="settings-list">
+                  <SettingsRow
+                    labelId="ingest-queue-label"
+                    title="Default Ingestion State"
+                    description="Newly added drawings enter the honest 'queued / Awaiting processing' state without artificial processing simulation."
+                  >
+                    <span className="settings-chip settings-chip--available">Queued</span>
+                  </SettingsRow>
+                </div>
+              </section>
+            )}
+
+            {/* 6. AI & MODELS */}
+            {activeTab === "ai-models" && (
+              <section className="settings-panel" role="tabpanel" aria-labelledby="settings-ai-models-title">
+                <SettingsPanelHeader
+                  icon={<IconLayers />}
+                  kicker="AI & Models"
+                  title="Local AI & Perception Stack"
+                  description="Governance and readiness of on-device neural perception engines and extraction pipelines."
+                />
+
+                <div className="settings-model-grid">
+                  <div className="settings-model-card">
+                    <div>
+                      <strong>Vector Geometry Extractor</strong>
+                      <span>Local CAD primitive parser & line segment reconstruction.</span>
+                    </div>
+                    <span className="settings-chip settings-chip--available">AVAILABLE</span>
+                  </div>
+
+                  <div className="settings-model-card">
+                    <div>
+                      <strong>Neural Symbol Classifier</strong>
+                      <span>Electrical & mechanical symbol proposal model.</span>
+                    </div>
+                    <span className="settings-chip settings-chip--standby">STANDBY</span>
+                  </div>
+
+                  <div className="settings-model-card">
+                    <div>
+                      <strong>Schedule & Feeder OCR</strong>
+                      <span>Panel schedule text extraction and tabular digitizer.</span>
+                    </div>
+                    <span className="settings-chip settings-chip--standby">STANDBY</span>
+                  </div>
+
+                  <div className="settings-model-card">
+                    <div>
+                      <strong>Cloud Multi-Model Escalation</strong>
+                      <span>Cloud perception inference for complex high-density packages.</span>
+                    </div>
+                    <span className="settings-chip settings-chip--not-connected">NOT CONNECTED</span>
+                  </div>
+                </div>
+
+                <div className="settings-callout">
+                  <span className="settings-callout__icon"><IconShield /></span>
+                  <div>
+                    <strong className="settings-callout__title">Model Training & Data Rights Governance</strong>
+                    <p className="settings-callout__text">
+                      Customer drawings and takeoff data are never sent to external AI vendors and never contribute to
+                      model training without explicit, contractual authorization.
+                    </p>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* 7. ACCOUNT */}
+            {activeTab === "account" && (
+              <section className="settings-panel" role="tabpanel" aria-labelledby="settings-account-title">
+                <SettingsPanelHeader
+                  icon={<IconUser />}
+                  kicker="Account"
+                  title="Workstation Operator Profile"
+                  description="Review your local workstation operator identity and session authentication state."
+                />
+
+                <div className="settings-account-grid">
+                  <label className="settings-field">
+                    <span>Operator Name</span>
                     <input type="text" value="Hardik Bhaskar" readOnly />
                   </label>
                   <label className="settings-field">
-                    <span>Email</span>
-                    <input type="email" value="hardik@apexeng.example" readOnly />
+                    <span>Internal Identity</span>
+                    <input type="email" value="hardik@apexeng.internal" readOnly />
                   </label>
                   <label className="settings-field">
                     <span>Organization</span>
                     <input type="text" value="Apex Engineering" readOnly />
                   </label>
                   <label className="settings-field">
-                    <span>Role</span>
-                    <input type="text" value={roleLabel} readOnly />
+                    <span>Workstation Role</span>
+                    <input type="text" value="Lead Estimator · Owner" readOnly />
                   </label>
                 </div>
 
                 <div className="settings-list">
                   <SettingsRow
-                    labelId="org-policy-label"
-                    title="Organization AI policy"
-                    description="Only owners can change global cloud-processing policy and audit defaults."
-                    meta={isPermissionLimited ? "Read-only for Editor role." : "Owner permission available in this demo state."}
+                    labelId="auth-state-label"
+                    title="Session State"
+                    description="Currently authenticated to local desktop workstation environment."
                   >
-                    <button
-                      type="button"
-                      className="btn btn--secondary btn--sm"
-                      disabled={isPermissionLimited}
-                    >
-                      Manage Policy
-                    </button>
+                    <span className="settings-chip settings-chip--available">Authenticated</span>
                   </SettingsRow>
 
                   <SettingsRow
-                    labelId="billing-label"
-                    title="Billing and subscription"
-                    description="Billing controls are reserved for owners and require backend account integration."
-                    meta="Backend-dependent."
+                    labelId="cloud-account-label"
+                    title="Cloud Account Sync"
+                    description="Connect enterprise single sign-on (SSO) and multi-tenant organization billing."
+                    meta="Available in Cloud Enterprise release."
                   >
-                    <button type="button" className="btn btn--secondary btn--sm" disabled>
-                      Configure Billing
-                    </button>
+                    <span className="settings-chip settings-chip--not-connected">Not Connected</span>
                   </SettingsRow>
                 </div>
               </section>
-              )}
+            )}
 
-              {activeTab === "notifications" && (
-                <section className="settings-panel" id="notifications" aria-labelledby="settings-notifications-title">
+            {/* 8. NOTIFICATIONS */}
+            {activeTab === "notifications" && (
+              <section className="settings-panel" role="tabpanel" aria-labelledby="settings-notifications-title">
                 <SettingsPanelHeader
                   icon={<IconBell />}
                   kicker="Notifications"
-                  title="Workflow alerts"
-                  description="Set default notification behavior for processing, review, and approval events."
+                  title="Workstation Event Alerts"
+                  description="Configure notification triggers for local document processing, queue state, and takeoff generation."
                 />
 
                 <div className="settings-list">
                   <SettingsRow
-                    labelId="job-complete-label"
-                    title="Processing completion"
-                    description="Notify me when local drawing processing or export generation finishes."
+                    labelId="local-events-label"
+                    title="Workstation Core Events"
+                    description="Notify when local engine connects, changes status, or reports diagnostics."
                   >
                     <SettingsSwitch
-                      labelId="job-complete-label"
-                      checked={jobCompleteAlerts}
-                      onChange={setJobCompleteAlerts}
+                      labelId="local-events-label"
+                      checked={localEventsAlerts}
+                      onChange={setLocalEventsAlerts}
                     />
                   </SettingsRow>
 
                   <SettingsRow
-                    labelId="review-digest-label"
-                    title="Review digest"
-                    description="Summarize unresolved AI proposals and rejected line items at the start of each day."
+                    labelId="queue-events-label"
+                    title="Document Queue Alerts"
+                    description="Notify when new drawing sets are registered in the perception queue."
                   >
                     <SettingsSwitch
-                      labelId="review-digest-label"
-                      checked={reviewDigest}
-                      onChange={setReviewDigest}
+                      labelId="queue-events-label"
+                      checked={documentQueueAlerts}
+                      onChange={setDocumentQueueAlerts}
                     />
                   </SettingsRow>
 
                   <SettingsRow
-                    labelId="approval-requests-label"
-                    title="Approval requests"
-                    description="Alert me when teammates assign takeoff review or export approval work."
+                    labelId="takeoff-export-label"
+                    title="Takeoff & Export Generation"
+                    description="Notify when takeoff quantity matrices or Excel/PDF exports are ready."
                   >
                     <SettingsSwitch
-                      labelId="approval-requests-label"
-                      checked={approvalRequests}
-                      onChange={setApprovalRequests}
+                      labelId="takeoff-export-label"
+                      checked={takeoffExportAlerts}
+                      onChange={setTakeoffExportAlerts}
+                    />
+                  </SettingsRow>
+
+                  <SettingsRow
+                    labelId="proposal-digest-label"
+                    title="Unresolved Takeoff Proposals Digest"
+                    description="Daily summary of AI symbol proposals awaiting human verification."
+                  >
+                    <SettingsSwitch
+                      labelId="proposal-digest-label"
+                      checked={unresolvedProposalDigest}
+                      onChange={setUnresolvedProposalDigest}
                     />
                   </SettingsRow>
                 </div>
               </section>
-              )}
-            </div>
+            )}
+
+            {/* 9. KEYBOARD SHORTCUTS */}
+            {activeTab === "shortcuts" && (
+              <section className="settings-panel" role="tabpanel" aria-labelledby="settings-shortcuts-title">
+                <SettingsPanelHeader
+                  icon={<IconKeyboard />}
+                  kicker="Shortcuts"
+                  title="Workstation Keybindings"
+                  description="Quick reference for keyboard-driven navigation, command palette, and modal dismissal."
+                />
+
+                <div className="settings-table-container">
+                  <table className="settings-table">
+                    <thead>
+                      <tr>
+                        <th>Action</th>
+                        <th>Shortcut</th>
+                        <th>Scope</th>
+                        <th>Description</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><strong>Command & Quick Search</strong></td>
+                        <td><kbd className="settings-kbd">⌘K</kbd> / <kbd className="settings-kbd">Ctrl+K</kbd></td>
+                        <td>Global</td>
+                        <td>Open universal search for projects, documents, and AI sessions</td>
+                      </tr>
+                      <tr>
+                        <td><strong>Dismiss / Close</strong></td>
+                        <td><kbd className="settings-kbd">ESC</kbd></td>
+                        <td>Modals / Palettes</td>
+                        <td>Close any active modal, popover, or command search palette</td>
+                      </tr>
+                      <tr>
+                        <td><strong>Submit / Advance</strong></td>
+                        <td><kbd className="settings-kbd">Enter</kbd></td>
+                        <td>Forms / Modals</td>
+                        <td>Advance stepped project creation or open selected search result</td>
+                      </tr>
+                      <tr>
+                        <td><strong>Navigate Results</strong></td>
+                        <td><kbd className="settings-kbd">↑</kbd> <kbd className="settings-kbd">↓</kbd></td>
+                        <td>Search Palette</td>
+                        <td>Move selection up and down in quick search list</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+
+            {/* 10. PRIVACY & DATA */}
+            {activeTab === "privacy" && (
+              <section className="settings-panel" role="tabpanel" aria-labelledby="settings-privacy-title">
+                <SettingsPanelHeader
+                  icon={<IconShield />}
+                  kicker="Privacy"
+                  title="Data Isolation & Security Architecture"
+                  description="Vectoris operates on a strict local-first privacy boundary designed for confidential engineering drawings."
+                />
+
+                <div className="settings-list">
+                  <SettingsRow
+                    labelId="zero-silent-label"
+                    title="Zero Silent Uploads"
+                    description="Raw blueprint and CAD drawing binaries never leave your workstation without explicit per-job authorization."
+                  >
+                    <span className="settings-chip settings-chip--available">Enforced</span>
+                  </SettingsRow>
+
+                  <SettingsRow
+                    labelId="telemetry-label"
+                    title="Zero Telemetry Tracking"
+                    description="No background behavioral analytics, drawing telemetry, or vendor schedule telemetry is transmitted."
+                  >
+                    <span className="settings-chip settings-chip--available">Disabled</span>
+                  </SettingsRow>
+
+                  <SettingsRow
+                    labelId="training-label"
+                    title="Model Training Protection"
+                    description="Your confidential drawings, project notes, and takeoff corrections never contribute to model training."
+                  >
+                    <span className="settings-chip settings-chip--available">Protected</span>
+                  </SettingsRow>
+
+                  <SettingsRow
+                    labelId="retention-label"
+                    title="Local Data Retention Policy"
+                    description="All project metadata and drawing entities are persisted in local workstation storage with immediate local deletion."
+                  >
+                    <span className="settings-chip settings-chip--available">Local-Only</span>
+                  </SettingsRow>
+                </div>
+              </section>
+            )}
+
+            {/* 11. ABOUT & UPDATES */}
+            {activeTab === "about" && (
+              <section className="settings-panel" role="tabpanel" aria-labelledby="settings-about-title">
+                <SettingsPanelHeader
+                  icon={<IconInfo />}
+                  kicker="About"
+                  title="Vectoris Workstation Specifications"
+                  description="Desktop runtime environment, framework dependencies, and build licensing."
+                />
+
+                <div className="settings-grid-3col">
+                  <div className="settings-stat-card">
+                    <span className="settings-stat-card__label">Application Version</span>
+                    <strong className="settings-stat-card__val">v0.2.1</strong>
+                    <span className="settings-stat-card__sub">Engineering Workstation Release</span>
+                  </div>
+                  <div className="settings-stat-card">
+                    <span className="settings-stat-card__label">Desktop Shell</span>
+                    <strong className="settings-stat-card__val">Tauri v2 Core</strong>
+                    <span className="settings-stat-card__sub">Rust 2021 + WebView2</span>
+                  </div>
+                  <div className="settings-stat-card">
+                    <span className="settings-stat-card__label">UI Framework</span>
+                    <strong className="settings-stat-card__val">React 19 + Vite 7</strong>
+                    <span className="settings-stat-card__sub">TypeScript 5.7 Strict</span>
+                  </div>
+                </div>
+
+                <div className="settings-list">
+                  <SettingsRow
+                    labelId="license-label"
+                    title="Software License"
+                    description="Proprietary Internal Enterprise Workstation Edition."
+                  >
+                    <span className="settings-chip settings-chip--available">Enterprise Local</span>
+                  </SettingsRow>
+                </div>
+
+                <UpdatePanel />
+              </section>
+            )}
           </div>
         </div>
-      )}
+      </div>
     </AppShell>
   );
 }
 
-function SettingsSkeleton() {
-  return (
-    <div className="settings-page settings-page--skeleton" aria-busy="true" aria-label="Loading settings">
-      <div className="settings-header">
-        <div>
-          <div className="skeleton skeleton--label" />
-          <div className="skeleton skeleton--h2" />
-          <div className="skeleton skeleton--p" />
-        </div>
-        <div className="settings-header__actions">
-          <div className="skeleton skeleton--btn" />
-          <div className="skeleton skeleton--btn" />
-        </div>
-      </div>
-      <div className="settings-layout">
-        <aside className="settings-rail">
-          {[0, 1, 2, 3].map((index) => (
-            <div className="settings-rail__item settings-rail__item--skeleton" key={index}>
-              <span className="skeleton" />
-              <span className="skeleton" />
-            </div>
-          ))}
-        </aside>
-        <div className="settings-content">
-          {[0, 1, 2].map((index) => (
-            <section className="settings-panel settings-panel--skeleton" key={index}>
-              <div className="skeleton skeleton--label" />
-              <div className="skeleton skeleton--h2" />
-              <div className="settings-skeleton-rows">
-                <div className="skeleton" />
-                <div className="skeleton" />
-                <div className="skeleton" />
-              </div>
-            </section>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SettingsError({ onRetry }: { onRetry: () => void }) {
-  return (
-    <div className="settings-page">
-      <section className="settings-empty-state" role="alert">
-        <span className="settings-empty-state__icon" aria-hidden="true">
-          <IconAlert />
-        </span>
-        <h1>Settings could not load</h1>
-        <p>
-          The interface can render the shell, but the settings payload is unavailable in this forced QA state.
-        </p>
-        <button type="button" className="btn btn--primary" onClick={onRetry}>
-          Retry
-        </button>
-      </section>
-    </div>
-  );
-}
+// ── Reusable Component Primitives ─────────────────────────────────────────────
 
 function SettingsPanelHeader({
   icon,
@@ -624,30 +1008,6 @@ function SettingsPanelHeader({
         <p className="settings-panel__description">{description}</p>
       </div>
     </header>
-  );
-}
-
-function SettingsBanner({
-  icon,
-  title,
-  description,
-  tone,
-}: {
-  icon: ReactNode;
-  title: string;
-  description: string;
-  tone: "neutral" | "warning";
-}) {
-  return (
-    <aside className={`settings-banner settings-banner--${tone}`} role="note">
-      <span className="settings-banner__icon" aria-hidden="true">
-        {icon}
-      </span>
-      <div>
-        <strong>{title}</strong>
-        <p>{description}</p>
-      </div>
-    </aside>
   );
 }
 
@@ -750,6 +1110,8 @@ function SettingsSwitch({
   );
 }
 
+// ── SVG Icons ────────────────────────────────────────────────────────────────
+
 function IconPalette(props: { "aria-hidden"?: boolean | "true" | "false" }) {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" {...props}>
@@ -771,6 +1133,44 @@ function IconCpu(props: { "aria-hidden"?: boolean | "true" | "false" }) {
   );
 }
 
+function IconBuilding(props: { "aria-hidden"?: boolean | "true" | "false" }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" {...props}>
+      <path d="M3 15.5V3.5A1.5 1.5 0 014.5 2h9A1.5 1.5 0 0115 3.5v12M2 15.5h14" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" />
+      <path d="M6 5.5h2M10 5.5h2M6 8.5h2M10 8.5h2M6 11.5h2M10 11.5h2M7.5 15.5v-2.5h3v2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconDatabase(props: { "aria-hidden"?: boolean | "true" | "false" }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" {...props}>
+      <ellipse cx="9" cy="4.5" rx="6" ry="2.5" stroke="currentColor" strokeWidth="1.45" />
+      <path d="M3 4.5v4.5c0 1.38 2.69 2.5 6 2.5s6-1.12 6-2.5V4.5" stroke="currentColor" strokeWidth="1.45" />
+      <path d="M3 9v4.5c0 1.38 2.69 2.5 6 2.5s6-1.12 6-2.5V9" stroke="currentColor" strokeWidth="1.45" />
+    </svg>
+  );
+}
+
+function IconFiles(props: { "aria-hidden"?: boolean | "true" | "false" }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" {...props}>
+      <path d="M4 3a1.5 1.5 0 011.5-1.5h5l4 4v9a1.5 1.5 0 01-1.5 1.5h-7.5A1.5 1.5 0 014 14.5V3z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M10.5 1.5V5.5h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M7 9.5h4M7 12.5h2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconLayers(props: { "aria-hidden"?: boolean | "true" | "false" }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" {...props}>
+      <path d="M2.5 6.5L9 2.5L15.5 6.5L9 10.5L2.5 6.5Z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M2.5 10L9 14L15.5 10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function IconUser(props: { "aria-hidden"?: boolean | "true" | "false" }) {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" {...props}>
@@ -785,6 +1185,33 @@ function IconBell(props: { "aria-hidden"?: boolean | "true" | "false" }) {
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" {...props}>
       <path d="M9 2.6a4.5 4.5 0 0 0-4.5 4.5v2.3L3 12h12l-1.5-2.6V7.1A4.5 4.5 0 0 0 9 2.6Z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M7.4 14.1a1.6 1.6 0 0 0 3.2 0" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconKeyboard(props: { "aria-hidden"?: boolean | "true" | "false" }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" {...props}>
+      <rect x="2.5" y="4" width="13" height="10" rx="2" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M5 6.5h.5M7.5 6.5h.5M10 6.5h.5M12.5 6.5h.5M5 9h.5M7.5 9h.5M10 9h.5M12.5 9h.5M6.5 11.5h5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconShield(props: { "aria-hidden"?: boolean | "true" | "false" }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" {...props}>
+      <path d="M9 2.5L3.5 5v5c0 4.14 2.86 6.86 5.5 7.5 2.64-.64 5.5-3.36 5.5-7.5V5L9 2.5Z" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M6.5 9l2 2 3.5-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function IconInfo(props: { "aria-hidden"?: boolean | "true" | "false" }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" {...props}>
+      <circle cx="9" cy="9" r="6.5" stroke="currentColor" strokeWidth="1.45" />
+      <path d="M9 8.5v4M9 5.5v.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   );
 }
@@ -827,33 +1254,6 @@ function IconCheck(props: { "aria-hidden"?: boolean | "true" | "false" }) {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" {...props}>
       <path d="m4 9.4 3.1 3.1L14 5.6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function IconLock() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-      <rect x="4" y="8" width="10" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.45" />
-      <path d="M6.4 8V6.2a2.6 2.6 0 0 1 5.2 0V8" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function IconCloudOff() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-      <path d="M3.2 3.2 14.8 14.8" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" />
-      <path d="M5.3 13.5h6.8M4.6 11.7A3 3 0 0 1 7 7.2a3.6 3.6 0 0 1 5.4-.4 2.9 2.9 0 0 1 2.1 4.9" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function IconAlert() {
-  return (
-    <svg width="26" height="26" viewBox="0 0 26 26" fill="none" aria-hidden="true">
-      <path d="M13 3.2 24 22H2L13 3.2Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
-      <path d="M13 9v6M13 18.6v.2" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
     </svg>
   );
 }

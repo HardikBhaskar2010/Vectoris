@@ -17,55 +17,17 @@
  */
 
 import { useMemo, useState, useEffect } from "react";
+import { Link, useRouter } from "../router";
 import { AppShell } from "../components/AppShell";
 import { KPICard } from "../components/KPICard";
 import { BlueprintViewport } from "../components/BlueprintViewport";
+import { CreateProjectModal } from "../components/CreateProjectModal";
+import { useProjects, useAllDocuments } from "../services/dataService";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type PageState = "loading" | "empty" | "error" | "data";
 
 // ── Demo data — structured to match the real API shape when it arrives ────────
-const DEMO_KPI = [
-  {
-    label: "Active Projects",
-    value: 24,
-    trend: "+3 active this week",
-    trendType: "positive" as const,
-    accent: false,
-    icon: <IconDomain />,
-  },
-  {
-    label: "Sheets Processed",
-    value: 436,
-    trend: "+12.4% this month",
-    trendType: "positive" as const,
-    accent: false,
-    icon: <IconBlueprint />,
-  },
-  {
-    label: "Takeoff Items",
-    value: 18240,
-    trend: "Ready for review",
-    trendType: "neutral" as const,
-    accent: true,
-    icon: <IconCable />,
-  },
-  {
-    label: "Verified Line Items",
-    value: 380,
-    trend: "BOQ export ready",
-    trendType: "neutral" as const,
-    accent: false,
-    icon: <IconReceipt />,
-  },
-];
-
-const DEMO_PROJECTS = [
-  { name: "ABC Data Center",    discipline: "Electrical & Feeders", sheets: "142 DWG", status: "In Progress", progress: 68, action: "inspect" },
-  { name: "Greenfield Hospital", discipline: "Power & Lighting",   sheets: "98 PDF",  status: "In Review",   progress: 42, action: "inspect" },
-  { name: "Skyline Tower",      discipline: "Commercial MEP",       sheets: "76 DWG",  status: "Verified",    progress: 100, action: "boq" },
-] as const;
-
 const DEMO_AI_FEED = [
   {
     id: "feed-1",
@@ -101,189 +63,239 @@ const DEMO_TAKEOFF_ITEMS = [
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 export function DashboardPage() {
-  const params = useMemo(() => new URLSearchParams(window.location.search), []);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const projects = useProjects();
+  const documents = useAllDocuments();
+  const [pageState, setPageState] = useState<PageState>("data");
 
-  // Force state from URL param — real state will come from API
-  const forcedState = params.get("state") as PageState | null;
-
-  const [pageState, setPageState] = useState<PageState>(() => {
-    if (forcedState && ["loading", "empty", "error", "data"].includes(forcedState)) {
-      return forcedState;
-    }
-    return "loading";
-  });
-
-  // Simulate async load — replace with real API call
+  // Read URL query state override if present
   useEffect(() => {
-    if (forcedState) return; // respect URL override
-    const t = window.setTimeout(() => setPageState("data"), 900);
-    return () => window.clearTimeout(t);
-  }, [forcedState]);
+    const params = new URLSearchParams(window.location.search);
+    const forcedState = params.get("state") as PageState | null;
+    if (forcedState && ["loading", "empty", "error", "data"].includes(forcedState)) {
+      setPageState(forcedState);
+    } else {
+      setPageState(projects.length === 0 ? "empty" : "data");
+    }
+  }, [projects.length]);
 
-  return (
-    <AppShell activePath="/dashboard">
-      <div className="dashboard">
-        {pageState === "loading" && <DashboardSkeleton />}
-        {pageState === "empty"   && <DashboardEmpty />}
-        {pageState === "error"   && <DashboardError onRetry={() => setPageState("loading")} />}
-        {pageState === "data"    && <DashboardData />}
-      </div>
-    </AppShell>
-  );
-}
-
-// ── Data State — full populated dashboard ────────────────────────────────────
-function DashboardData() {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
+  const totalSheets = useMemo(() => {
+    return documents.reduce((sum, d) => sum + (d.sheet_count || 0), 0) || 436;
+  }, [documents]);
+
+  const kpis = useMemo(() => [
+    {
+      label: "Active Projects",
+      value: projects.length,
+      trend: "+3 active this week",
+      trendType: "positive" as const,
+      accent: false,
+      icon: <IconDomain />,
+    },
+    {
+      label: "Sheets Processed",
+      value: totalSheets,
+      trend: "+12.4% this month",
+      trendType: "positive" as const,
+      accent: false,
+      icon: <IconBlueprint />,
+    },
+    {
+      label: "Takeoff Items",
+      value: 18240,
+      trend: "Ready for review",
+      trendType: "neutral" as const,
+      accent: true,
+      icon: <IconCable />,
+    },
+    {
+      label: "Verified Line Items",
+      value: 380,
+      trend: "BOQ export ready",
+      trendType: "neutral" as const,
+      accent: false,
+      icon: <IconReceipt />,
+    },
+  ], [projects.length, totalSheets]);
+
+  const activeProjects = useMemo(() => {
+    return projects.slice(0, 3).map((p) => ({
+      id: p.id,
+      name: p.name,
+      discipline: p.discipline,
+      sheets: `${p.sheets} ${p.sheetType}`,
+      status: p.status === "completed" || p.status === "verified" ? "Verified" : p.status === "review" ? "In Review" : "In Progress",
+      progress: p.progress,
+      action: p.status === "completed" || p.status === "verified" ? ("boq" as const) : ("inspect" as const),
+    }));
+  }, [projects]);
+
   return (
-    <>
-      {/* Welcome row */}
-      <div className="dashboard__welcome">
-        <div>
-          <h1 className="dashboard__greeting">
-            {greeting}, Hardik
-            <span aria-hidden="true"> 👋</span>
-          </h1>
-          <p className="dashboard__subline">
-            Engineering intelligence across your active projects.
-          </p>
-        </div>
-        <div className="dashboard__ctas">
-          <a href="/projects/new" className="btn btn--secondary">
-            <IconPlus aria-hidden="true" />
-            New Project
-          </a>
-          <a href="/workspace/upload" className="btn btn--primary">
-            <IconUpload aria-hidden="true" />
-            Upload Drawings
-          </a>
-        </div>
-      </div>
-
-      {/* KPI Grid */}
-      <div className="dashboard__kpi-grid" role="region" aria-label="Project summary metrics">
-        {DEMO_KPI.map((kpi, i) => (
-          <KPICard
-            key={kpi.label}
-            label={kpi.label}
-            value={kpi.value}
-            trend={kpi.trend}
-            trendType={kpi.trendType}
-            icon={kpi.icon}
-            accent={kpi.accent}
-            entryDelay={i * 60}
-          />
-        ))}
-      </div>
-
-      {/* Hero: Blueprint Viewport (7) + Right Column (5) */}
-      <div className="dashboard__hero">
-
-        {/* Left — Blueprint viewport + project table */}
-        <section className="dashboard__left-panel" aria-label="Active project drawing preview">
-          <BlueprintViewport />
-
-          {/* Recent Projects Table */}
-          <div className="projects-table">
-            <div className="projects-table__header">
-              <span className="projects-table__title">Recent Projects &amp; Drawing Status</span>
-              <a href="/projects" className="projects-table__view-all">View all 24 projects →</a>
-            </div>
-            <table className="projects-table__table">
-              <thead>
-                <tr>
-                  <th>Project</th>
-                  <th>Discipline</th>
-                  <th>Sheets</th>
-                  <th>Takeoff Status</th>
-                  <th className="projects-table__th--right">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {DEMO_PROJECTS.map((p) => (
-                  <tr key={p.name}>
-                    <td className="projects-table__name">{p.name}</td>
-                    <td className="projects-table__discipline">{p.discipline}</td>
-                    <td className="projects-table__sheets">{p.sheets}</td>
-                    <td>
-                      <ProjectStatusBadge status={p.status} progress={p.progress} />
-                    </td>
-                    <td className="projects-table__action">
-                      <a
-                        href={p.action === "boq" ? "/boq" : "/workspace"}
-                        className="projects-table__link"
-                      >
-                        {p.action === "boq" ? "BOQ" : "Inspect"}
-                      </a>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        {/* Right — AI Feed + Takeoff Stream */}
-        <div className="dashboard__right-col">
-
-          {/* AI Engineering Copilot Feed — read-only activity stream */}
-          <section className="ai-feed" aria-label="AI Engineering Copilot activity feed — read only">
-            <div className="ai-feed__header">
-              <div className="ai-feed__title-row">
-                <IconBrain aria-hidden="true" />
-                <span className="ai-feed__title">AI Engineering Copilot</span>
+    <AppShell activePath="/dashboard">
+      <div className="dashboard" role="main" aria-label="Workstation Dashboard">
+        {pageState === "loading" && <DashboardSkeleton />}
+        {pageState === "empty" && <DashboardEmpty onOpenCreate={() => setIsCreateModalOpen(true)} />}
+        {pageState === "error" && <DashboardError onRetry={() => setPageState("data")} />}
+        {pageState === "data" && (
+          <>
+            {/* Welcome row */}
+            <div className="dashboard__welcome">
+              <div>
+                <h1 className="dashboard__greeting">
+                  {greeting}, Hardik
+                  <span aria-hidden="true"> 👋</span>
+                </h1>
+                <p className="dashboard__subline">
+                  Engineering intelligence across your active projects.
+                </p>
               </div>
-              {/* No interactive AI input on Dashboard — see AI_SESSION.md */}
-              <span className="ai-feed__status">Live Inference</span>
+              <div className="dashboard__ctas">
+                <button
+                  type="button"
+                  className="btn btn--secondary"
+                  onClick={() => setIsCreateModalOpen(true)}
+                >
+                  <IconPlus aria-hidden="true" />
+                  New Project
+                </button>
+                <Link to="/project/p1/documents" className="btn btn--primary">
+                  <IconUpload aria-hidden="true" />
+                  Upload Drawings
+                </Link>
+              </div>
             </div>
-            <ol className="ai-feed__list" aria-label="Recent AI activity">
-              {DEMO_AI_FEED.map((item) => (
-                <li key={item.id} className="ai-feed__item">
-                  <div className="ai-feed__item-meta">
-                    <span className="ai-feed__item-file">{item.file}</span>
-                    <time className="ai-feed__item-time">{item.time}</time>
+
+            {/* KPI Grid */}
+            <div className="dashboard__kpi-grid" role="region" aria-label="Project summary metrics">
+              {kpis.map((kpi, i) => (
+                <KPICard
+                  key={kpi.label}
+                  label={kpi.label}
+                  value={kpi.value}
+                  trend={kpi.trend}
+                  trendType={kpi.trendType}
+                  icon={kpi.icon}
+                  accent={kpi.accent}
+                  entryDelay={i * 60}
+                />
+              ))}
+            </div>
+
+            {/* Hero: Blueprint Viewport (7) + Right Column (5) */}
+            <div className="dashboard__hero">
+
+              {/* Left — Blueprint viewport + project table */}
+              <section className="dashboard__left-panel" aria-label="Active project drawing preview">
+                <BlueprintViewport />
+
+                {/* Recent Projects Table */}
+                <div className="projects-table">
+                  <div className="projects-table__header">
+                    <span className="projects-table__title">Recent Projects &amp; Drawing Status</span>
+                    <Link to="/projects" className="projects-table__view-all">View all {projects.length} projects →</Link>
                   </div>
-                  <p className="ai-feed__item-summary">{item.summary}</p>
-                  <span className="ai-feed__item-source">Source: {item.source}</span>
-                  {/* NOTE: "Confidence: High" badge intentionally omitted — UX_PRINCIPLES.md §2 */}
-                </li>
-              ))}
-            </ol>
-          </section>
+                  <table className="projects-table__table">
+                    <thead>
+                      <tr>
+                        <th>Project</th>
+                        <th>Discipline</th>
+                        <th>Sheets</th>
+                        <th>Takeoff Status</th>
+                        <th className="projects-table__th--right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {activeProjects.map((p) => (
+                        <tr key={p.id}>
+                          <td className="projects-table__name">{p.name}</td>
+                          <td className="projects-table__discipline">{p.discipline}</td>
+                          <td className="projects-table__sheets">{p.sheets}</td>
+                          <td>
+                            <ProjectStatusBadge status={p.status} progress={p.progress} />
+                          </td>
+                          <td className="projects-table__action">
+                            <Link
+                              to={p.action === "boq" ? `/project/${p.id}/reports` : `/project/${p.id}/workspace`}
+                              className="projects-table__link"
+                            >
+                              {p.action === "boq" ? "BOQ" : "Inspect"}
+                            </Link>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
 
-          {/* Takeoff Items Stream */}
-          <section className="takeoff-stream" aria-label="Takeoff items for ABC Data Center">
-            <div className="takeoff-stream__header">
-              <div className="takeoff-stream__title-row">
-                <IconStraighten aria-hidden="true" />
-                <span className="takeoff-stream__title">Takeoff Items — ABC Data Center</span>
+              {/* Right — AI Feed + Takeoff Stream */}
+              <div className="dashboard__right-col">
+
+                {/* AI Engineering Copilot Feed — read-only activity stream */}
+                <section className="ai-feed" aria-label="AI Engineering Copilot activity feed — read only">
+                  <div className="ai-feed__header">
+                    <div className="ai-feed__title-row">
+                      <IconBrain aria-hidden="true" />
+                      <span className="ai-feed__title">AI Engineering Copilot</span>
+                    </div>
+                    <span className="ai-feed__status">Live Inference</span>
+                  </div>
+                  <ol className="ai-feed__list" aria-label="Recent AI activity">
+                    {DEMO_AI_FEED.map((item) => (
+                      <li key={item.id} className="ai-feed__item">
+                        <div className="ai-feed__item-meta">
+                          <span className="ai-feed__item-file">{item.file}</span>
+                          <time className="ai-feed__item-time">{item.time}</time>
+                        </div>
+                        <p className="ai-feed__item-summary">{item.summary}</p>
+                        <span className="ai-feed__item-source">Source: {item.source}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </section>
+
+                {/* Takeoff Items Stream */}
+                <section className="takeoff-stream" aria-label="Takeoff items for ABC Data Center">
+                  <div className="takeoff-stream__header">
+                    <div className="takeoff-stream__title-row">
+                      <IconStraighten aria-hidden="true" />
+                      <span className="takeoff-stream__title">Takeoff Items — ABC Data Center</span>
+                    </div>
+                    <Link to="/project/p1/takeoff" className="takeoff-stream__link">Full Takeoff →</Link>
+                  </div>
+                  <ol className="takeoff-stream__list" aria-label="Recent takeoff items">
+                    {DEMO_TAKEOFF_ITEMS.map((item) => (
+                      <li key={item.id} className="takeoff-stream__item">
+                        <span className={`takeoff-stream__dot takeoff-stream__dot--${item.dot}`} aria-hidden="true" />
+                        <span className="takeoff-stream__label">{item.label}</span>
+                        <span className="takeoff-stream__qty">{item.qty}</span>
+                        <TakeoffStatusBadge status={item.status} />
+                      </li>
+                    ))}
+                  </ol>
+                  <div className="takeoff-stream__footer">
+                    <span className="takeoff-stream__total">Total Takeoff: 380 Items</span>
+                    <Link to="/project/p1/workspace" className="btn btn--primary btn--sm">
+                      Launch Drawing Takeoff
+                      <IconArrow aria-hidden="true" />
+                    </Link>
+                  </div>
+                </section>
+
               </div>
-              <a href="/workspace?tab=takeoff" className="takeoff-stream__link">Full Takeoff →</a>
             </div>
-            <ol className="takeoff-stream__list" aria-label="Recent takeoff items">
-              {DEMO_TAKEOFF_ITEMS.map((item) => (
-                <li key={item.id} className="takeoff-stream__item">
-                  <span className={`takeoff-stream__dot takeoff-stream__dot--${item.dot}`} aria-hidden="true" />
-                  <span className="takeoff-stream__label">{item.label}</span>
-                  <span className="takeoff-stream__qty">{item.qty}</span>
-                  <TakeoffStatusBadge status={item.status} />
-                </li>
-              ))}
-            </ol>
-            <div className="takeoff-stream__footer">
-              <span className="takeoff-stream__total">Total Takeoff: 380 Items</span>
-              <a href="/workspace" className="btn btn--primary btn--sm">
-                Launch Drawing Takeoff
-                <IconArrow aria-hidden="true" />
-              </a>
-            </div>
-          </section>
-
-        </div>
+          </>
+        )}
       </div>
-    </>
+
+      <CreateProjectModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+      />
+    </AppShell>
   );
 }
 
@@ -332,7 +344,7 @@ function DashboardSkeleton() {
 }
 
 // ── Empty State — no projects yet ────────────────────────────────────────────
-function DashboardEmpty() {
+function DashboardEmpty({ onOpenCreate }: { onOpenCreate: () => void }) {
   return (
     <div className="dashboard-empty" role="main" aria-label="No projects yet">
       <div className="dashboard-empty__icon" aria-hidden="true">
@@ -342,13 +354,12 @@ function DashboardEmpty() {
       <p className="dashboard-empty__body">
         Create your first project and upload a drawing package to start an AI-assisted takeoff.
       </p>
-      <a href="/projects/new" className="btn btn--primary">
+      <button type="button" className="btn btn--primary" onClick={onOpenCreate}>
         <IconPlus aria-hidden="true" />
         Create First Project
-      </a>
+      </button>
       <p className="dashboard-empty__hint">
-        Have an invite link?{" "}
-        <a href="/projects/join" className="dashboard-empty__link">Join an existing workspace</a>
+        Single-organization workstation mode · Local-First Storage
       </p>
     </div>
   );

@@ -21,143 +21,57 @@
  */
 
 import { useState, useMemo } from "react";
+import { useRouter } from "../router";
 import { AppShell } from "../components/AppShell";
 import { ProjectCard } from "../components/ProjectCard";
 import { CreateProjectModal } from "../components/CreateProjectModal";
 import type { ProjectItem, ProjectStatus } from "../components/ProjectCard";
 
-// ── Demo Data ─────────────────────────────────────────────────────────────────
-const DEMO_PROJECTS: ProjectItem[] = [
-  {
-    id: "p1",
-    name: "ABC Data Center",
-    client: "Equinix · Phase 2",
-    sector: "data-center",
-    discipline: "ELEC-HV",
-    status: "processing",
-    sheets: 142,
-    sheetType: "DWG",
-    progress: 45,
-    updatedAt: "2h ago",
-    members: [
-      { name: "Hardik Bhaskar", initials: "HB", avatarColor: "#2d4a6e" },
-      { name: "Rina Mehta",     initials: "RM", avatarColor: "#3d5a3e" },
-      { name: "Zaid Siddiqui",  initials: "ZS", avatarColor: "#5a3d3d" },
-    ],
-    description: "High-density server room electrical takeoff — cable tray and feeder layouts.",
-  },
-  {
-    id: "p2",
-    name: "Omega Plant Expansion",
-    client: "Tesla · Austin TX",
-    sector: "industrial",
-    discipline: "MECH-HVAC",
-    status: "completed",
-    sheets: 308,
-    sheetType: "DWG",
-    progress: 100,
-    updatedAt: "1d ago",
-    members: [
-      { name: "Arjun Nair",    initials: "AN", avatarColor: "#3d4a5d" },
-      { name: "Priya Sharma",  initials: "PS", avatarColor: "#4d3d5a" },
-    ],
-    description: "Full HVAC and mechanical scope for new production wing.",
-  },
-  {
-    id: "p3",
-    name: "Sunrise Medical Tower",
-    client: "HCA Healthcare · Phoenix",
-    sector: "healthcare",
-    discipline: "PLUMB",
-    status: "review",
-    sheets: 76,
-    sheetType: "PDF",
-    progress: 78,
-    updatedAt: "4h ago",
-    members: [
-      { name: "Chen Wei",      initials: "CW", avatarColor: "#3a5a3a" },
-      { name: "Laila Hassan",  initials: "LH", avatarColor: "#5a4a2d" },
-      { name: "Omar Patel",    initials: "OP", avatarColor: "#2d3a5a" },
-      { name: "Nadia Kovacs",  initials: "NK", avatarColor: "#5a2d4a" },
-    ],
-    description: "Plumbing riser diagrams and fixture schedule extraction.",
-  },
-  {
-    id: "p4",
-    name: "Central Park Tower",
-    client: "Brookfield Properties",
-    sector: "commercial",
-    discipline: "FIRE",
-    status: "processing",
-    sheets: 54,
-    sheetType: "DWG",
-    progress: 22,
-    updatedAt: "30m ago",
-    members: [
-      { name: "Evan Torres",   initials: "ET", avatarColor: "#4a3d2d" },
-    ],
-    description: "Fire protection sprinkler layout and alarm panel drawings.",
-  },
-  {
-    id: "p5",
-    name: "I-35 Interchange Upgrade",
-    client: "TxDOT · Austin",
-    sector: "infrastructure",
-    discipline: "CIVIL",
-    status: "verified",
-    sheets: 421,
-    sheetType: "DWG",
-    progress: 100,
-    updatedAt: "3d ago",
-    members: [
-      { name: "Sasha Kim",     initials: "SK", avatarColor: "#2d5a4a" },
-      { name: "Marcus Hill",   initials: "MH", avatarColor: "#4a2d5a" },
-    ],
-    description: "Bridge structural and drainage drawings, full scope.",
-  },
-  {
-    id: "p6",
-    name: "GreenLeaf Warehouse",
-    client: "Amazon Logistics · Dallas",
-    sector: "industrial",
-    discipline: "ELEC-LV",
-    status: "review",
-    sheets: 198,
-    sheetType: "BIM",
-    progress: 61,
-    updatedAt: "6h ago",
-    members: [
-      { name: "Fatima Al-Rashid", initials: "FA", avatarColor: "#3d4a2d" },
-      { name: "Leo Nakamura",     initials: "LN", avatarColor: "#2d3a4a" },
-      { name: "Beatrice Santos",  initials: "BS", avatarColor: "#4a2d3a" },
-    ],
-    description: "Low-voltage distribution and lighting design for 400,000 sq ft facility.",
-  },
-];
+import { useProjects, dataService } from "../services/dataService";
+import type { CreateProjectPayload } from "../components/CreateProjectModal";
 
 type FilterStatus = "all" | "processing" | "review" | "completed";
 type ViewMode    = "grid" | "list";
 type PageState   = "loading" | "empty" | "data" | "error";
 
-function getPageState(): PageState {
-  const p = new URLSearchParams(window.location.search);
-  const s = p.get("state");
-  if (s === "loading" || s === "empty" || s === "error") return s;
-  return "data";
-}
-
 export default function ProjectsPage() {
-  const [pageState] = useState<PageState>(getPageState);
+  const { navigate, searchParams } = useRouter();
+  const stateParam = searchParams.get("state");
+  const pageState: PageState =
+    stateParam === "loading" || stateParam === "empty" || stateParam === "error"
+      ? stateParam
+      : "data";
+
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
   const [sector, setSector] = useState("all");
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [isModalOpen, setModalOpen] = useState(false);
 
+  const projectsData = useProjects();
+  const projectItems: ProjectItem[] = useMemo(
+    () =>
+      projectsData.map((p) => ({
+        id: p.id,
+        name: p.name,
+        client: p.client,
+        sector: p.sector,
+        discipline: p.discipline,
+        status: p.status,
+        sheets: p.sheets,
+        sheetType: p.sheetType,
+        progress: p.progress,
+        updatedAt: p.updated_at,
+        members: p.members,
+        description: p.description,
+      })),
+    [projectsData]
+  );
+
   // Filter logic
   const filtered = useMemo(() => {
     if (pageState !== "data") return [];
-    return DEMO_PROJECTS.filter((p) => {
+    return projectItems.filter((p) => {
       const matchStatus =
         filterStatus === "all" ? true
         : filterStatus === "completed" ? (p.status === "completed" || p.status === "verified")
@@ -168,14 +82,27 @@ export default function ProjectsPage() {
         p.client.toLowerCase().includes(search.toLowerCase());
       return matchStatus && matchSector && matchSearch;
     });
-  }, [pageState, filterStatus, sector, search]);
+  }, [pageState, projectItems, filterStatus, sector, search]);
 
-  const isFilteredEmpty = pageState === "data" && DEMO_PROJECTS.length > 0 && filtered.length === 0;
+  const isFilteredEmpty = pageState === "data" && projectItems.length > 0 && filtered.length === 0;
 
-  const handleCreateProject = async () => {
-    // Demo: close modal after brief simulated delay
-    await new Promise<void>((res) => setTimeout(res, 1200));
+  const handleCreateProject = (payload: CreateProjectPayload) => {
+    const fullDescription = [
+      payload.description,
+      payload.reference ? `Ref: ${payload.reference}` : "",
+      payload.location ? `Location: ${payload.location}` : "",
+      payload.notes ? `Notes: ${payload.notes}` : "",
+    ].filter(Boolean).join("\n");
+
+    const newProj = dataService.createProject({
+      name: payload.name,
+      description: fullDescription || payload.description,
+      client: payload.client,
+      sector: payload.sector,
+      discipline: payload.discipline,
+    });
     setModalOpen(false);
+    navigate(`/project/${newProj.id}/documents`);
   };
 
   return (
@@ -187,7 +114,7 @@ export default function ProjectsPage() {
             <h1 className="projects-page__title">Engineering Projects</h1>
             <p className="projects-page__subtitle">
               {pageState === "data"
-                ? `${DEMO_PROJECTS.length} projects across ${new Set(DEMO_PROJECTS.map((p) => p.client.split("·")[0].trim())).size} clients`
+                ? `${projectItems.length} projects across ${new Set(projectItems.map((p) => p.client.split("·")[0].trim())).size} clients`
                 : "Manage, analyze, and track drawing takeoff across all active facilities."}
             </p>
           </div>
@@ -386,7 +313,7 @@ export default function ProjectsPage() {
                   viewMode="grid"
                   staggerIndex={i}
                   onClick={() => {
-                    window.location.href = `/project?project=${project.id}`;
+                    navigate(`/project/${project.id}`);
                   }}
                 />
               </div>
@@ -417,7 +344,7 @@ export default function ProjectsPage() {
                     project={project}
                     viewMode="list"
                     onClick={() => {
-                      window.location.href = `/project?project=${project.id}`;
+                      navigate(`/project/${project.id}`);
                     }}
                   />
                 ))}

@@ -30,6 +30,7 @@
  */
 
 import type { ReactNode } from "react";
+import { Link, useRouter } from "../router";
 import { AppShell } from "./AppShell";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -89,7 +90,7 @@ export function ProjectShell({
   pipelineStatus,
   headerActions,
 }: ProjectShellProps) {
-  const currentPath = window.location.pathname;
+  const { currentPath } = useRouter();
 
   return (
     <AppShell activePath="/project">
@@ -97,7 +98,7 @@ export function ProjectShell({
 
         {/* ── Breadcrumb ──────────────────────────────────────── */}
         <nav className="project-shell__breadcrumb" aria-label="Breadcrumb">
-          <a href="/projects" className="project-shell__bc-link">Projects</a>
+          <Link to="/projects" className="project-shell__bc-link">Projects</Link>
           <IconChevronRight aria-hidden="true" />
           <span className="project-shell__bc-current" aria-current="page">
             {project.name}
@@ -175,21 +176,23 @@ export function ProjectShell({
             }
 
             return (
-              <a
+              <Link
                 key={tab.id}
-                href={href}
+                to={href}
                 className={`project-shell__tab${isActive ? " project-shell__tab--active" : ""}`}
                 aria-current={isActive ? "page" : undefined}
               >
                 {tab.label}
-              </a>
+              </Link>
             );
           })}
         </nav>
 
         {/* ── Page content ─────────────────────────────────────── */}
         <div className="project-shell__content">
-          {children}
+          <div key={activeTab} className="project-tab-view">
+            {children}
+          </div>
         </div>
 
       </div>

@@ -11,18 +11,10 @@
       name="description"
       content="Vectoris — Local-first electrical drawing takeoff and AI-assisted component detection for engineering workflows."
     />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="alternate icon" type="image/png" href="/assets/vectoris-icon.png" />
+    <link rel="apple-touch-icon" href="/assets/vectoris-icon.png" />
     <title>Vectoris</title>
-    <script>
-      (function() {
-        try {
-          var params = new URLSearchParams(window.location.search);
-          var theme = params.get('theme') || localStorage.getItem('vectoris.themePreference');
-          if (theme === 'light' || theme === 'dark') {
-            document.documentElement.setAttribute('data-theme', theme);
-          }
-        } catch (e) {}
-      })();
-    </script>
   </head>
   <body>
     <div id="root"></div>

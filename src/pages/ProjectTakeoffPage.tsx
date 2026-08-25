@@ -21,205 +21,15 @@
  */
 
 import { useState, useMemo } from "react";
+import { Link, useRouter } from "../router";
 import { ProjectShell } from "../components/ProjectShell";
 import type { ProjectMeta } from "../components/ProjectShell";
-
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-export type LineItemStatus = "proposed" | "approved" | "rejected";
-
-export interface LineItem {
-  id: string;
-  item_code: string;
-  name: string;
-  description: string;
-  specification: string;
-  category: "Lighting" | "Cable Tray" | "Power Distribution" | "Conduit" | "Equipment" | "Safety";
-  quantity: number;
-  unit: "EA" | "m" | "ft" | "SET" | "LOT";
-  source_document_id: string;
-  source_document_name: string;
-  source_sheet: string;
-  source_coordinates?: { x: number; y: number; width: number; height: number };
-  status: LineItemStatus;
-  detection_source: "ai_detection" | "human_created";
-  model_version?: string;
-  reviewed_by?: string;
-  reviewed_at?: string;
-  rejection_reason?: string;
-  correction_history?: Array<{
-    timestamp: string;
-    user: string;
-    action: string;
-    previous_value: string;
-    new_value: string;
-  }>;
-}
-
-// ── Demo Data ─────────────────────────────────────────────────────────────────
-
-const DEMO_PROJECT: ProjectMeta = {
-  id: "p1",
-  name: "ABC Data Center",
-  client: "Equinix",
-  sector: "Data Center",
-  discipline: "Electrical HV",
-  displayType: "Data Center · Electrical",
-  typeProvenance: "ai_inferred",
-};
-
-const INITIAL_LINE_ITEMS: LineItem[] = [
-  {
-    id: "li-101",
-    item_code: "LT-2X4-LED",
-    name: "2x4 Troffer LED Fixture",
-    description: "Recessed 2x4 LED troffer with 0-10V continuous dimming driver",
-    specification: "4000K CCT · 5000 lm · 120-277V · 90+ CRI",
-    category: "Lighting",
-    quantity: 142,
-    unit: "EA",
-    source_document_id: "d1",
-    source_document_name: "E-101_LightingPlan.pdf",
-    source_sheet: "E-101 (Floor Plan Level 1)",
-    source_coordinates: { x: 340, y: 520, width: 24, height: 48 },
-    status: "approved",
-    detection_source: "ai_detection",
-    model_version: "v2.4-native",
-    reviewed_by: "Hardik Bhaskar",
-    reviewed_at: "2h ago",
-    correction_history: [
-      { timestamp: "2h ago", user: "Hardik Bhaskar", action: "Approved count", previous_value: "142 proposed", new_value: "142 verified" }
-    ]
-  },
-  {
-    id: "li-102",
-    item_code: "LT-EM-LED",
-    name: "Emergency LED Battery Pack",
-    description: "90-minute integral emergency backup battery unit for troffer fixtures",
-    specification: "1400 lm output in battery mode · Self-diagnostic test switch",
-    category: "Lighting",
-    quantity: 28,
-    unit: "EA",
-    source_document_id: "d1",
-    source_document_name: "E-101_LightingPlan.pdf",
-    source_sheet: "E-101 (Floor Plan Level 1)",
-    source_coordinates: { x: 410, y: 580, width: 16, height: 16 },
-    status: "approved",
-    detection_source: "ai_detection",
-    model_version: "v2.4-native",
-    reviewed_by: "Hardik Bhaskar",
-    reviewed_at: "2h ago",
-  },
-  {
-    id: "li-103",
-    item_code: "CT-LAD-24",
-    name: "24-inch Overhead Ladder Cable Tray",
-    description: "Heavy-duty aluminum ladder cable tray with 9-inch rung spacing",
-    specification: "6-inch side rail · 24-inch usable width · NEMA 12B rated",
-    category: "Cable Tray",
-    quantity: 384,
-    unit: "m",
-    source_document_id: "d4",
-    source_document_name: "E-104_CableTrayLayout.dwg",
-    source_sheet: "E-104 (Server Room B Cable Routing)",
-    source_coordinates: { x: 120, y: 310, width: 620, height: 28 },
-    status: "proposed",
-    detection_source: "ai_detection",
-    model_version: "v2.4-native",
-  },
-  {
-    id: "li-104",
-    item_code: "CT-LAD-12",
-    name: "12-inch Underfloor Cable Basket",
-    description: "Zinc-plated electro-welded steel wire mesh cable basket tray",
-    specification: "4-inch side depth · 12-inch width · Underfloor raised pedestal mount",
-    category: "Cable Tray",
-    quantity: 196,
-    unit: "m",
-    source_document_id: "d4",
-    source_document_name: "E-104_CableTrayLayout.dwg",
-    source_sheet: "E-104 (Server Room B Cable Routing)",
-    source_coordinates: { x: 180, y: 440, width: 480, height: 20 },
-    status: "proposed",
-    detection_source: "ai_detection",
-    model_version: "v2.4-native",
-  },
-  {
-    id: "li-105",
-    item_code: "SW-RP-400A",
-    name: "400A Remote Power Panel (RPP)",
-    description: "Dual-feed 42-pole remote power distribution panel with integrated branch monitoring",
-    specification: "400A Main Breaker · 480/208V · 100kAIC · TVSS included",
-    category: "Power Distribution",
-    quantity: 6,
-    unit: "EA",
-    source_document_id: "d2",
-    source_document_name: "E-102_PowerDistribution.dwg",
-    source_sheet: "E-102 (Power Single-Line)",
-    source_coordinates: { x: 610, y: 220, width: 44, height: 44 },
-    status: "approved",
-    detection_source: "human_created",
-    reviewed_by: "Rina Mehta",
-    reviewed_at: "1h ago",
-  },
-  {
-    id: "li-106",
-    item_code: "SW-PDU-150K",
-    name: "150 kVA Static Transfer Switch PDU",
-    description: "Floor-mounted Power Distribution Unit with STS and K-13 isolation transformer",
-    specification: "480V Delta Input to 208/120V Wye Output · Sub-cycle transfer",
-    category: "Power Distribution",
-    quantity: 4,
-    unit: "EA",
-    source_document_id: "d2",
-    source_document_name: "E-102_PowerDistribution.dwg",
-    source_sheet: "E-102 (Power Single-Line)",
-    source_coordinates: { x: 740, y: 220, width: 52, height: 52 },
-    status: "proposed",
-    detection_source: "ai_detection",
-    model_version: "v2.4-native",
-  },
-  {
-    id: "li-107",
-    item_code: "CND-EMT-2.0",
-    name: "2-inch EMT Conduit Run",
-    description: "Electrical Metallic Tubing for feeder routing to Server Room C subpanels",
-    specification: "ANSI C80.3 steel EMT with steel compression fittings",
-    category: "Conduit",
-    quantity: 115,
-    unit: "m",
-    source_document_id: "d3",
-    source_document_name: "E-103_SingleLine.pdf",
-    source_sheet: "E-103 (Feeder Routing Schedule)",
-    source_coordinates: { x: 280, y: 690, width: 310, height: 12 },
-    status: "rejected",
-    detection_source: "ai_detection",
-    model_version: "v2.4-native",
-    reviewed_by: "Hardik Bhaskar",
-    reviewed_at: "3h ago",
-    rejection_reason: "Scope conflict: Conduit runs for Section C are covered under Package 26-05 subcontract.",
-    correction_history: [
-      { timestamp: "3h ago", user: "Hardik Bhaskar", action: "Rejected item", previous_value: "Proposed", new_value: "Rejected (Scope conflict)" }
-    ]
-  },
-  {
-    id: "li-108",
-    item_code: "SW-DISC-100",
-    name: "100A Fused Safety Disconnect Switch",
-    description: "NEMA 3R outdoor heavy-duty safety switch with Class J fuses",
-    specification: "3-pole · 600VAC · Visible double-break rotary blade design",
-    category: "Equipment",
-    quantity: 8,
-    unit: "EA",
-    source_document_id: "d2",
-    source_document_name: "E-102_PowerDistribution.dwg",
-    source_sheet: "E-102 (Mechanical Yard Disconnects)",
-    source_coordinates: { x: 880, y: 410, width: 30, height: 30 },
-    status: "proposed",
-    detection_source: "ai_detection",
-    model_version: "v2.4-native",
-  }
-];
+import type { LineItem, LineItemStatus } from "../data";
+import {
+  useProject,
+  useLineItems,
+  dataService,
+} from "../services/dataService";
 
 const CATEGORIES = ["All", "Lighting", "Cable Tray", "Power Distribution", "Conduit", "Equipment"] as const;
 const STATUS_TABS = [
@@ -232,13 +42,27 @@ const STATUS_TABS = [
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function ProjectTakeoffPage() {
-  const projectId = getProjectId();
-  const [items, setItems] = useState<LineItem[]>(INITIAL_LINE_ITEMS);
+  const { params } = useRouter();
+  const projectId = params.id || "p1";
+  const project = useProject(projectId);
+  const items = useLineItems(projectId);
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [selectedStatusTab, setSelectedStatusTab] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedItem, setSelectedItem] = useState<LineItem | null>(null);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+
+  const selectedItem = items.find((i) => i.id === selectedItemId) || null;
+
+  const projectMeta: ProjectMeta = {
+    id: projectId,
+    name: project?.name || "ABC Data Center",
+    client: project?.client || "Equinix",
+    sector: project?.sector,
+    discipline: project?.discipline,
+    displayType: project?.displayType || "Data Center · Electrical",
+    typeProvenance: project?.typeProvenance || "ai_inferred",
+  };
 
   // Filter items
   const filteredItems = useMemo(() => {
@@ -264,75 +88,39 @@ export default function ProjectTakeoffPage() {
   // Statistics
   const stats = useMemo(() => {
     const total = items.length;
-    const proposed = items.filter(i => i.status === "proposed").length;
-    const approved = items.filter(i => i.status === "approved").length;
-    const rejected = items.filter(i => i.status === "rejected").length;
+    const proposed = items.filter((i) => i.status === "proposed").length;
+    const approved = items.filter((i) => i.status === "approved").length;
+    const rejected = items.filter((i) => i.status === "rejected").length;
     return { total, proposed, approved, rejected };
   }, [items]);
 
   // Actions
   const handleApprove = (id: string) => {
-    setItems(prev => prev.map(i => {
-      if (i.id === id) {
-        return {
-          ...i,
-          status: "approved",
-          reviewed_by: "Hardik Bhaskar",
-          reviewed_at: "Just now",
-          correction_history: [
-            ...(i.correction_history || []),
-            { timestamp: "Just now", user: "Hardik Bhaskar", action: "Approved count", previous_value: i.status, new_value: "approved" }
-          ]
-        };
-      }
-      return i;
-    }));
-    if (selectedItem?.id === id) {
-      setSelectedItem(prev => prev ? { ...prev, status: "approved" } : null);
-    }
+    dataService.updateLineItemStatus(id, "approved", "Hardik Bhaskar");
   };
 
   const handleReject = (id: string, reason?: string) => {
-    setItems(prev => prev.map(i => {
-      if (i.id === id) {
-        return {
-          ...i,
-          status: "rejected",
-          rejection_reason: reason || "Dismissed by engineer during takeoff review",
-          reviewed_by: "Hardik Bhaskar",
-          reviewed_at: "Just now",
-          correction_history: [
-            ...(i.correction_history || []),
-            { timestamp: "Just now", user: "Hardik Bhaskar", action: "Rejected item", previous_value: i.status, new_value: "rejected" }
-          ]
-        };
-      }
-      return i;
-    }));
-    if (selectedItem?.id === id) {
-      setSelectedItem(prev => prev ? { ...prev, status: "rejected", rejection_reason: reason || "Dismissed by engineer" } : null);
-    }
+    dataService.updateLineItemStatus(id, "rejected", "Hardik Bhaskar", reason);
   };
 
   const handleBulkApproveProposed = () => {
-    setItems(prev => prev.map(i => {
-      if (i.status === "proposed") {
-        return {
-          ...i,
-          status: "approved",
-          reviewed_by: "Hardik Bhaskar",
-          reviewed_at: "Just now",
-        };
-      }
-      return i;
-    }));
+    items
+      .filter((i) => i.status === "proposed")
+      .forEach((i) => {
+        dataService.updateLineItemStatus(i.id, "approved", "Hardik Bhaskar");
+      });
+  };
+
+  const handleAddItem = (newItem: Omit<LineItem, "id" | "project_id">) => {
+    dataService.addLineItem(projectId, newItem);
+    setShowAddModal(false);
   };
 
   const headerActions = (
     <>
-      <a href={`/project/${projectId}/reports`} className="btn btn--secondary btn--sm">
+      <Link to={`/project/${projectId}/reports`} className="btn btn--secondary btn--sm">
         <IconExport /> Export BOQ
-      </a>
+      </Link>
       <button
         type="button"
         className="btn btn--primary btn--sm"
@@ -345,7 +133,7 @@ export default function ProjectTakeoffPage() {
 
   return (
     <ProjectShell
-      project={{ ...DEMO_PROJECT, id: projectId }}
+      project={projectMeta}
       activeTab="takeoff"
       headerActions={headerActions}
     >
@@ -356,7 +144,7 @@ export default function ProjectTakeoffPage() {
           <div className="pt-kpi-card">
             <span className="pt-kpi-card__label">Total Detected</span>
             <span className="pt-kpi-card__value pt-mono">{stats.total}</span>
-            <span className="pt-kpi-card__sub">Across {DEMO_PROJECT.sector} package</span>
+            <span className="pt-kpi-card__sub">Across {projectMeta.sector || "Project"} package</span>
           </div>
 
           <div className="pt-kpi-card pt-kpi-card--proposed">
@@ -500,9 +288,9 @@ export default function ProjectTakeoffPage() {
                       <tr
                         key={item.id}
                         className={`pt-row${isSelected ? " pt-row--selected" : ""}${isRejected ? " pt-row--rejected" : ""}`}
-                        onClick={() => setSelectedItem(item)}
+                        onClick={() => setSelectedItemId(item.id)}
                         tabIndex={0}
-                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setSelectedItem(item); }}
+                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setSelectedItemId(item.id); }}
                       >
                         {/* Item & Code */}
                         <td className="pt-col-item">
@@ -603,7 +391,7 @@ export default function ProjectTakeoffPage() {
                             <button
                               type="button"
                               className="pt-btn-action pt-btn-action--inspect"
-                              onClick={() => setSelectedItem(item)}
+                              onClick={() => setSelectedItemId(item.id)}
                               title="Inspect Traceability &amp; Drawing Evidence"
                             >
                               <IconEvidence aria-hidden="true" />
@@ -630,7 +418,7 @@ export default function ProjectTakeoffPage() {
                 <button
                   type="button"
                   className="pt-drawer__close"
-                  onClick={() => setSelectedItem(null)}
+                  onClick={() => setSelectedItemId(null)}
                   aria-label="Close evidence inspection drawer"
                 >
                   <IconClose />
@@ -726,12 +514,12 @@ export default function ProjectTakeoffPage() {
                     )}
                   </div>
 
-                  <a
-                    href={`/project/${projectId}/workspace?doc=${selectedItem.source_document_id}&sheet=${encodeURIComponent(selectedItem.source_sheet)}`}
+                  <Link
+                    to={`/project/${projectId}/workspace?doc=${selectedItem.source_document_id}&sheet=${encodeURIComponent(selectedItem.source_sheet)}`}
                     className="btn btn--secondary btn--sm pt-open-workspace-btn"
                   >
                     <IconWorkspace /> Open Bounding Region in Workspace
-                  </a>
+                  </Link>
                 </section>
 
                 {/* Audit & Correction History */}
@@ -779,15 +567,6 @@ export default function ProjectTakeoffPage() {
       </div>
     </ProjectShell>
   );
-}
-
-// ── Helpers & URL parsing ─────────────────────────────────────────────────────
-
-function getProjectId(): string {
-  const path = window.location.pathname;
-  const match = path.match(/^\/project\/([^/]+)/);
-  if (match) return match[1];
-  return new URLSearchParams(window.location.search).get("project") ?? "p1";
 }
 
 // ── Inline Icons ──────────────────────────────────────────────────────────────

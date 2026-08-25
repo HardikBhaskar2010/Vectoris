@@ -18,6 +18,7 @@
  */
 
 import { useState, type ReactNode } from "react";
+import { Link, useRouter } from "../router";
 import { ProjectShell } from "../components/ProjectShell";
 import type { ProjectMeta } from "../components/ProjectShell";
 
@@ -35,17 +36,7 @@ interface ExportHistoryItem {
   size_kb: number;
 }
 
-// ── Demo Data ─────────────────────────────────────────────────────────────────
-
-const DEMO_PROJECT: ProjectMeta = {
-  id: "p1",
-  name: "ABC Data Center",
-  client: "Equinix",
-  sector: "Data Center",
-  discipline: "Electrical HV",
-  displayType: "Data Center · Electrical",
-  typeProvenance: "ai_inferred",
-};
+import { useProject } from "../services/dataService";
 
 const INITIAL_HISTORY: ExportHistoryItem[] = [
   {
@@ -119,10 +110,24 @@ const FORMAT_DETAILS: Record<ExportFormat, FormatDetail> = {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function ProjectReportsPage() {
-  const projectId = getProjectId();
+  const { params } = useRouter();
+  const projectId = params.id || "p1";
+  const project = useProject(projectId);
   const [history, setHistory] = useState<ExportHistoryItem[]>(INITIAL_HISTORY);
   const [exportingFormat, setExportingFormat] = useState<ExportFormat | null>(null);
   const [successToast, setSuccessToast] = useState<string | null>(null);
+
+  const projectName = project?.name || "ABC Data Center";
+
+  const projectMeta: ProjectMeta = {
+    id: projectId,
+    name: projectName,
+    client: project?.client || "Equinix",
+    sector: project?.sector,
+    discipline: project?.discipline,
+    displayType: project?.displayType || "Data Center · Electrical",
+    typeProvenance: project?.typeProvenance || "ai_inferred",
+  };
 
   const handleGenerateExport = (format: ExportFormat) => {
     setExportingFormat(format);
@@ -130,7 +135,7 @@ export default function ProjectReportsPage() {
       const newItem: ExportHistoryItem = {
         id: `exp-${Date.now().toString().slice(-4)}`,
         format,
-        filename: `${DEMO_PROJECT.name.replace(/\s+/g, "_")}_${format}_${new Date().toISOString().split("T")[0]}${FORMAT_DETAILS[format].ext}`,
+        filename: `${projectName.replace(/\s+/g, "_")}_${format}_${new Date().toISOString().split("T")[0]}${FORMAT_DETAILS[format].ext}`,
         item_count: 382,
         generated_by: "Hardik Bhaskar",
         generated_at: "Just now",
@@ -145,7 +150,7 @@ export default function ProjectReportsPage() {
 
   return (
     <ProjectShell
-      project={{ ...DEMO_PROJECT, id: projectId }}
+      project={projectMeta}
       activeTab="reports"
     >
       <div className="pr-page">
@@ -179,9 +184,9 @@ export default function ProjectReportsPage() {
                 Derived from 112 analyzed sheets across Server Rooms A, B, and C drawings. All items have been verified by engineering review.
               </p>
             </div>
-            <a href={`/project/${projectId}/takeoff`} className="btn btn--secondary btn--sm">
+            <Link to={`/project/${projectId}/takeoff`} className="btn btn--secondary btn--sm">
               Review Takeoff Data →
-            </a>
+            </Link>
           </div>
 
           <div className="pr-metrics-row">
@@ -312,15 +317,6 @@ export default function ProjectReportsPage() {
       </div>
     </ProjectShell>
   );
-}
-
-// ── URL parsing ───────────────────────────────────────────────────────────────
-
-function getProjectId(): string {
-  const path = window.location.pathname;
-  const match = path.match(/^\/project\/([^/]+)/);
-  if (match) return match[1];
-  return new URLSearchParams(window.location.search).get("project") ?? "p1";
 }
 
 // ── Icons ─────────────────────────────────────────────────────────────────────

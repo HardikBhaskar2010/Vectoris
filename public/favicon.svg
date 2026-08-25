@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" fill="none">
+  <defs>
+    <linearGradient id="v-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2E0A08" />
+      <stop offset="50%" stop-color="#1C0504" />
+      <stop offset="100%" stop-color="#0F0202" />
+    </linearGradient>
+    <linearGradient id="v-border" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF4D42" stop-opacity="0.8" />
+      <stop offset="100%" stop-color="#DD0200" stop-opacity="0.6" />
+    </linearGradient>
+    <linearGradient id="v-outer" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FF4136" />
+      <stop offset="50%" stop-color="#EE0300" />
+      <stop offset="100%" stop-color="#C40200" />
+    </linearGradient>
+    <linearGradient id="v-inner" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FF5C52" />
+      <stop offset="100%" stop-color="#9E0200" />
+    </linearGradient>
+  </defs>
+  <rect x="1" y="1" width="38" height="38" rx="10" fill="url(#v-bg)" stroke="url(#v-border)" stroke-width="1.2" />
+  <path d="M6 9.5 L20 33 L34 9.5 L27.5 13.5 L20 23.5 L12.5 13.5 Z" fill="url(#v-outer)" />
+  <path d="M15 15.5 L20 22 L25 15.5 L20 18.5 Z" fill="url(#v-inner)" />
+  <path d="M6 9.5 L12.5 13.5 M34 9.5 L27.5 13.5" stroke="rgba(255, 255, 255, 0.4)" stroke-width="0.75" stroke-linecap="round" />
+</svg>

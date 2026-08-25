@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { engineService } from "../services/engineService";
 
 interface DesktopTitleBarProps {
   /** Optional title override or breadcrumb */
@@ -113,6 +114,17 @@ function generateLiquidFrontPath(p: number, W: number, H: number): string {
 export function DesktopTitleBar({ title, isAuthenticated = false }: DesktopTitleBarProps) {
   const [isMaximized, setIsMaximized] = useState(false);
   const [isTauriApp, setIsTauriApp] = useState(false);
+  const [engineStatus, setEngineStatus] = useState<{ status: string; message: string; is_tauri: boolean }>({
+    status: "standby",
+    message: "Local Engine · Standby",
+    is_tauri: false,
+  });
+
+  useEffect(() => {
+    engineService.getEngineStatus().then((res) => {
+      setEngineStatus(res);
+    });
+  }, []);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -268,8 +280,8 @@ export function DesktopTitleBar({ title, isAuthenticated = false }: DesktopTitle
           <span className="desktop-titlebar__name">Vectoris</span>
         </div>
 
-        <span className="desktop-titlebar__version" aria-label="Version 0.1.0 local workstation">
-          v0.1.0
+        <span className="desktop-titlebar__version" aria-label="Version 0.2.1 local workstation">
+          v0.2.1
         </span>
 
         {title ? (
@@ -284,8 +296,8 @@ export function DesktopTitleBar({ title, isAuthenticated = false }: DesktopTitle
       <div className="desktop-titlebar__center" data-tauri-drag-region>
         {isAuthenticated ? (
           <div className="desktop-titlebar__status-pill" data-tauri-drag-region>
-            <span className="desktop-titlebar__status-dot" aria-hidden="true" />
-            <span>Local Engine · Ready</span>
+            <span className={`desktop-titlebar__status-dot desktop-titlebar__status-dot--${engineStatus.status}`} aria-hidden="true" />
+            <span>{engineStatus.is_tauri ? "Desktop Workstation · Standby" : "Workstation · Local Standby"}</span>
           </div>
         ) : (
           <span className="desktop-titlebar__pill-static" data-tauri-drag-region>

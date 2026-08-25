@@ -42,172 +42,62 @@
  */
 
 import { useState, useEffect } from "react";
+import { Link, useRouter } from "../router";
 import { ProjectShell } from "../components/ProjectShell";
 import type { ProjectMeta } from "../components/ProjectShell";
+import type {
+  Project,
+  ProjectDocument as Document,
+  TakeoffRunSummary,
+  ChatSession,
+  TypeProvenance,
+} from "../data";
+import {
+  INITIAL_PROJECTS,
+  INITIAL_DOCUMENTS,
+  INITIAL_TAKEOFF_SUMMARY,
+  INITIAL_SESSIONS,
+} from "../data";
 
-// ── Types matching DATA_MODEL.md §2 ──────────────────────────────────────────
-
-type TypeProvenance = "ai_inferred" | "user_provided" | "verified";
-
-interface Project {
-  id: string;
-  name: string;
-  client: string;
-  description: string;
-  sector: string;
-  discipline: string;
-  inferred_type: string | null;
-  user_provided_type: string | null;
-  verified_type: string | null;
-  created_at: string;
-  updated_at: string;
-  member_count: number;
-  members: Array<{ name: string; initials: string; role: string; avatarColor?: string }>;
-}
-
-interface Document {
-  id: string;
-  project_id: string;
-  filename: string;
-  format: "DWG" | "PDF" | "BIM" | "TIFF" | "Excel";
-  upload_status: "complete" | "processing" | "queued" | "error" | "parsed";
-  size_mb: number;
-  sheet_count: number;
-  uploaded_by: string;
-  uploaded_at: string;
-}
-
-interface TakeoffRunSummary {
-  id: string;
-  project_id: string;
-  status: "pending" | "running" | "complete" | "error";
-  sheets_processed: number;
-  sheets_total: number;
-  line_items_proposed: number;
-  line_items_approved: number;
-  started_at: string;
-  completed_at: string | null;
-  model_version: string;
-}
-
-interface ChatSession {
-  id: string;
-  project_id: string;
-  title: string;
-  last_message_preview: string;
-  message_count: number;
-  created_by: string;
-  created_at: string;
-  updated_at: string;
-}
+import {
+  useProject,
+  useDocuments,
+  useTakeoff,
+  useSessions,
+} from "../services/dataService";
 
 type PageState = "loading" | "empty" | "data" | "error" | "permission" | "offline";
 
-// ── URL state resolution ──────────────────────────────────────────────────────
-function getPageState(): PageState {
-  const p = new URLSearchParams(window.location.search);
-  const s = p.get("state");
-  if (s === "loading" || s === "empty" || s === "error" || s === "permission" || s === "offline") return s;
-  return "data";
-}
-
-function getProjectId(): string {
-  const p = new URLSearchParams(window.location.search);
-  return p.get("project") || "p1";
-}
-
-// ── Demo data — structured to match real API shape ────────────────────────────
-
-const DEMO_PROJECT: Project = {
-  id: "p1",
-  name: "ABC Data Center",
-  client: "Equinix",
-  description: "High-density server room electrical takeoff — cable tray, feeder layouts, and lighting across Server Rooms A, B, and C. Phase 2 expansion drawings.",
-  sector: "Data Center",
-  discipline: "Electrical HV",
-  inferred_type: "Data Center · Electrical",
-  user_provided_type: null,
-  verified_type: null,
-  created_at: "2026-08-10",
-  updated_at: "2026-08-24",
-  member_count: 3,
-  members: [
-    { name: "Hardik Bhaskar", initials: "HB", role: "Owner", avatarColor: "#2d4a6e" },
-    { name: "Rina Mehta",     initials: "RM", role: "Editor", avatarColor: "#3d5a3e" },
-    { name: "Zaid Siddiqui",  initials: "ZS", role: "Viewer", avatarColor: "#5a3d3d" },
-  ],
-};
-
-const DEMO_DOCUMENTS: Document[] = [
-  { id: "d1", project_id: "p1", filename: "E-101_LightingPlan.pdf",     format: "PDF",  upload_status: "complete",   size_mb: 2.4,  sheet_count: 32,  uploaded_by: "Hardik Bhaskar", uploaded_at: "3h ago" },
-  { id: "d2", project_id: "p1", filename: "E-102_PowerDistribution.dwg", format: "DWG",  upload_status: "complete",   size_mb: 3.1,  sheet_count: 48,  uploaded_by: "Hardik Bhaskar", uploaded_at: "3h ago" },
-  { id: "d3", project_id: "p1", filename: "E-103_SingleLine.pdf",        format: "PDF",  upload_status: "processing", size_mb: 1.8,  sheet_count: 24,  uploaded_by: "Rina Mehta",     uploaded_at: "1h ago" },
-  { id: "d4", project_id: "p1", filename: "E-104_CableTrayLayout.dwg",   format: "DWG",  upload_status: "queued",     size_mb: 4.2,  sheet_count: 38,  uploaded_by: "Rina Mehta",     uploaded_at: "1h ago" },
-  { id: "d5", project_id: "p1", filename: "Spec_Division_26.pdf",        format: "PDF",  upload_status: "parsed",     size_mb: 12.5, sheet_count: 0,   uploaded_by: "Zaid Siddiqui",  uploaded_at: "2d ago" },
-];
-
-const DEMO_TAKEOFF: TakeoffRunSummary = {
-  id: "tr1",
-  project_id: "p1",
-  status: "running",
-  sheets_processed: 112,
-  sheets_total: 142,
-  line_items_proposed: 1240,
-  line_items_approved: 382,
-  started_at: "01h 42m ago",
-  completed_at: null,
-  model_version: "v2.4-native",
-};
-
-const DEMO_SESSIONS: ChatSession[] = [
-  {
-    id: "s1", project_id: "p1",
-    title: "Cable tray routing — Server Room B",
-    last_message_preview: "Confirmed: 127.4 m of overhead ladder tray. Voltage drop is within spec.",
-    message_count: 14,
-    created_by: "Hardik Bhaskar",
-    created_at: "2h ago",
-    updated_at: "2h ago",
-  },
-  {
-    id: "s2", project_id: "p1",
-    title: "Feeder sizing — PAC-01 to PAC-06",
-    last_message_preview: "Proposed 350 kcmil conductor. Awaiting confirmation from Equinix MEP review.",
-    message_count: 8,
-    created_by: "Rina Mehta",
-    created_at: "12h ago",
-    updated_at: "12h ago",
-  },
-  {
-    id: "s3", project_id: "p1",
-    title: "Lighting fixture schedule verification",
-    last_message_preview: "43× LED Troffers detected. 4 items require manual classification.",
-    message_count: 6,
-    created_by: "Hardik Bhaskar",
-    created_at: "1d ago",
-    updated_at: "1d ago",
-  },
-];
-
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function ProjectOverviewPage() {
-  const [pageState] = useState<PageState>(getPageState);
-  const [projectId]  = useState<string>(getProjectId);
+  const { params, searchParams } = useRouter();
+  const projectId = params.id || "p1";
+  const stateParam = searchParams.get("state") as PageState | null;
+  const pageState: PageState =
+    stateParam && ["loading", "empty", "error", "permission", "offline"].includes(stateParam)
+      ? stateParam
+      : "data";
+
   const [activeTab, setActiveTab] = useState<"documents" | "takeoff" | "reports">("documents");
 
+  const project = useProject(projectId) || INITIAL_PROJECTS[0];
+  const documents = useDocuments(projectId);
+  const takeoff = useTakeoff(projectId);
+  const sessions = useSessions(projectId);
+
   // Determine type provenance for the project
-  const typeProvenance: TypeProvenance = DEMO_PROJECT.verified_type
+  const typeProvenance: TypeProvenance = project.verified_type
     ? "verified"
-    : DEMO_PROJECT.user_provided_type
+    : project.user_provided_type
     ? "user_provided"
     : "ai_inferred";
 
   // Strip any parenthetical confidence suffix — confidence is internal, never user-facing
   // (UX_PRINCIPLES.md §2). Defensive: strips even if real API leaks it.
   const displayType = (
-    DEMO_PROJECT.verified_type ||
-    DEMO_PROJECT.user_provided_type ||
-    DEMO_PROJECT.inferred_type ||
+    project.verified_type ||
+    project.user_provided_type ||
+    project.inferred_type ||
     "Unknown"
   ).replace(/\s*\([^)]*\)/g, "").trim();
 
@@ -219,34 +109,34 @@ export default function ProjectOverviewPage() {
   // Build ProjectMeta for ProjectShell
   const projectMeta: ProjectMeta = {
     id: projectId,
-    name: DEMO_PROJECT.name,
-    client: DEMO_PROJECT.client,
-    sector: DEMO_PROJECT.sector,
-    discipline: DEMO_PROJECT.discipline,
+    name: project.name,
+    client: project.client,
+    sector: project.sector,
+    discipline: project.discipline,
     displayType,
     typeProvenance,
   };
 
   // Pipeline status banner for ProjectShell
-  const pipelineStatusBanner = DEMO_TAKEOFF.status === "running" ? (
-    <ProcessingStatusBar takeoff={DEMO_TAKEOFF} />
+  const pipelineStatusBanner = takeoff.status === "running" ? (
+    <ProcessingStatusBar takeoff={takeoff} />
   ) : undefined;
 
   // Header actions for ProjectShell
   const headerActionsEl = (
     <>
       {canUpload && (
-        <a href={`/project/${projectId}/documents`} className="btn btn--secondary btn--sm">
+        <Link to={`/project/${projectId}/documents`} className="btn btn--secondary btn--sm">
           <IconUpload /> Upload
-        </a>
+        </Link>
       )}
-      <a
-        href={`/project/${projectId}/workspace`}
-        className={`btn btn--primary btn--sm${!DEMO_DOCUMENTS.length ? " btn--disabled" : ""}`}
-        aria-disabled={!DEMO_DOCUMENTS.length}
+      <Link
+        to={`/project/${projectId}/workspace`}
+        className={`btn btn--primary btn--sm${!documents.length ? " btn--disabled" : ""}`}
+        aria-disabled={!documents.length}
       >
         <IconWorkspace /> Open Workspace
-      </a>
+      </Link>
       <button type="button" className="btn btn--icon btn--sm" aria-label="More project options">
         <IconEllipsis />
       </button>
@@ -285,7 +175,7 @@ export default function ProjectOverviewPage() {
       )}
 
       {/* ── Empty — newly created project ────────────────────────── */}
-      {pageState === "empty" && (
+      {(pageState === "empty" || (pageState === "data" && documents.length === 0)) && (
         <div className="po-empty-state">
           <div className="po-empty-icon" aria-hidden="true">
             <EmptyProjectIllustration />
@@ -296,12 +186,12 @@ export default function ProjectOverviewPage() {
             Vectoris will organize the project context and queue AI analysis automatically.
           </p>
           <div className="po-empty-actions">
-            <a href={`/project/${projectId}/documents`} className="btn btn--primary">
+            <Link to={`/project/${projectId}/documents`} className="btn btn--primary">
               <IconUpload /> Upload Drawings &amp; Documents
-            </a>
-            <a href="/sessions" className="btn btn--ghost">
+            </Link>
+            <Link to="/sessions" className="btn btn--ghost">
               Start an AI Session instead
-            </a>
+            </Link>
           </div>
         </div>
       )}
@@ -315,7 +205,7 @@ export default function ProjectOverviewPage() {
       )}
 
       {/* ── Data / Permission / Offline (show Overview content) ─── */}
-      {(pageState === "data" || pageState === "permission" || pageState === "offline") && (
+      {((pageState === "data" && documents.length > 0) || pageState === "permission" || pageState === "offline") && (
         <div className="po-body">
           {/* ── Left: recent document activity + takeoff progress ── */}
           <div className="po-main-col">
@@ -325,19 +215,19 @@ export default function ProjectOverviewPage() {
                 <h2 id="recent-docs-heading" className="po-overview-section__title">
                   <IconDoc /> Recent Documents
                 </h2>
-                <a href={`/project/${projectId}/documents`} className="po-overview-section__link">
+                <Link to={`/project/${projectId}/documents`} className="po-overview-section__link">
                   View all →
-                </a>
+                </Link>
               </div>
               <ul className="po-doc-list" aria-label="Recent uploaded documents">
-                {DEMO_DOCUMENTS.slice(0, 3).map((doc) => (
-                  <DocumentRow key={doc.id} doc={doc} />
+                {documents.slice(0, 3).map((doc) => (
+                  <DocumentRow key={doc.id} doc={doc} projectId={projectId} />
                 ))}
               </ul>
-              {DEMO_DOCUMENTS.length > 3 && (
-                <a href={`/project/${projectId}/documents`} className="po-overview-section__more">
-                  +{DEMO_DOCUMENTS.length - 3} more documents
-                </a>
+              {documents.length > 3 && (
+                <Link to={`/project/${projectId}/documents`} className="po-overview-section__more">
+                  +{documents.length - 3} more documents
+                </Link>
               )}
             </section>
 
@@ -347,11 +237,11 @@ export default function ProjectOverviewPage() {
                 <h2 id="takeoff-progress-heading" className="po-overview-section__title">
                   <IconTakeoff /> Takeoff Progress
                 </h2>
-                <a href={`/project/${projectId}/takeoff`} className="po-overview-section__link">
+                <Link to={`/project/${projectId}/takeoff`} className="po-overview-section__link">
                   Review →
-                </a>
+                </Link>
               </div>
-              <TakeoffPanel takeoff={DEMO_TAKEOFF} canView={true} />
+              <TakeoffPanel takeoff={takeoff} canView={true} projectId={projectId} />
             </section>
           </div>
 
@@ -364,24 +254,24 @@ export default function ProjectOverviewPage() {
                     <h2 id="sessions-heading" className="po-side-card__title">
                       <IconSession /> AI Sessions
                     </h2>
-                    <a href={`/sessions?project=${projectId}`} className="po-side-card__action">
+                    <Link to={`/sessions?project=${projectId}`} className="po-side-card__action">
                       New session
-                    </a>
+                    </Link>
                   </div>
 
-                  {DEMO_SESSIONS.length === 0 ? (
+                  {sessions.length === 0 ? (
                     <p className="po-side-empty">No sessions yet. Start one to ask questions about this project.</p>
                   ) : (
                     <ul className="po-session-list" aria-label="AI sessions">
-                      {DEMO_SESSIONS.map((session) => (
+                      {sessions.map((session) => (
                         <SessionRow key={session.id} session={session} projectId={projectId} />
                       ))}
                     </ul>
                   )}
 
-                  <a href={`/sessions?project=${projectId}`} className="po-side-card__footer-link">
+                  <Link to={`/sessions?project=${projectId}`} className="po-side-card__footer-link">
                     View all sessions →
-                  </a>
+                  </Link>
                 </section>
 
                 {/* Project Metadata */}
@@ -400,28 +290,28 @@ export default function ProjectOverviewPage() {
                   <dl className="po-meta-list">
                     <div className="po-meta-row">
                       <dt>Client</dt>
-                      <dd>{DEMO_PROJECT.client}</dd>
+                      <dd>{project.client}</dd>
                     </div>
                     <div className="po-meta-row">
                       <dt>Sector</dt>
-                      <dd>{DEMO_PROJECT.sector}</dd>
+                      <dd>{project.sector}</dd>
                     </div>
                     <div className="po-meta-row">
                       <dt>Discipline</dt>
-                      <dd>{DEMO_PROJECT.discipline}</dd>
+                      <dd>{project.discipline}</dd>
                     </div>
                     <div className="po-meta-row">
                       <dt>Created</dt>
-                      <dd className="font-mono">{DEMO_PROJECT.created_at}</dd>
+                      <dd className="font-mono">{project.created_at}</dd>
                     </div>
                     <div className="po-meta-row">
                       <dt>Last updated</dt>
-                      <dd className="font-mono">{DEMO_PROJECT.updated_at}</dd>
+                      <dd className="font-mono">{project.updated_at}</dd>
                     </div>
                   </dl>
 
-                  {DEMO_PROJECT.description && (
-                    <p className="po-meta-description">{DEMO_PROJECT.description}</p>
+                  {project.description && (
+                    <p className="po-meta-description">{project.description}</p>
                   )}
                 </section>
 
@@ -439,7 +329,7 @@ export default function ProjectOverviewPage() {
                   </div>
 
                   <ul className="po-team-list" aria-label="Project team members">
-                    {DEMO_PROJECT.members.map((m, i) => (
+                    {project.members.map((m, i) => (
                       <li key={i} className="po-team-member">
                         <div className="po-team-member__avatar" style={{ background: m.avatarColor }} aria-hidden="true">
                           {m.initials}
@@ -510,18 +400,18 @@ function ProjectHeader({
 
       <div className="po-project-header__actions">
         {canUpload && (
-          <a href="/upload" className="btn btn--secondary">
+          <Link to={`/project/${project.id}/documents`} className="btn btn--secondary">
             <IconUpload /> Upload
-          </a>
+          </Link>
         )}
-        <a
-          href={isEmpty ? "#" : "/workspace"}
+        <Link
+          to={isEmpty ? "#" : `/project/${project.id}/workspace`}
           className={`btn btn--primary${isEmpty ? " btn--disabled" : ""}`}
           aria-disabled={isEmpty}
           title={isEmpty ? "Upload drawings first to open the workspace" : undefined}
         >
           <IconWorkspace /> Open Workspace
-        </a>
+        </Link>
         {canEdit && (
           <button type="button" className="btn btn--icon" aria-label="Project actions">
             <IconMore />
@@ -550,22 +440,27 @@ function ProcessingStatusBar({ takeoff }: { takeoff: TakeoffRunSummary }) {
         <div className="po-processing-bar__fill" style={{ width: `${pct}%` }} />
       </div>
       <span className="po-processing-bar__pct font-mono">{pct}%</span>
-      <a href="/processing" className="po-processing-bar__link">
+      <Link to={`/project/${takeoff.project_id}/workspace`} className="po-processing-bar__link">
         View pipeline →
-      </a>
+      </Link>
     </div>
   );
 }
 
 // ── Document Row ──────────────────────────────────────────────────────────────
-function DocumentRow({ doc }: { doc: Document }) {
+function DocumentRow({ doc, projectId }: { doc: Document; projectId?: string }) {
+  const pId = projectId || doc.project_id || "p1";
   const statusLabel: Record<Document["upload_status"], string> = {
-    complete:   "Complete",
-    processing: "Processing",
-    queued:     "Queued",
-    error:      "Error",
-    parsed:     "Parsed",
+    complete:    "Complete",
+    ingesting:   "Ingesting",
+    classifying: "Classifying",
+    detecting:   "Detecting",
+    queued:      "Queued",
+    error:       "Error",
+    parsed:      "Parsed",
   };
+
+  const isProcessing = ["ingesting", "classifying", "detecting"].includes(doc.upload_status);
 
   return (
     <li className={`po-doc-row po-doc-row--${doc.upload_status}`}>
@@ -577,7 +472,7 @@ function DocumentRow({ doc }: { doc: Document }) {
         <span className="po-doc-row__name font-mono">{doc.filename}</span>
         <span className="po-doc-row__meta">
           <span className="font-mono">{doc.size_mb} MB</span>
-          {doc.sheet_count > 0 && (
+          {doc.sheet_count !== null && doc.sheet_count > 0 && (
             <><span aria-hidden="true">·</span><span className="font-mono">{doc.sheet_count} sheets</span></>
           )}
           <span aria-hidden="true">·</span>
@@ -589,14 +484,14 @@ function DocumentRow({ doc }: { doc: Document }) {
 
       <div className="po-doc-row__status-wrap">
         <span className={`po-doc-status po-doc-status--${doc.upload_status}`}>
-          {doc.upload_status === "processing" && <span className="po-spin-icon" aria-hidden="true"><IconSync /></span>}
+          {isProcessing && <span className="po-spin-icon" aria-hidden="true"><IconSync /></span>}
           {doc.upload_status === "complete"   && <IconCheckmark />}
           {doc.upload_status === "parsed"     && <IconCheckmark />}
           {doc.upload_status === "queued"     && <IconClock />}
           {doc.upload_status === "error"      && <IconError />}
-          {statusLabel[doc.upload_status]}
+          {statusLabel[doc.upload_status] || "Queued"}
         </span>
-        {doc.upload_status === "processing" && (
+        {isProcessing && (
           <div className="po-doc-progress" aria-hidden="true">
             <div className="po-doc-progress__fill" />
           </div>
@@ -604,16 +499,17 @@ function DocumentRow({ doc }: { doc: Document }) {
       </div>
 
       {(doc.upload_status === "complete" || doc.upload_status === "parsed") && (
-        <a href={`/workspace?doc=${doc.id}`} className="po-doc-row__open" aria-label={`Open ${doc.filename} in workspace`}>
+        <Link to={`/project/${pId}/workspace?doc=${doc.id}`} className="po-doc-row__open" aria-label={`Open ${doc.filename} in workspace`}>
           Open →
-        </a>
+        </Link>
       )}
     </li>
   );
 }
 
 // ── Takeoff Panel ─────────────────────────────────────────────────────────────
-function TakeoffPanel({ takeoff, canView }: { takeoff: TakeoffRunSummary; canView: boolean }) {
+function TakeoffPanel({ takeoff, canView, projectId }: { takeoff: TakeoffRunSummary; canView: boolean; projectId?: string }) {
+  const pId = projectId || takeoff.project_id || "p1";
   const pct = Math.round((takeoff.sheets_processed / takeoff.sheets_total) * 100);
   const reviewPct = Math.round((takeoff.line_items_approved / takeoff.line_items_proposed) * 100);
 
@@ -624,9 +520,9 @@ function TakeoffPanel({ takeoff, canView }: { takeoff: TakeoffRunSummary; canVie
           Run <span className="font-mono">{takeoff.id}</span> · Model <span className="font-mono">{takeoff.model_version}</span>
         </span>
         {canView && takeoff.status === "complete" && (
-          <a href="/workspace" className="btn btn--sm btn--primary">
+          <Link to={`/project/${pId}/takeoff`} className="btn btn--sm btn--primary">
             Review Takeoff →
-          </a>
+          </Link>
         )}
       </div>
 
@@ -719,8 +615,8 @@ function ReportsPanel({ canExport, takeoff }: { canExport: boolean; takeoff: Tak
 function SessionRow({ session, projectId }: { session: ChatSession; projectId: string }) {
   return (
     <li className="po-session-row">
-      <a
-        href={`/sessions?project=${projectId}&session=${session.id}`}
+      <Link
+        to={`/sessions?project=${projectId}&session=${session.id}`}
         className="po-session-row__link"
         aria-label={`Open AI session: ${session.title}`}
       >
@@ -732,7 +628,7 @@ function SessionRow({ session, projectId }: { session: ChatSession; projectId: s
           <span className="font-mono">{session.updated_at}</span>
           <span className="po-session-row__count font-mono">{session.message_count} msgs</span>
         </div>
-      </a>
+      </Link>
     </li>
   );
 }
@@ -894,12 +790,19 @@ function IconVerified() {
 }
 function DocFormatIcon({ format }: { format: Document["format"] }) {
   const colors: Record<Document["format"], string> = {
-    DWG: "#3b82f6", PDF: "#ef4444", BIM: "#8b5cf6", TIFF: "#10b981", Excel: "#22c55e",
+    DWG: "#3b82f6",
+    PDF: "#ef4444",
+    DXF: "#6366f1",
+    BIM: "#8b5cf6",
+    TIFF: "#10b981",
+    Excel: "#22c55e",
+    Other: "#64748b",
   };
+  const color = colors[format] || "#64748b";
   return (
     <svg width="28" height="32" viewBox="0 0 28 32" fill="none" aria-hidden="true">
-      <rect x="0" y="0" width="28" height="32" rx="3" fill={colors[format]} fillOpacity="0.12" stroke={colors[format]} strokeWidth="1" strokeOpacity="0.3"/>
-      <text x="14" y="20" textAnchor="middle" fontSize="8" fontWeight="700" fontFamily="monospace" fill={colors[format]}>{format}</text>
+      <rect x="0" y="0" width="28" height="32" rx="3" fill={color} fillOpacity="0.12" stroke={color} strokeWidth="1" strokeOpacity="0.3"/>
+      <text x="14" y="20" textAnchor="middle" fontSize="8" fontWeight="700" fontFamily="monospace" fill={color}>{format}</text>
     </svg>
   );
 }

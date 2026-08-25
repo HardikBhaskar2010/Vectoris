@@ -1,4 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "../router";
 import { BrandMark } from "../components/BrandMark";
 import { SystemNotice } from "../components/SystemNotice";
 import { useOnlineStatus } from "../hooks/useOnlineStatus";
@@ -492,7 +493,7 @@ export function AuthPage() {
 
           {/* Secondary actions */}
           <div className="auth-secondary-actions">
-            {!isSignup ? <a href="/auth/reset-password">Forgot password?</a> : null}
+            {!isSignup ? <Link to="/auth?mode=reset">Forgot password?</Link> : null}
             <button type="button" onClick={() => switchMode(isSignup ? "signin" : "signup")}>
               {isSignup ? "Already have an account? Sign in" : "Need access? Create an account"}
             </button>
@@ -508,8 +509,8 @@ export function AuthPage() {
               textAlign: "center",
             }}
           >
-            <a
-              href="/dashboard"
+            <Link
+              to="/dashboard"
               className="button button--secondary"
               style={{
                 display: "inline-flex",
@@ -526,7 +527,7 @@ export function AuthPage() {
             >
               <span>Skip to Dashboard (Testing / Dev)</span>
               <span aria-hidden="true">&rarr;</span>
-            </a>
+            </Link>
           </div>
         </div>
       </section>

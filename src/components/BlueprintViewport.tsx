@@ -21,6 +21,7 @@
  */
 
 import { useEffect, useRef } from "react";
+import { Link } from "../router";
 
 export function BlueprintViewport() {
   const pulseRef = useRef<SVGPolylineElement>(null);
@@ -59,10 +60,10 @@ export function BlueprintViewport() {
             </div>
           </div>
         </div>
-        <a href="/workspace" className="blueprint-vp__cta">
+        <Link to="/project/p1/workspace" className="blueprint-vp__cta">
           Open in Drawing Workspace
           <IconArrowOut aria-hidden="true" />
-        </a>
+        </Link>
       </div>
 
       {/* SVG Demo Canvas */}
