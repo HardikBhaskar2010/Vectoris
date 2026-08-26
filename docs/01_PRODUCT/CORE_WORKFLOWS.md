@@ -66,6 +66,33 @@ Org creation → Owner invites members via link → role assignment → multiple
 
 Structured takeoff data (source of truth) → user selects format from a Download/overflow menu → Vectoris transforms internal data → delivers file. Exported files are **never** the canonical source of truth (see `PRD.md` NFR and `../06_PAGES/EXPORT.md`).
 
+## 6a. Workflow: Refer Team Member Into an Existing Project (NEAR-TERM — see `../DOMAIN/COLLABORATION.md`)
+
+```mermaid
+sequenceDiagram
+    participant A as Existing Member
+    participant V as Vectoris
+    participant B as New Member
+    A->>V: Invite B (Permission Role + optional Discipline Role tag)
+    V->>B: Invitation link (per USER_ROLES.md §4)
+    B->>V: Accept
+    V->>B: Present Project Intelligence-curated entry (not raw document dump)
+    B->>V: Ask discipline-framed or general questions via AI Session
+```
+
+This workflow does not change the invitation mechanism already specified in `USER_ROLES.md` §4. It adds an optional Discipline Role tag and a Project Intelligence-driven landing experience — see `../DOMAIN/COLLABORATION.md` and `../DOMAIN/PROJECT_INTELLIGENCE.md`. Status: NEAR-TERM, OPEN DECISION (OD-25) — not yet authorized for build.
+
+## 6b. Workflow: Project Understanding Synthesis (NEAR-TERM — see `../DOMAIN/PROJECT_INTELLIGENCE.md`)
+
+```text
+User asks (in an AI Session, project-scoped): "Explain this project to me" / "What's unresolved?"
+   -> Agent reads across: documents, takeoff state, prior sessions, decisions, activity
+   -> Agent classifies each claim: known-from-evidence / inferred / human-decided / unresolved
+   -> Agent responds, evidence-linked, explicitly marking gaps as gaps (not silently omitted)
+```
+
+This is the same evidence-linking discipline `AI_SESSION.md` §AI Behavior already requires for single-document questions, applied at project scope. Status: NEAR-TERM, OPEN DECISION (OD-24) — requires a defined grounding procedure before build; see `../DOMAIN/PROJECT_INTELLIGENCE.md` §4.
+
 ## 7. Cross-References
 
 - Page-level detail for each step: `../06_PAGES/*`

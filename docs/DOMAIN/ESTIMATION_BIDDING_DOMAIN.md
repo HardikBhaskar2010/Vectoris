@@ -563,6 +563,7 @@ Consistent with, and not overriding, `../MVP_BOUNDARY.md` (which remains authori
 - `../MVP_BOUNDARY.md` — authoritative scope boundary; unchanged by this research
 - `../04_AI/AI_SYSTEM.md`, `../04_AI/AI_MEMORY.md` — AI/deterministic split and memory-layer principles this document's §13–14 apply to the estimation domain specifically
 - Legacy `README.md` (Four Memory Layers, Decision Intelligence vision) — the principles this evidence validates
+- `../DOMAIN/PROJECT_INTELLIGENCE.md` — the same known/inferred/decided/unresolved evidence-classification discipline this document applies to commercial data (§8.2, §14), reused at project scope
 
 ---
 

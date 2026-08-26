@@ -152,6 +152,9 @@ Two-column split: fixed-width session sidebar (~300px) + flexible chat canvas. T
 - Present a confidence score as a primary response element (per `../02_DESIGN/UX_PRINCIPLES.md` §2)
 - Invent pricing, catalog, or specification information
 
+### Role-Aware Question Framing (NEAR-TERM — see `../DOMAIN/COLLABORATION.md`)
+When the user has a Discipline Role tag (Estimator, Electrical Engineer, HVAC Engineer, Project Manager, Procurement, Site Engineer, Sales/BD, Management — see `../DOMAIN/COLLABORATION.md` §3), the Agent's first-turn context and clarifying-question style lean toward that discipline's typical concerns. Example question patterns the Agent should handle fluently once this lands: an Estimator asking what quantities are driving the estimate; an Electrical Engineer asking where cable tray routing changes; an HVAC Engineer asking to explain cooling scope; a Project Manager asking what's unresolved; Procurement asking what materials are required; a Site Engineer asking where equipment is installed; Management asking for current project/commercial position. **This never restricts what the Agent will answer** — a person can always ask outside their tagged discipline; the tag only changes defaults and framing, never access (per `../DOMAIN/COLLABORATION.md` §4's hard boundary). Status: NEAR-TERM, OPEN DECISION (OD-25) — Discipline Role tagging is not yet authorized for build.
+
 ### Tool Execution Trace
 Per the design reference, the agent shows step-by-step reasoning:
 ```

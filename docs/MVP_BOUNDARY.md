@@ -60,6 +60,9 @@ Consolidated from `README.md` (H1-specific) and `SCOPE.md` §24 (company-wide):
 | Autonomous pricing decisions | Rejected — human approval is non-negotiable |
 | Full negotiation automation | Long-term |
 | Conduit/wire quantity estimation without validation | Long-term (requires validated spike) |
+| Cross-document project-level AI synthesis ("explain this project") | Near-term (OD-24) — see `DOMAIN/PROJECT_INTELLIGENCE.md` |
+| Discipline Role tagging / curated first-view by discipline | Near-term (OD-25) — see `DOMAIN/COLLABORATION.md` |
+| Decision / Activity as first-class entities distinct from `CorrectionEvent` | Near-term (OD-24) — see `DOMAIN/PROJECT_INTELLIGENCE.md` |
 
 ---
 

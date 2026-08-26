@@ -42,6 +42,22 @@ This diagram is the same convergent pipeline described in the legacy `SCOPE.md` 
 
 **This is vision, not a build plan.** See `PRODUCT_SCOPE.md` and `MVP_BOUNDARY.md` (root of `docs/`) for what is actually authorized to be built now.
 
+## 3a. The Project Is the Primary Object
+
+**Status: LOCKED (framing) — does not change the MVP boundary in §5.**
+
+Vectoris is not defined by any single workflow inside it. It is not a takeoff tool, a BOQ generator, an estimator, a bidding application, or a document chatbot — those are workflows that happen *inside* Vectoris's primary object, which is the **Project**.
+
+A Project is shared context, not a personal workspace. The conceptual hierarchy a person moves through inside a Project is:
+
+```text
+UNDERSTAND → EXPLORE → COLLABORATE → ENGINEER → ESTIMATE → BID → DELIVER
+```
+
+These are not seven pages or seven products — they are different ways the same underlying Project Intelligence gets used, by different people, at different times. A Project should become useful to a teammate who did not upload a single document to it, the moment they're invited — see `../DOMAIN/COLLABORATION.md`. Vectoris should be able to answer "what is this project, and what do we know about it" as a grounded, evidence-linked synthesis, not just a document list — see `../DOMAIN/PROJECT_INTELLIGENCE.md`.
+
+**This does not reopen the MVP boundary.** UNDERSTAND and EXPLORE map to capability already scoped in `PRODUCT_SCOPE.md` (drawing-first takeoff, AI sessions, document upload). COLLABORATE beyond existing org/roles, ENGINEER (solution/assembly mapping), ESTIMATE, BID, and DELIVER map to Near-term/Long-term horizons exactly as already defined in `PRODUCT_SCOPE.md` and `../LONG_TERM_VISION.md` — this section renames and reframes the destination, it does not authorize building further than §5 already does.
+
 ## 4. Why This Problem, Why Now
 
 Carried forward from the legacy discovery/thesis documents (evidence status preserved, not upgraded):
@@ -77,3 +93,4 @@ Full detail: `PRODUCT_SCOPE.md`, `MVP_BOUNDARY.md`, `FEATURE_MAP.md`.
 - Long-term system detail: `../LONG_TERM_VISION.md`
 - What the product must do at MVP: `PRD.md`
 - Vocabulary: `GLOSSARY.md`
+- Project-as-primary-object detail: `../DOMAIN/PROJECT_INTELLIGENCE.md`, `../DOMAIN/COLLABORATION.md`

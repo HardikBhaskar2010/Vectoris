@@ -37,6 +37,10 @@ Full material/labor estimating · CPQ · pricing intelligence · commercial inte
 
 The founder's decision to architect H1 and H2 as one pipeline (see `VISION.md` §4) is an **architectural** decision about how the eventual system's data model fits together (shared line-item structure, application/where-used semantics). It is explicitly **not** a decision to build the requirement-entry pathway now. The MVP remains drawing-only. Any document that describes requirement-entry, BOQ generation, pricing, or proposal generation as currently buildable is inconsistent with this document and must be corrected.
 
+## 3a. Project Intelligence / Collaboration Reframing Does Not Expand the MVP
+
+`VISION.md` §3a locks a broader framing of Vectoris as a shared Project Intelligence workspace (see `../DOMAIN/PROJECT_INTELLIGENCE.md`, `../DOMAIN/COLLABORATION.md`). Like the H1/H2 merge in §3 above, this is a **framing and target-architecture** decision, not a scope expansion. Grounded cross-document project synthesis ("explain this project"), Decision/Activity entities, and Discipline Role tagging are **NEAR-TERM, OPEN DECISION** (OD-24, OD-25 in `../OPEN_DECISIONS.md`) — none are authorized for build under the current MVP boundary.
+
 ## 4. Candidate Wedges Beyond Drawing Takeoff (Not Yet Authorized)
 
 Preserved from legacy `SCOPE.md` §5 candidate wedge table: Revision & Addenda Intelligence (scripted, competitively contested as of Aug 2026), post-takeoff assembly mapping, engineering constraint intelligence, cross-OEM configuration, standalone product selection, proposal QA, bid pricing optimization. None are MVP scope. Feature-mapped in `../01_PRODUCT/FEATURE_MAP.md`.
