@@ -8,9 +8,11 @@
 
 ## 1. What Vectoris Is
 
-Vectoris is **one unified product**: an AI-native engineering and commercial intelligence system for electrical/MEP work, evolving toward AI-native project engineering and, eventually, broader project management.
+Vectoris is **one unified product**: an AI-native Project Management and Project Intelligence workspace for electrical and MEP engineering, where takeoff, estimation, and bidding are major sequential workflows inside the Project container.
 
-It is not two products. The prior "H1" (Drawing Intelligence) and "H2" (Engineering & Commercial Intelligence) hypotheses from the DrawSpec discovery phase are **not separate products** — they are two entry pathways into one underlying pipeline. This framing was already emerging in the legacy README ("H1 and H2 as sequential, not competing") and is now a founder-locked architectural decision, not a hypothesis.
+It is **not** an ERP, CRM, or generic accounting suite. Nor is it merely an isolated, single-purpose "AI Takeoff App". 
+
+Vectoris is the project-centric workspace where engineering, commercial estimation, and project intelligence converge around shared project evidence.
 
 ## 2. Core Principle
 
@@ -18,45 +20,80 @@ It is not two products. The prior "H1" (Drawing Intelligence) and "H2" (Engineer
 
 Every AI action in Vectoris must be traceable to evidence, reversible by a human, and recorded with enough context to reconstruct "what did Vectoris believe, and what did the human change."
 
-## 3. The Long-Term Vision (Not the MVP)
+## 3. The Target Product Architecture
 
-The ultimate system spans:
+The overarching Vectoris architecture we are converging toward is:
 
-```mermaid
-flowchart LR
-    A[Project Understanding] --> B[Project Design / Engineering Intelligence]
-    B --> C[Drawing Intelligence / Requirements Understanding]
-    C --> D[Takeoff]
-    D --> E[Application / Where-Used Reasoning]
-    E --> F[Product / Material Selection]
-    F --> G[BOQ / BOM Generation]
-    G --> H[Pricing Intelligence]
-    H --> I[Commercial Intelligence]
-    I --> J[Proposal Generation]
-    J --> K[Collaboration + Company Memory]
-    K --> L[Line-Item R&D / Engineering Research]
-    L --> M[Project Execution + Project Management]
+```text
+                    VECTORIS
+                       │
+                 ┌──── PROJECT ────┐
+                 │                 │
+          PROJECT INTELLIGENCE     │
+                 │                 │
+     ┌───────────┼────────────┐    │
+     ↓           ↓            ↓    ↓
+  Drawings    Documents      AI   Collaboration
+     │
+     ↓
+  Takeoff
+     │
+     ↓
+    BOQ
+     │
+     ↓
+ Engineering
+     │
+     ↓
+ Estimation
+     │
+     ↓
+ Commercial
+     │
+     ↓
+    Bids
+     │
+     ↓
+  Delivery
 ```
 
-This diagram is the same convergent pipeline described in the legacy `SCOPE.md` §23 ("Drawing Path" and "Requirement Path" converging on BOQ → Pricing → Proposal), now generalized: Vectoris is the single agentic system that eventually operates across the whole loop, entered from whichever input the customer has (drawings, requirements, existing BOQs, specifications).
+And today's **Takeoff MVP** is the first operational wedge executed directly inside this architecture:
 
-**This is vision, not a build plan.** See `PRODUCT_SCOPE.md` and `MVP_BOUNDARY.md` (root of `docs/`) for what is actually authorized to be built now.
+```text
+Project
+  ↓
+Documents / Drawings
+  ↓
+AI + Detection
+  ↓
+Human Verification
+  ↓
+Takeoff
+  ↓
+Export
+```
+
+This ensures that building the focused Takeoff MVP today happens inside the correct long-term Project-centric container without breaking the overarching architecture.
 
 ## 3a. The Project Is the Primary Object
 
-**Status: LOCKED (framing) — does not change the MVP boundary in §5.**
+**Status: LOCKED (Product Architecture & Foundation)**
 
-Vectoris is not defined by any single workflow inside it. It is not a takeoff tool, a BOQ generator, an estimator, a bidding application, or a document chatbot — those are workflows that happen *inside* Vectoris's primary object, which is the **Project**.
+Vectoris is not defined by any single isolated tool inside it. It is not an ad-hoc takeoff calculator, an isolated BOQ generator, or a detached document chatbot — those are workflows and capabilities that live *inside* Vectoris's primary container: the **Project**.
 
-A Project is shared context, not a personal workspace. The conceptual hierarchy a person moves through inside a Project is:
+Project Intelligence is the foundational context layer of the workspace. It answers: *"What is this project, what evidence exists, what decisions have been made, and what is currently unresolved?"*
+
+The sequential workflow progression across a Project lifecycle is:
 
 ```text
 UNDERSTAND → EXPLORE → COLLABORATE → ENGINEER → ESTIMATE → BID → DELIVER
 ```
 
-These are not seven pages or seven products — they are different ways the same underlying Project Intelligence gets used, by different people, at different times. A Project should become useful to a teammate who did not upload a single document to it, the moment they're invited — see `../DOMAIN/COLLABORATION.md`. Vectoris should be able to answer "what is this project, and what do we know about it" as a grounded, evidence-linked synthesis, not just a document list — see `../DOMAIN/PROJECT_INTELLIGENCE.md`.
+These are not disconnected products — they are progressive stages of the same underlying Project Intelligence workspace used by teams over time:
+- **Drawings, Documents, AI Sessions, Collaboration**: Shared evidence and interaction surfaces within the project container (see `../DOMAIN/PROJECT_INTELLIGENCE.md`, `../DOMAIN/COLLABORATION.md`).
+- **Takeoff → BOQ → Engineering → Estimation → Commercial → Bids → Delivery**: Sequential downstream workflows operating on validated project data.
 
-**This does not reopen the MVP boundary.** UNDERSTAND and EXPLORE map to capability already scoped in `PRODUCT_SCOPE.md` (drawing-first takeoff, AI sessions, document upload). COLLABORATE beyond existing org/roles, ENGINEER (solution/assembly mapping), ESTIMATE, BID, and DELIVER map to Near-term/Long-term horizons exactly as already defined in `PRODUCT_SCOPE.md` and `../LONG_TERM_VISION.md` — this section renames and reframes the destination, it does not authorize building further than §5 already does.
+**Scope Discipline**: Establishing the Project as the root architectural container does not mean building every downstream stage immediately. The MVP focuses strictly on the drawing-first takeoff wedge, while the project-centric architecture guarantees seamless extension into downstream estimating and commercial workflows.
 
 ## 4. Why This Problem, Why Now
 

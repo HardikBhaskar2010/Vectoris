@@ -12,6 +12,7 @@
 
 | Item | Detail |
 |---|---|
+| Project workspace container | Project entity, multi-user project access, organizations, roles, project document repository |
 | Document ingestion | PDF (native-vector and scanned/raster) as primary; ingestion abstraction also architected for DWG, DXF, image, Excel |
 | Sheet classification | Identify sheet type: floor plan, schedule, legend, notes, single-line diagram |
 | Electrical component detection | Symbol/component detection with bounding-box source evidence |
@@ -24,7 +25,7 @@
 | Export | XLSX, CSV, JSON, PDF |
 | Organizations | Create org, invite members via link, role assignment |
 | Roles | Owner / Admin / Manager / Editor / Viewer with org/project/session scopes |
-| Multi-user projects | Multiple users on the same project concurrently (conflict handling TBD) |
+| Multi-user projects | Multiple users on the same project concurrently |
 | AI chat sessions | Project-scoped agentic sessions with tool-using Brain; multiple sessions per project |
 | Agentic AI (Brain + Perception + Tools + Memory + Control) | Full agentic hybrid architecture at MVP — prompting/scaffolding first, fine-tuning later |
 | Audit / correction event ledger | Structured, append-only record; foundation for future learning pipeline |
@@ -33,36 +34,28 @@
 
 ## Explicitly Out of Scope — Do Not Build Yet
 
-Consolidated from `README.md` (H1-specific) and `SCOPE.md` §24 (company-wide):
+Downstream workflows and non-core capabilities reserved for future horizons:
 
 | Out of Scope Item | Horizon |
 |---|---|
-| Material / labor estimating | Near-term / Long-term |
-| CPQ (Configure-Price-Quote) | Long-term — mature incumbent category |
-| Pricing intelligence | Long-term |
-| Commercial intelligence | Long-term |
-| Proposal generation | Long-term |
-| BOQ generation | Near-term / Long-term |
-| Application / where-used mapping | Near-term |
-| Product / material selection | Near-term / Long-term |
-| Company memory (learning system) | Near-term foundations / Long-term full |
+| Downstream BOQ generation & BOM explosion | Near-term / Long-term workflow |
+| Material / labor estimating & unit cost modeling | Near-term / Long-term workflow |
+| Pricing intelligence & commercial margin modeling | Long-term workflow |
+| Formal Proposal & Bid generation | Long-term workflow |
+| Application / where-used assembly mapping | Near-term workflow |
+| Product / material selection engine | Near-term / Long-term workflow |
+| Company memory (institutional learning system) | Near-term foundations / Long-term full |
 | Requirement-based entry (H2 pathway) | Near-term (post Gate H2-1) |
-| Revision & addenda intelligence | Near-term candidate (competitively contested) |
+| Revision & addenda intelligence | Near-term candidate |
 | Cross-OEM configuration | Long-term |
 | Full HVAC / plumbing takeoff | Long-term |
-| Full MEP platform | Long-term |
-| Project management | Long-term |
-| CRM | Long-term |
-| ERP | Long-term |
-| Procurement marketplace | Long-term |
-| Accounting | Long-term |
+| Generic CRM / ERP / Accounting / Marketplace | Explicitly rejected — Vectoris is a specialized engineering project workspace, not an ERP |
 | Autonomous engineering approval | Rejected — human approval is non-negotiable |
 | Autonomous pricing decisions | Rejected — human approval is non-negotiable |
 | Full negotiation automation | Long-term |
 | Conduit/wire quantity estimation without validation | Long-term (requires validated spike) |
-| Cross-document project-level AI synthesis ("explain this project") | Near-term (OD-24) — see `DOMAIN/PROJECT_INTELLIGENCE.md` |
-| Discipline Role tagging / curated first-view by discipline | Near-term (OD-25) — see `DOMAIN/COLLABORATION.md` |
-| Decision / Activity as first-class entities distinct from `CorrectionEvent` | Near-term (OD-24) — see `DOMAIN/PROJECT_INTELLIGENCE.md` |
+| Deep automated cross-document synthesis ("explain this project") | Near-term (OD-24) — see `DOMAIN/PROJECT_INTELLIGENCE.md` |
+| Curated first-view by discipline role | Near-term (OD-25) — see `DOMAIN/COLLABORATION.md` |
 
 ---
 

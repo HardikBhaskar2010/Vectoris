@@ -168,7 +168,7 @@ docs/
 | R4 | LONG_TERM_VISION.md | Long-term vision detail beyond VISION.md | MVP boundaries | VISION | Complete |
 | R5 | DEPENDENCIES.md | Centralized registry of all third-party libraries | Architecture context | TECH_STACK | Complete |
 | R6 | DOCUMENTATION_MANIFEST.md | Canonical index of every document in the system | Document content | All | Complete |
-| D1 | DOMAIN/PROJECT_INTELLIGENCE.md | Grounded cross-document project-level synthesis; evidence-classification discipline at project scope | MVP-authorized build detail (this is Near-term, OD-24) | VISION, AI_SESSION, DATA_MODEL | Complete (spec) — capability itself Near-term/OPEN |
+| D1 | DOMAIN/PROJECT_INTELLIGENCE.md | Core Project Management & Project Intelligence architecture container and context grounding layer across Drawings, Documents, AI, and Collaboration | Generic ERP/CRM (out of scope) | VISION, AI_SESSION, DATA_MODEL | Locked (Architecture) · Automated synthesis (OD-24) |
 | D2 | DOMAIN/COLLABORATION.md | Discipline Role (context curation) as distinct from Permission Role; referral/invite-to-existing-project flow | Permission matrix (that stays in USER_ROLES, LOCKED) | USER_ROLES, PROJECT_INTELLIGENCE | Complete (spec) — capability itself Near-term/OPEN |
 
 ## Generation Order

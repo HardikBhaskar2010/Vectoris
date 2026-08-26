@@ -6,23 +6,26 @@
 
 ---
 
-## 1. Problem Statement
+## 1. Problem Statement & Product Concept
 
-Electrical/MEP estimators and system integrators spend hours manually counting components on drawings and, downstream, assembling requirement-driven solutions into priced proposals. Category-level pain is corroborated by secondary research (6–12h manual estimates, ~38% material-pricing error rate in industry benchmarks); severity for Vectoris's specific target segment is **not yet validated** — see legacy `THESIS.md` Gates for the validation framework this PRD assumes is still in force.
+Electrical and MEP estimators, engineers, and project managers navigate complex, disconnected project documents, drawing packages, and specifications. Manual component counting and downstream pricing take 6–12 hours per package, with high error rates.
+
+Vectoris addresses this by providing an **AI-native Project Management & Project Intelligence workspace** where engineering, estimating, and commercial workflows live inside a shared Project container. The initial operational wedge is the validated **Drawing-First Takeoff MVP**.
 
 ## 2. MVP — Locked
 
 ```mermaid
 flowchart TD
-    A[Drawing Package] --> B[Document / Sheet Understanding]
-    B --> C[Electrical Component Detection]
-    C --> D[Counting + Measurement]
-    D --> E[Evidence-Backed Takeoff]
-    E --> F[Human Correction / Approval]
-    F --> G[Export]
+    A[Project Context] --> B[Drawing Package / Document Ingestion]
+    B --> C[Document / Sheet Understanding]
+    C --> D[Electrical Component Detection]
+    D --> E[Counting + Measurement]
+    E --> F[Evidence-Backed Takeoff]
+    F --> G[Human Correction / Approval]
+    G --> H[Export & Downstream Handoff]
 ```
 
-The MVP is **drawing-first**. This does not mean Vectoris only ever accepts drawings — the architecture is prepared for multiple input types (requirements, existing BOQs, specifications) per `VISION.md` — but only the drawing-based takeoff workflow is fully implemented at MVP. See `MVP_BOUNDARY.md` for the explicit in/out list.
+The MVP is **drawing-first** and executes within the native Project container. This does not mean Vectoris is merely a standalone takeoff tool — the architecture is organized around the Project container, hosting Drawings, Documents, AI Sessions, and Collaboration. See `MVP_BOUNDARY.md` for the explicit in/out list.
 
 ### 2.1 MVP Functional Requirements
 
@@ -47,7 +50,7 @@ PDF (native + scanned), DWG, DXF, images, Excel, and other project file formats 
 
 ### 2.3 Explicitly Out of MVP
 
-CPQ, pricing, labor estimation, procurement, full ERP/CRM, project management, proposal generation, autonomous pricing decisions. Full list and rationale: `MVP_BOUNDARY.md`.
+Downstream workflows (BOQ explosion, material/labor unit pricing, proposal generation, autonomous pricing) and generic non-core systems (generic ERP/CRM/accounting). Full list and rationale: `MVP_BOUNDARY.md`.
 
 ## 3. Near-Term Expansion (Not MVP, Not Yet Authorized)
 

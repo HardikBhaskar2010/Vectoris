@@ -1,12 +1,13 @@
-# Vectoris — Engineering Desktop Workstation
+# Vectoris — AI-Native Project Management & Intelligence Workspace
 
-Local-first, AI-native electrical estimating and techno-commercial engineering workstation. Unifies blueprint takeoff from CAD drawings, PDF schematics, and raster sets with on-device perception compute, local storage isolation, and cryptographic release verification.
+AI-native Project Management and Project Intelligence workspace for electrical and MEP engineering. Unifies blueprint takeoff from CAD drawings, PDF schematics, and raster sets with on-device perception compute, project-level document intelligence, local storage isolation, and cryptographic release verification.
 
 ---
 
 ## Metadata & Classification
 
-- Product: Vectoris Engineering Workstation
+- Product: Vectoris Project Management & Intelligence Workspace
+- Domain: Electrical & MEP Engineering, Blueprint Takeoff, Estimation & Bidding
 - Runtime: Tauri v2 Core (Rust 2021 + WebView2)
 - Frontend: React 19, TypeScript Strict, Vite 7
 - Security: Local-First Isolation, Minisign Ed25519 Cryptographic Verification, Strict CSP
@@ -15,8 +16,54 @@ Local-first, AI-native electrical estimating and techno-commercial engineering w
 
 ---
 
+## Core Architecture & Workflow Hierarchy
+
+Vectoris is fundamentally an **AI-native Project Management & Project Intelligence workspace** where estimating, takeoff, and bidding are major sequential workflows inside the Project container:
+
+```text
+                    VECTORIS
+                       │
+                 ┌──── PROJECT ────┐
+                 │                 │
+          PROJECT INTELLIGENCE     │
+                 │                 │
+     ┌───────────┼────────────┐    │
+     ↓           ↓            ↓    ↓
+  Drawings    Documents      AI   Collaboration
+     │
+     ↓
+  Takeoff
+     │
+     ↓
+    BOQ
+     │
+     ↓
+ Engineering
+     │
+     ↓
+ Estimation
+     │
+     ↓
+ Commercial
+     │
+     ↓
+    Bids
+     │
+     ↓
+  Delivery
+```
+
+The current **Takeoff MVP** is the operational wedge built directly within this architecture:
+
+```text
+Project → Documents / Drawings → AI + Detection → Human Verification → Takeoff → Export
+```
+
+---
+
 ## Core Capabilities
 
+- Project-Centric Workspace: Shared project evidence repository organizing drawings, documents, AI chat threads, and collaborative team roles.
 - Local-First Blueprint Takeoff: On-device geometry extraction, symbol classification, and schedule parsing without silent cloud uploads.
 - Tauri v2 Desktop Architecture: Native desktop shell with custom frameless window management, multi-threaded compute, and minimal memory overhead.
 - Cryptographically Verified Updates: In-app software updates powered by Tauri 2 Updater and Ed25519 signing keys, featuring the dedicated "Stay Put" handoff experience.

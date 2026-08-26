@@ -51,8 +51,8 @@
     },
     "publisher": "Vectoris AI Inc.",
     "copyright": "Copyright © 2026 Vectoris AI Inc. All rights reserved.",
-    "shortDescription": "Vectoris Engineering Desktop Workstation",
-    "longDescription": "Vectoris is a local-first desktop engineering workstation for electrical estimating, blueprint takeoff, and evidence-backed quantity estimation."
+    "shortDescription": "Vectoris Project Management & Intelligence Workspace",
+    "longDescription": "Vectoris is a local-first, AI-native project management and project intelligence workspace for electrical and MEP engineering, unifying drawing takeoff, document synthesis, and collaborative estimation."
   },
   "plugins": {
     "updater": {
