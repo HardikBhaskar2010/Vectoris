@@ -37,6 +37,7 @@ interface ExportHistoryItem {
 }
 
 import { useProject } from "../services/dataService";
+import { generateId } from "../services/idService";
 
 const INITIAL_HISTORY: ExportHistoryItem[] = [
   {
@@ -133,7 +134,7 @@ export default function ProjectReportsPage() {
     setExportingFormat(format);
     setTimeout(() => {
       const newItem: ExportHistoryItem = {
-        id: `exp-${Date.now().toString().slice(-4)}`,
+        id: generateId("exp"),
         format,
         filename: `${projectName.replace(/\s+/g, "_")}_${format}_${new Date().toISOString().split("T")[0]}${FORMAT_DETAILS[format].ext}`,
         item_count: 382,

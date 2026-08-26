@@ -21,6 +21,7 @@ import type {
   EngineStatusInfo,
   DocumentFormat,
 } from "../data/types";
+import { generateId } from "./idService";
 import { INITIAL_PROJECTS } from "../data/mockProjects";
 import { INITIAL_DOCUMENTS } from "../data/mockDocuments";
 import { INITIAL_SESSIONS } from "../data/mockSessions";
@@ -114,7 +115,7 @@ class DataService {
     sector?: ProjectSector;
     discipline?: string;
   }): Project {
-    const id = `p${Date.now()}`;
+    const id = generateId("p");
     const newProject: Project = {
       id,
       name: data.name,
@@ -165,20 +166,25 @@ class DataService {
       size_mb: number;
       uploaded_by?: string;
       file_path?: string;
+      storage_reference?: string;
     }>
   ): ProjectDocument[] {
-    const newDocs: ProjectDocument[] = files.map((f, idx) => ({
-      id: `d_${Date.now()}_${idx}`,
-      project_id: projectId,
-      filename: f.filename,
-      format: f.format,
-      size_mb: Number(f.size_mb.toFixed(2)),
-      upload_status: "queued", // Honest state: Queued awaiting engine processing
-      sheet_count: null,
-      uploaded_by: f.uploaded_by || "Hardik Bhaskar",
-      uploaded_at: "Just now",
-      file_path: f.file_path,
-    }));
+    const newDocs: ProjectDocument[] = files.map((f) => {
+      const docId = generateId("d");
+      return {
+        id: docId,
+        project_id: projectId,
+        filename: f.filename,
+        format: f.format,
+        size_mb: Number(f.size_mb.toFixed(2)),
+        upload_status: "queued", // Honest state: Queued awaiting engine processing
+        sheet_count: null,
+        uploaded_by: f.uploaded_by || "Hardik Bhaskar",
+        uploaded_at: "Just now",
+        file_path: f.file_path,
+        storage_reference: f.storage_reference || `projects/${projectId}/documents/${docId}/${f.filename}`,
+      };
+    });
 
     this.documents = [...newDocs, ...this.documents];
     saveToStorage("documents", this.documents);
@@ -230,13 +236,17 @@ class DataService {
     return this.lineItems.filter((li) => li.project_id === projectId);
   }
 
+  public getAllLineItems(): LineItem[] {
+    return [...this.lineItems];
+  }
+
   public addLineItem(
     projectId: string,
     item: Omit<LineItem, "id" | "project_id">
   ): LineItem {
     const newLineItem: LineItem = {
       ...item,
-      id: `li-${Date.now()}`,
+      id: generateId("li"),
       project_id: projectId,
     };
     this.lineItems.push(newLineItem);
@@ -271,13 +281,34 @@ class DataService {
 
     if (!item.correction_history) item.correction_history = [];
     item.correction_history.push({
+      id: generateId("corr"),
+      line_item_id: item.id,
       timestamp: "Just now",
       user,
+      user_id: "u-hb",
       action: `Status changed from ${prev} to ${status}`,
       previous_value: prev,
       new_value: status,
+      ai_value: `${item.quantity} ${item.unit} proposed`,
+      human_value: status === "approved" ? `${item.quantity} ${item.unit} verified` : "0 (rejected)",
+      delta: status === "approved" ? "0" : `-${item.quantity}`,
+      correction_type: status === "rejected" ? (reason?.toLowerCase().includes("scope") ? "scope_excluded" : "manual_override") : "manual_override",
+      correction_reason: reason,
       reason,
+      source: "verification",
+      model_version: item.model_version || "v2.4-native",
     });
+
+    // Bidirectional sync with any detections corresponding to this line item
+    Object.keys(this.detections).forEach((sheetKey) => {
+      this.detections[sheetKey].forEach((d) => {
+        if (d.line_item_id === id || d.label === item.item_code || d.label === item.name) {
+          d.status = status;
+          d.reviewed_by = user;
+        }
+      });
+    });
+    saveToStorage("detections", this.detections);
 
     saveToStorage("lineItems", this.lineItems);
 
@@ -307,6 +338,70 @@ class DataService {
     return this.detections[sheetId] || [];
   }
 
+  public updateDetectionStatus(
+    sheetId: string,
+    detectionId: string,
+    status: LineItemStatus,
+    user: string = "Hardik Bhaskar",
+    reason?: string
+  ): void {
+    const sheetDets = this.detections[sheetId];
+    if (!sheetDets) return;
+
+    const det = sheetDets.find((d) => d.id === detectionId);
+    if (!det) return;
+
+    const prev = det.status;
+    det.status = status;
+    det.reviewed_by = user;
+
+    // Bidirectional sync: If detection links to a LineItem, update that LineItem as well
+    const linkedItem = det.line_item_id
+      ? this.lineItems.find((li) => li.id === det.line_item_id)
+      : this.lineItems.find((li) => li.item_code === det.label || li.name === det.label);
+
+    if (linkedItem) {
+      linkedItem.status = status;
+      linkedItem.reviewed_by = user;
+      linkedItem.reviewed_at = "Just now";
+      if (reason) linkedItem.rejection_reason = reason;
+
+      if (!linkedItem.correction_history) linkedItem.correction_history = [];
+      linkedItem.correction_history.push({
+        id: generateId("corr"),
+        line_item_id: linkedItem.id,
+        timestamp: "Just now",
+        user,
+        user_id: "u-hb",
+        action: `Status changed from ${prev} to ${status}`,
+        previous_value: prev,
+        new_value: status,
+        ai_value: `${linkedItem.quantity} ${linkedItem.unit} proposed`,
+        human_value: status === "approved" ? `${linkedItem.quantity} ${linkedItem.unit} verified` : "0 (rejected)",
+        delta: status === "approved" ? "0" : `-${linkedItem.quantity}`,
+        correction_type: status === "rejected" ? (reason?.toLowerCase().includes("scope") ? "scope_excluded" : "manual_override") : "manual_override",
+        correction_reason: reason,
+        reason,
+        source: "verification",
+        model_version: det.model_version || "v2.4-native",
+      });
+      saveToStorage("lineItems", this.lineItems);
+
+      // Recalculate takeoff summary approved count
+      const projId = linkedItem.project_id;
+      const summary = this.takeoffSummaries[projId];
+      if (summary) {
+        summary.line_items_approved = this.lineItems.filter(
+          (li) => li.project_id === projId && li.status === "approved"
+        ).length;
+        saveToStorage("takeoffSummaries", this.takeoffSummaries);
+      }
+    }
+
+    saveToStorage("detections", this.detections);
+    this.notify();
+  }
+
   // ── AI Sessions ─────────────────────────────────────────────────────────────
 
   public getSessions(projectId?: string | null): ChatSession[] {
@@ -324,8 +419,9 @@ class DataService {
     title: string;
     initialMessage?: string;
   }): ChatSession {
+    const sessionId = generateId("s");
     const newSession: ChatSession = {
-      id: `s_${Date.now()}`,
+      id: sessionId,
       project_id: data.project_id || null,
       project_name: data.project_name || null,
       title: data.title,
@@ -337,7 +433,7 @@ class DataService {
       messages: data.initialMessage
         ? [
             {
-              id: `m_${Date.now()}`,
+              id: generateId("m"),
               role: "user",
               content: data.initialMessage,
               timestamp: "Just now",
@@ -372,7 +468,7 @@ class DataService {
     if (!session) return undefined;
 
     const newMsg: ChatMessage = {
-      id: `m_${Date.now()}`,
+      id: generateId("m"),
       role: msg.role,
       content: msg.content,
       timestamp: "Just now",
@@ -553,6 +649,18 @@ export function useSheets(projectId: string): Sheet[] {
   }, [projectId]);
 
   return sheets;
+}
+
+export function useLayers(): LayerDef[] {
+  const [layers, setLayers] = useState<LayerDef[]>(() => dataService.getLayers());
+
+  useEffect(() => {
+    return dataService.subscribe(() => {
+      setLayers(dataService.getLayers());
+    });
+  }, []);
+
+  return layers;
 }
 
 export function useDetections(sheetId: string): Detection[] {

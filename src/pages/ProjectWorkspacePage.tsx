@@ -17,7 +17,7 @@
  *   IBM Plex Mono telemetry, cubic-bezier(0.22, 1, 0.36, 1) transitions
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link, useRouter } from "../router";
 import { ProjectShell } from "../components/ProjectShell";
 import type { ProjectMeta } from "../components/ProjectShell";
@@ -31,11 +31,13 @@ import type {
   LineItemStatus as DetectionStatus,
 } from "../data";
 import {
-  INITIAL_PROJECTS,
-  INITIAL_SHEETS as SHEETS,
-  INITIAL_LAYERS as LAYERS,
-  INITIAL_DETECTIONS as INIT_DETECTIONS,
-} from "../data";
+  useProject,
+  useSheets,
+  useLayers,
+  useDetections,
+  useLineItems,
+  dataService,
+} from "../services/dataService";
 
 type ToolMode = "select" | "pan" | "measure";
 
@@ -50,32 +52,15 @@ interface TakeoffItem {
   layer_id: string;
 }
 
-import { useProject } from "../services/dataService";
-
-const TAKEOFF_ITEMS: Record<string, TakeoffItem[]> = {
-  s3: [
-    { id: "ti-1", detection_id: "det-2", name: "Ladder Cable Tray 600mm",  spec: "Aluminum NEMA 12B",     quantity: 127.4, unit: "MTR", status: "approved", layer_id: "CT" },
-    { id: "ti-2", detection_id: "det-1", name: "Recessed 2x4 LED Troffer", spec: "Lithonia CPX 4008",     quantity: 47,    unit: "EA",  status: "approved", layer_id: "LT" },
-    { id: "ti-3", detection_id: "det-3", name: "Duplex Receptacle 20A",    spec: "Hubbell Commercial",    quantity: 86,    unit: "EA",  status: "proposed", layer_id: "PF" },
-    { id: "ti-4", detection_id: "det-4", name: "Smoke Detector (Photo)",   spec: "Simplex 4098",          quantity: 34,    unit: "EA",  status: "approved", layer_id: "LT" },
-    { id: "ti-5", detection_id: "det-5", name: '3" EMT Rigid Conduit',     spec: "Wheatland Tube",        quantity: 184.6, unit: "MTR", status: "approved", layer_id: "PF" },
-  ],
-  s1: [
-    { id: "ti-e101-1", detection_id: "det-e101-1", name: "2x4 Troffer LED Fixture", spec: "4000K · 5000lm · 120-277V", quantity: 142, unit: "EA", status: "approved", layer_id: "LT" },
-    { id: "ti-e101-2", detection_id: "det-e101-2", name: "Emergency LED Battery",   spec: "90-min · 1400lm backup",    quantity: 24,  unit: "EA", status: "proposed", layer_id: "LT" },
-  ],
-  s2: [
-    { id: "ti-e102-1", detection_id: "det-e102-1", name: "Duplex Receptacle 20A", spec: "Hubbell Commercial", quantity: 86,    unit: "EA",  status: "proposed", layer_id: "PF" },
-    { id: "ti-e102-2", detection_id: "det-e102-2", name: '3" EMT Rigid Conduit',  spec: "Wheatland Tube",    quantity: 184.6, unit: "MTR", status: "approved", layer_id: "PF" },
-  ],
-};
-
 // ── Main Component ─────────────────────────────────────────────────────────────
 
 export default function ProjectWorkspacePage() {
   const { params, navigate } = useRouter();
   const projectId = params.id || "p1";
   const project = useProject(projectId);
+  const sheets = useSheets(projectId);
+  const layers = useLayers();
+  const lineItems = useLineItems(projectId);
 
   const projectMeta: ProjectMeta = {
     id: projectId,
@@ -90,7 +75,7 @@ export default function ProjectWorkspacePage() {
   const [isLoading,      setIsLoading]      = useState(true);
   const [activeSheetId,  setActiveSheetId]  = useState("s3");
   const [layerVis,       setLayerVis]       = useState<Record<string, boolean>>({ LT: true, CT: true, PF: true, AW: true });
-  const [detections,     setDetections]     = useState(INIT_DETECTIONS);
+  const activeDets                          = useDetections(activeSheetId);
   const [selectedDetId,  setSelectedDetId]  = useState<string | null>(null);
   const [hoveredDetId,   setHoveredDetId]   = useState<string | null>(null);
   const [toolMode,       setToolMode]       = useState<ToolMode>("select");
@@ -104,9 +89,37 @@ export default function ProjectWorkspacePage() {
 
   useEffect(() => { const t = setTimeout(() => setIsLoading(false), 900); return () => clearTimeout(t); }, []);
 
-  const activeSheet   = SHEETS.find(s => s.id === activeSheetId) ?? SHEETS[0];
-  const activeDets    = detections[activeSheetId] ?? [];
-  const activeTakeoff = TAKEOFF_ITEMS[activeSheetId] ?? [];
+  const activeSheet = sheets.find(s => s.id === activeSheetId) ?? sheets[0] ?? {
+    id: "s3",
+    project_id: projectId,
+    sheet_id: "E-104",
+    name: "Cable Tray Layout",
+    type: "floor_plan" as const,
+    detection_count: 47,
+    document_name: "E-104_CableTrayLayout.dwg",
+    is_empty: false,
+  };
+
+  // Derive Live Takeoff table items directly from canonical detections and line items
+  const activeTakeoff: TakeoffItem[] = useMemo(() => {
+    return activeDets.map((d) => {
+      const linkedLineItem = d.line_item_id
+        ? lineItems.find((li) => li.id === d.line_item_id)
+        : lineItems.find((li) => li.item_code === d.label || li.name === d.label);
+
+      return {
+        id: d.line_item_id || `ti-${d.id}`,
+        detection_id: d.id,
+        name: linkedLineItem?.name || d.label,
+        spec: linkedLineItem?.specification || `${d.category} · ${d.quantity} ${d.unit}`,
+        quantity: d.quantity,
+        unit: d.unit,
+        status: d.status,
+        layer_id: d.layer_id,
+      };
+    });
+  }, [activeDets, lineItems]);
+
   const selectedDet   = activeDets.find(d => d.id === selectedDetId) ?? null;
   const approvedCount = activeDets.filter(d => d.status === "approved").length;
   const totalDets     = activeDets.length;
@@ -137,29 +150,13 @@ export default function ProjectWorkspacePage() {
 
   // Actions
   const handleApprove = useCallback((id: string) => {
-    setDetections(prev => {
-      const u = { ...prev };
-      if (u[activeSheetId]) {
-        u[activeSheetId] = u[activeSheetId].map(d =>
-          d.id === id ? { ...d, status: "approved" as DetectionStatus, reviewed_by: "Hardik Bhaskar" } : d
-        );
-      }
-      return u;
-    });
+    dataService.updateDetectionStatus(activeSheetId, id, "approved", "Hardik Bhaskar");
     setJustApproved(id);
     setTimeout(() => setJustApproved(null), 600);
   }, [activeSheetId]);
 
-  const handleReject = useCallback((id: string) => {
-    setDetections(prev => {
-      const u = { ...prev };
-      if (u[activeSheetId]) {
-        u[activeSheetId] = u[activeSheetId].map(d =>
-          d.id === id ? { ...d, status: "rejected" as DetectionStatus } : d
-        );
-      }
-      return u;
-    });
+  const handleReject = useCallback((id: string, reason?: string) => {
+    dataService.updateDetectionStatus(activeSheetId, id, "rejected", "Hardik Bhaskar", reason);
     setSelectedDetId(null);
   }, [activeSheetId]);
 
@@ -182,7 +179,7 @@ export default function ProjectWorkspacePage() {
     setSelectedDetId(null); setSelectedRowId(null);
   }, [toolMode, measureStart]);
 
-  const handleDetClick = useCallback((e: React.MouseEvent, id: string) => {
+  const handleDetClick = useCallback((e: React.MouseEvent | React.KeyboardEvent, id: string) => {
     e.stopPropagation();
     if (toolMode !== "select") return;
     setSelectedDetId(p => p === id ? null : id);
@@ -246,10 +243,10 @@ export default function ProjectWorkspacePage() {
           <div className="wks-panel-section">
             <div className="wks-panel-section__header">
               <span className="wks-panel-section__title">Sheets</span>
-              <span className="wks-panel-section__count">{SHEETS.length}</span>
+              <span className="wks-panel-section__count">{sheets.length}</span>
             </div>
             <ul className="wks-sheet-list" role="listbox" aria-label="Drawing sheets">
-              {SHEETS.map(sheet => (
+              {sheets.map(sheet => (
                 <li
                   key={sheet.id}
                   role="option" aria-selected={sheet.id === activeSheetId}
@@ -279,7 +276,7 @@ export default function ProjectWorkspacePage() {
               <span style={{ color: "var(--app-text-muted)" }}><IconLayers /></span>
             </div>
             <ul className="wks-layer-list" aria-label="Layer visibility toggles">
-              {LAYERS.map(layer => {
+              {layers.map(layer => {
                 const on = layerVis[layer.id] ?? true;
                 return (
                   <li key={layer.id} className={`wks-layer-item${on ? "" : " wks-layer-item--off"}`}>
@@ -583,7 +580,7 @@ interface BlueprintProps {
   measureLine: { x1: number; y1: number; x2: number; y2: number; label: string } | null;
   measureStart: { x: number; y: number } | null;
   dCls: (id: string) => string;
-  handleDetClick: (e: React.MouseEvent, id: string) => void;
+  handleDetClick: (e: React.MouseEvent | React.KeyboardEvent, id: string) => void;
   setHoveredDetId: (id: string | null) => void;
   setTooltipPos: (p: { x: number; y: number } | null) => void;
 }
@@ -648,13 +645,13 @@ function BlueprintSVG({ activeSheet, activeDets, layerVis, selectedDetId, measur
       {layerVis.CT && (
         <g>
           {/* CT-TRAY-A main E-W run */}
-          <g className={dCls("det-2")} onClick={e => handleDetClick(e, "det-2")} onMouseEnter={e => onHoverIn(e, "det-2")} onMouseMove={onHoverMove} onMouseLeave={onHoverOut} tabIndex={0} onKeyDown={e => e.key === "Enter" && handleDetClick(e as any, "det-2")} aria-label="CT-TRAY-A 127.4m">
+          <g className={dCls("det-2")} onClick={e => handleDetClick(e, "det-2")} onMouseEnter={e => onHoverIn(e, "det-2")} onMouseMove={onHoverMove} onMouseLeave={onHoverOut} tabIndex={0} onKeyDown={e => e.key === "Enter" && handleDetClick(e, "det-2")} aria-label="CT-TRAY-A 127.4m">
             <rect x="238" y="162" width="382" height="28" rx="2" fill="rgba(56,189,248,0.07)" stroke="#38bdf8" strokeWidth={selectedDetId === "det-2" ? "2" : "1.5"} strokeDasharray={detStatus("det-2") !== "approved" ? "6 3" : "none"} />
             {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(i => <line key={i} x1={248 + i * 36} y1="165" x2={248 + i * 36} y2="187" stroke="rgba(56,189,248,0.32)" strokeWidth="0.8" />)}
             <text x="429" y="153" fill="#38bdf8" fontSize="9" fontFamily="IBM Plex Mono, monospace" textAnchor="middle" fontWeight="700">CT-TRAY-A — 127.4m</text>
           </g>
           {/* CT-TRAY-B secondary run */}
-          <g className={dCls("det-5")} onClick={e => handleDetClick(e, "det-5")} onMouseEnter={e => onHoverIn(e, "det-5")} onMouseMove={onHoverMove} onMouseLeave={onHoverOut} tabIndex={0} onKeyDown={e => e.key === "Enter" && handleDetClick(e as any, "det-5")} aria-label="CT-TRAY-B 84.2m">
+          <g className={dCls("det-5")} onClick={e => handleDetClick(e, "det-5")} onMouseEnter={e => onHoverIn(e, "det-5")} onMouseMove={onHoverMove} onMouseLeave={onHoverOut} tabIndex={0} onKeyDown={e => e.key === "Enter" && handleDetClick(e, "det-5")} aria-label="CT-TRAY-B 84.2m">
             <rect x="278" y="222" width="224" height="22" rx="2" fill="rgba(56,189,248,0.04)" stroke="#38bdf8" strokeWidth="1.5" strokeDasharray="6 3" />
             {[0, 1, 2, 3, 4, 5].map(i => <line key={i} x1={290 + i * 34} y1="225" x2={290 + i * 34} y2="241" stroke="rgba(56,189,248,0.24)" strokeWidth="0.8" />)}
             <text x="390" y="214" fill="#38bdf8" fontSize="8.5" fontFamily="IBM Plex Mono, monospace" textAnchor="middle" fontWeight="600">CT-TRAY-B — 84.2m</text>
@@ -669,14 +666,14 @@ function BlueprintSVG({ activeSheet, activeDets, layerVis, selectedDetId, measur
       {layerVis.LT && (
         <g>
           {/* LT-01 Active cluster */}
-          <g className={dCls("det-1")} onClick={e => handleDetClick(e, "det-1")} onMouseEnter={e => onHoverIn(e, "det-1")} onMouseMove={onHoverMove} onMouseLeave={onHoverOut} filter={selectedDetId === "det-1" ? "url(#glow-green)" : undefined} tabIndex={0} onKeyDown={e => e.key === "Enter" && handleDetClick(e as any, "det-1")} aria-label="LT-01 Active 47 EA">
+          <g className={dCls("det-1")} onClick={e => handleDetClick(e, "det-1")} onMouseEnter={e => onHoverIn(e, "det-1")} onMouseMove={onHoverMove} onMouseLeave={onHoverOut} filter={selectedDetId === "det-1" ? "url(#glow-green)" : undefined} tabIndex={0} onKeyDown={e => e.key === "Enter" && handleDetClick(e, "det-1")} aria-label="LT-01 Active 47 EA">
             {[0, 1, 2].map(row => [0, 1, 2, 3].map(col => (
               <rect key={`lt1-${row}-${col}`} x={258 + col * 28} y={272 + row * 22} width="22" height="16" rx="1" fill="rgba(52,211,153,0.09)" stroke="#34d399" strokeWidth={selectedDetId === "det-1" ? "1.8" : "1.2"} />
             ))).flat()}
             <text x="314" y="264" fill="#34d399" fontSize="9" fontFamily="IBM Plex Mono, monospace" textAnchor="middle" fontWeight="700">LT-01 (ACTIVE) 47 EA</text>
           </g>
           {/* LT-01 [45] secondary */}
-          <g className={dCls("det-4")} onClick={e => handleDetClick(e, "det-4")} onMouseEnter={e => onHoverIn(e, "det-4")} onMouseMove={onHoverMove} onMouseLeave={onHoverOut} tabIndex={0} onKeyDown={e => e.key === "Enter" && handleDetClick(e as any, "det-4")} aria-label="LT-01 45 EA proposed">
+          <g className={dCls("det-4")} onClick={e => handleDetClick(e, "det-4")} onMouseEnter={e => onHoverIn(e, "det-4")} onMouseMove={onHoverMove} onMouseLeave={onHoverOut} tabIndex={0} onKeyDown={e => e.key === "Enter" && handleDetClick(e, "det-4")} aria-label="LT-01 45 EA proposed">
             {[0, 1].map(row => [0, 1, 2].map(col => (
               <rect key={`lt4-${row}-${col}`} x={420 + col * 26} y={208 + row * 20} width="20" height="14" rx="1" fill="rgba(52,211,153,0.05)" stroke="#34d399" strokeWidth="1.2" strokeDasharray="4 2" />
             ))).flat()}
@@ -688,7 +685,7 @@ function BlueprintSVG({ activeSheet, activeDets, layerVis, selectedDetId, measur
       {/* Power Feeder */}
       {layerVis.PF && (
         <g>
-          <g className={dCls("det-3")} onClick={e => handleDetClick(e, "det-3")} onMouseEnter={e => onHoverIn(e, "det-3")} onMouseMove={onHoverMove} onMouseLeave={onHoverOut} filter={selectedDetId === "det-3" ? "url(#glow-red)" : undefined} tabIndex={0} onKeyDown={e => e.key === "Enter" && handleDetClick(e as any, "det-3")} aria-label="FEEDER-DP1">
+          <g className={dCls("det-3")} onClick={e => handleDetClick(e, "det-3")} onMouseEnter={e => onHoverIn(e, "det-3")} onMouseMove={onHoverMove} onMouseLeave={onHoverOut} filter={selectedDetId === "det-3" ? "url(#glow-red)" : undefined} tabIndex={0} onKeyDown={e => e.key === "Enter" && handleDetClick(e, "det-3")} aria-label="FEEDER-DP1">
             <rect x="486" y="298" width="54" height="70" rx="2" fill="rgba(221,2,0,0.08)" stroke="#dd0200" strokeWidth={selectedDetId === "det-3" ? "2" : "1.5"} strokeDasharray={detStatus("det-3") !== "approved" ? "5 2" : "none"} />
             {[0, 1, 2].map(i => <line key={i} x1="490" y1={318 + i * 10} x2="536" y2={318 + i * 10} stroke="#dd0200" strokeWidth="0.9" />)}
             <line x1="513" y1="298" x2="513" y2="268" stroke="#dd0200" strokeWidth="2" strokeDasharray={detStatus("det-3") !== "approved" ? "4 2" : "none"} />

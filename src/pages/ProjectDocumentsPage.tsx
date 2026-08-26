@@ -78,7 +78,7 @@ export default function ProjectDocumentsPage() {
     setIsUploading(true);
     setUploadErrors([]);
     try {
-      const result = await fileDialogService.selectFiles({ multiple: true });
+      const result = await fileDialogService.selectFiles({ projectId, multiple: true });
 
       if (result.rejectedFiles.length > 0) {
         setUploadErrors(
@@ -257,17 +257,27 @@ function DocumentRow({ doc, projectId }: { doc: ProjectDocument; projectId: stri
             <a
               href={`/project/${projectId}/workspace?doc=${doc.id}`}
               className="pd-doc-filename pd-doc-filename--link"
+              title={doc.file_path || doc.storage_reference || doc.filename}
             >
               {doc.filename}
             </a>
           ) : (
-            <span className="pd-doc-filename">{doc.filename}</span>
+            <span
+              className="pd-doc-filename"
+              title={doc.file_path || doc.storage_reference || doc.filename}
+            >
+              {doc.filename}
+            </span>
           )}
           {isError && doc.error_message && (
             <span className="pd-doc-error-msg">{doc.error_message}</span>
           )}
           {doc.upload_status === "queued" && (
-            <span className="pd-doc-queued-hint" style={{ fontSize: 11, color: "var(--text-secondary)" }}>
+            <span
+              className="pd-doc-queued-hint"
+              style={{ fontSize: 11, color: "var(--text-secondary)" }}
+              title={doc.file_path ? `Local path: ${doc.file_path}` : undefined}
+            >
               Queued · Awaiting engine processing
             </span>
           )}

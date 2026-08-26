@@ -89,11 +89,23 @@ export interface ProjectDocument {
   uploaded_at: string;
   error_message?: string;
   file_path?: string;
+  storage_reference?: string;
 }
 
 // ── Takeoff & Detection Types ─────────────────────────────────────────────────
 
 export type LineItemStatus = "proposed" | "approved" | "rejected";
+
+export type CorrectionType =
+  | "missed"
+  | "false_positive"
+  | "wrong_symbol"
+  | "wrong_classification"
+  | "duplicate"
+  | "scope_excluded"
+  | "sheet_conflict"
+  | "manual_override"
+  | "other";
 
 export interface Coordinates {
   x: number;
@@ -102,13 +114,27 @@ export interface Coordinates {
   height: number;
 }
 
+/**
+ * CorrectionRecord / CorrectionEvent (docs/03_ARCHITECTURE/DATA_MODEL.md §2)
+ * Structured audit record capturing human corrections to AI proposed takeoffs.
+ */
 export interface CorrectionRecord {
+  id?: string;
+  line_item_id?: string;
   timestamp: string;
   user: string;
+  user_id?: string;
   action: string;
   previous_value: string;
   new_value: string;
+  ai_value?: string;
+  human_value?: string;
+  delta?: string;
+  correction_type?: CorrectionType;
+  correction_reason?: string;
   reason?: string;
+  source?: "manual" | "ai_inference" | "verification";
+  model_version?: string;
 }
 
 export interface LineItem {
@@ -176,6 +202,8 @@ export interface Detection {
   unit: string;
   model_version: string;
   reviewed_by?: string;
+  coordinates?: Coordinates;
+  line_item_id?: string;
 }
 
 // ── AI Chat Session Types ─────────────────────────────────────────────────────
