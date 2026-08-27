@@ -29,6 +29,31 @@ export interface SignInParams {
 
 class AuthService {
   /**
+   * Checks whether the application is running inside a Tauri desktop shell.
+   */
+  public isTauriEnvironment(): boolean {
+    return (
+      typeof window !== "undefined" &&
+      Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
+    );
+  }
+
+  /**
+   * Resolves the appropriate authentication redirect URL based on runtime environment.
+   * - Installed Tauri Desktop: "vectoris://auth-callback"
+   * - Web Development: "http://localhost:5173/auth?mode=callback" (or current origin)
+   */
+  public getAuthRedirectUrl(): string {
+    if (this.isTauriEnvironment()) {
+      return "vectoris://auth-callback";
+    }
+    if (typeof window !== "undefined" && window.location) {
+      return `${window.location.origin}/auth?mode=callback`;
+    }
+    return "vectoris://auth-callback";
+  }
+
+  /**
    * Checks whether a given user has verified their email address.
    */
   public isEmailConfirmed(user: User | null | undefined): boolean {
@@ -91,6 +116,7 @@ class AuthService {
 
   /**
    * Signs up a new user with email, password, and optional display metadata.
+   * Explicitly attaches the environment-specific emailRedirectTo target.
    */
   public async signUp(params: SignUpParams): Promise<AuthResult> {
     if (!isSupabaseConfigured()) {
@@ -100,6 +126,8 @@ class AuthService {
       };
     }
 
+    const redirectTo = this.getAuthRedirectUrl();
+
     try {
       const { data, error } = await supabase.auth.signUp({
         email: params.email.trim(),
@@ -108,6 +136,7 @@ class AuthService {
           data: {
             full_name: params.fullName?.trim() || "",
           },
+          emailRedirectTo: redirectTo,
         },
       });
 
@@ -246,6 +275,222 @@ class AuthService {
       const msg = err instanceof Error ? err.message : "Failed to update profile.";
       return { success: false, error: msg };
     }
+  }
+
+  /**
+   * Securely parses authentication parameters (tokens or PKCE code) from a URL or fragment string.
+   */
+  public extractAuthParams(rawUrlOrFragment: string): {
+    accessToken?: string;
+    refreshToken?: string;
+    code?: string;
+    type?: string;
+    error?: string;
+    errorDescription?: string;
+  } {
+    const result: {
+      accessToken?: string;
+      refreshToken?: string;
+      code?: string;
+      type?: string;
+      error?: string;
+      errorDescription?: string;
+    } = {};
+
+    try {
+      // Handle both full URLs (vectoris://auth-callback#...) and fragment/query strings (#access_token=...)
+      let queryString = "";
+      let fragmentString = "";
+
+      if (rawUrlOrFragment.includes("#")) {
+        const parts = rawUrlOrFragment.split("#");
+        fragmentString = parts[1] || "";
+        const preHash = parts[0] || "";
+        if (preHash.includes("?")) {
+          queryString = preHash.split("?")[1] || "";
+        }
+      } else if (rawUrlOrFragment.includes("?")) {
+        queryString = rawUrlOrFragment.split("?")[1] || "";
+      } else {
+        fragmentString = rawUrlOrFragment.startsWith("#") ? rawUrlOrFragment.slice(1) : rawUrlOrFragment;
+      }
+
+      const fragmentParams = new URLSearchParams(fragmentString);
+      const queryParams = new URLSearchParams(queryString);
+
+      result.accessToken = fragmentParams.get("access_token") || queryParams.get("access_token") || undefined;
+      result.refreshToken = fragmentParams.get("refresh_token") || queryParams.get("refresh_token") || undefined;
+      result.code = fragmentParams.get("code") || queryParams.get("code") || undefined;
+      result.type = fragmentParams.get("type") || queryParams.get("type") || undefined;
+      result.error = fragmentParams.get("error") || queryParams.get("error") || undefined;
+      result.errorDescription =
+        fragmentParams.get("error_description") || queryParams.get("error_description") || undefined;
+    } catch {
+      // In case of malformed input, safely fail
+    }
+
+    return result;
+  }
+
+  /**
+   * Processes an incoming authentication callback URL (from deep link or browser redirect).
+   * Securely establishes the Supabase session and immediately clears raw tokens.
+   */
+  public async handleAuthCallback(rawUrlOrFragment: string): Promise<AuthResult> {
+    if (!isSupabaseConfigured()) {
+      return { success: false, error: "Supabase connection is not configured." };
+    }
+
+    const { accessToken, refreshToken, code, error, errorDescription } =
+      this.extractAuthParams(rawUrlOrFragment);
+
+    if (error || errorDescription) {
+      return {
+        success: false,
+        error: errorDescription || error || "Authentication verification failed.",
+      };
+    }
+
+    try {
+      if (accessToken && refreshToken) {
+        const { data, error: sessionError } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+
+        // Immediately sanitize browser URL if present
+        if (typeof window !== "undefined" && window.history && (window.location.hash || window.location.search)) {
+          try {
+            const cleanUrl = window.location.pathname;
+            window.history.replaceState(null, "", cleanUrl);
+          } catch {
+            // Ignore history errors
+          }
+        }
+
+        if (sessionError) {
+          return { success: false, error: sessionError.message };
+        }
+
+        return {
+          success: true,
+          user: data.user,
+          session: data.session,
+          isEmailUnconfirmed: false,
+        };
+      }
+
+      if (code) {
+        const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+
+        // Sanitize browser URL
+        if (typeof window !== "undefined" && window.history && window.location.search) {
+          try {
+            window.history.replaceState(null, "", window.location.pathname);
+          } catch {
+            // Ignore history errors
+          }
+        }
+
+        if (exchangeError) {
+          return { success: false, error: exchangeError.message };
+        }
+
+        return {
+          success: true,
+          user: data.user,
+          session: data.session,
+          isEmailUnconfirmed: false,
+        };
+      }
+
+      return { success: false, error: "No authentication credentials detected in callback." };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Error processing authentication callback.";
+      return { success: false, error: msg };
+    }
+  }
+
+  /**
+   * Initializes desktop deep-link listener for 'vectoris://' custom protocol handoffs,
+   * as well as web URL fragment checks on initial application mount.
+   */
+  public initializeDesktopAuthListener(
+    onAuthSuccess?: (session: Session, user: User) => void,
+    onAuthError?: (errorMsg: string) => void
+  ): () => void {
+    let isDisposed = false;
+    let deepLinkUnlisten: (() => void) | null = null;
+
+    const processIncoming = async (urlStr: string) => {
+      if (isDisposed || !urlStr) return;
+      if (urlStr.includes("access_token") || urlStr.includes("code=") || urlStr.includes("error=")) {
+        const res = await this.handleAuthCallback(urlStr);
+        if (res.success && res.session && res.user) {
+          onAuthSuccess?.(res.session, res.user);
+        } else if (res.error) {
+          onAuthError?.(res.error);
+        }
+      }
+    };
+
+    // 1. Check current window location for web callback or startup fragment
+    if (typeof window !== "undefined") {
+      const fullLocation = window.location.href;
+      if (
+        fullLocation.includes("access_token") ||
+        fullLocation.includes("code=") ||
+        fullLocation.includes("error=")
+      ) {
+        void processIncoming(fullLocation);
+      }
+    }
+
+    // 2. Setup Tauri Deep Link Plugin listener if running in desktop shell
+    if (this.isTauriEnvironment()) {
+      import("@tauri-apps/plugin-deep-link")
+        .then(async ({ onOpenUrl, getCurrent }) => {
+          if (isDisposed) return;
+
+          // Check if app was cold-started via deep link
+          try {
+            const initialUrls = await getCurrent();
+            if (initialUrls && initialUrls.length > 0) {
+              for (const url of initialUrls) {
+                await processIncoming(url);
+              }
+            }
+          } catch {
+            // Ignore if getCurrent is not supported on platform
+          }
+
+          // Listen for active runtime deep link events (app already open)
+          try {
+            const unlisten = await onOpenUrl((urls) => {
+              for (const url of urls) {
+                void processIncoming(url);
+              }
+            });
+            if (isDisposed) {
+              unlisten();
+            } else {
+              deepLinkUnlisten = unlisten;
+            }
+          } catch {
+            // Deep link listener registration handled gracefully
+          }
+        })
+        .catch(() => {
+          // Ignore import error when running outside Tauri desktop runtime
+        });
+    }
+
+    return () => {
+      isDisposed = true;
+      if (deepLinkUnlisten) {
+        deepLinkUnlisten();
+      }
+    };
   }
 
   /**

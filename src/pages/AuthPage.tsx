@@ -245,6 +245,84 @@ export function AuthPage() {
 
   const { navigate } = useRouter();
 
+  // ── Desktop Deep-Link & URL Callback Listener ─────────────────────────────
+  useEffect(() => {
+    const handleAuthSuccess = async () => {
+      setStatus("success");
+      setFormMessage("Email verified! Entering workstation…");
+      setUnverifiedEmail(null);
+
+      try {
+        const userOrgs = await organizationService.getUserOrganizations();
+        const hasOrg = userOrgs.length > 0;
+        window.setTimeout(() => {
+          if (hasOrg) {
+            navigate("/dashboard");
+          } else {
+            navigate("/onboarding");
+          }
+        }, 400);
+      } catch {
+        navigate("/onboarding");
+      }
+    };
+
+    const handleAuthError = (errMsg: string) => {
+      setStatus("blocked");
+      setFormMessage(errMsg);
+    };
+
+    const cleanup = authService.initializeDesktopAuthListener(
+      handleAuthSuccess,
+      handleAuthError
+    );
+
+    return () => cleanup();
+  }, [navigate]);
+
+  // ── Background Verification Polling (Dual-Sync Resiliency) ─────────────────
+  useEffect(() => {
+    if (!unverifiedEmail) return;
+
+    let isDisposed = false;
+    const pollInterval = setInterval(async () => {
+      if (isDisposed) return;
+      try {
+        let verifyResult: AuthResult | null = null;
+        if (password) {
+          verifyResult = await authService.signIn({ email: unverifiedEmail, password });
+        } else {
+          const user = await authService.getCurrentUser();
+          if (user && authService.isEmailConfirmed(user)) {
+            verifyResult = { success: true, user, isEmailUnconfirmed: false };
+          }
+        }
+
+        if (verifyResult?.success && !verifyResult.isEmailUnconfirmed) {
+          if (isDisposed) return;
+          clearInterval(pollInterval);
+          setVerificationFeedback("Email verified! Initializing your engineering workstation…");
+          const userOrgs = await organizationService.getUserOrganizations();
+          const hasOrg = userOrgs.length > 0;
+          window.setTimeout(() => {
+            if (hasOrg) {
+              navigate("/dashboard");
+            } else {
+              navigate("/onboarding");
+            }
+          }, 400);
+        }
+      } catch {
+        // Polling errors fail silently without blocking UI
+      }
+    }, 3500);
+
+    return () => {
+      isDisposed = true;
+      clearInterval(pollInterval);
+    };
+  }, [unverifiedEmail, password, navigate]);
+
   const handleCheckVerification = async () => {
     if (!unverifiedEmail) return;
     setIsCheckingVerification(true);

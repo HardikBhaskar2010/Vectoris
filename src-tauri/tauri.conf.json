@@ -60,6 +60,11 @@
       "endpoints": [
         "https://github.com/VectorisAI/Vectoris/releases/latest/download/latest.json"
       ]
+    },
+    "deep-link": {
+      "desktop": {
+        "schemes": ["vectoris"]
+      }
     }
   }
 }

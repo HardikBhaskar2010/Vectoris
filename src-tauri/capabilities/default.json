@@ -18,6 +18,7 @@
     "dialog:allow-open",
     "dialog:allow-message",
     "process:allow-restart",
-    "process:allow-exit"
+    "process:allow-exit",
+    "deep-link:default"
   ]
 }

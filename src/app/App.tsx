@@ -35,6 +35,8 @@ import SessionsPage from "../pages/SessionsPage";
 import SettingsPage from "../pages/SettingsPage";
 import ProjectWorkspacePage from "../pages/ProjectWorkspacePage";
 import { ProjectShell } from "../components/ProjectShell";
+import { authService } from "../services/authService";
+import { organizationService } from "../services/organizationService";
 
 function AppContent() {
   const { currentPath, searchParams, navigate } = useRouter();
@@ -75,6 +77,26 @@ function AppContent() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
+
+  // Root-level Desktop Auth Callback & Deep-Link Listener
+  useEffect(() => {
+    const handleAuthSuccess = async () => {
+      try {
+        const userOrgs = await organizationService.getUserOrganizations();
+        const hasOrg = userOrgs.length > 0;
+        if (hasOrg) {
+          navigate("/dashboard");
+        } else {
+          navigate("/onboarding");
+        }
+      } catch {
+        navigate("/onboarding");
+      }
+    };
+
+    const cleanup = authService.initializeDesktopAuthListener(handleAuthSuccess);
+    return () => cleanup();
+  }, [navigate]);
 
   const isUnauthenticated =
     currentPath === "/" || currentPath.startsWith("/auth") || currentPath.startsWith("/onboarding");
