@@ -2,15 +2,18 @@
  * fileDialogService.ts — Native & web file selection service for engineering documents.
  *
  * Implements real file selection supporting PDF, DWG, DXF, BIM, TIFF, and Excel files.
- * Works seamlessly in both Tauri desktop mode (triggering the native OS file picker and
- * capturing real OS paths) and web preview environments (graceful fallback).
+ * Works seamlessly in both Tauri desktop mode (triggering the native OS file picker, staging
+ * files locally into %APPDATA%/Vectoris/projects/{id}/documents/{id}/, and capturing real OS paths)
+ * and web preview environments (graceful fallback).
  */
 
 import { invoke } from "@tauri-apps/api/core";
 import { open as tauriOpenDialog } from "@tauri-apps/plugin-dialog";
 import type { DocumentFormat } from "../data/types";
+import { generateId } from "./idService";
 
 export interface SelectedFileMetadata {
+  id?: string;
   filename: string;
   format: DocumentFormat;
   size_mb: number;
@@ -25,14 +28,16 @@ export interface FileSelectionResult {
   rejectedFiles: Array<{ filename: string; reason: string }>;
 }
 
-interface TauriDocumentMetadataResponse {
+interface TauriDocumentStagingResponse {
+  document_id: string;
   filename: string;
-  file_path: string;
+  original_path: string;
+  staged_path: string;
+  local_reference: string;
   size_bytes: number;
   size_mb: number;
   format: string;
   is_supported: boolean;
-  storage_reference: string;
 }
 
 const SUPPORTED_EXTENSIONS: Record<string, DocumentFormat> = {
@@ -89,16 +94,16 @@ export function parseFileMetadata(file: File & { path?: string }): {
     };
   }
 
-  // If dropped in Tauri / desktop webview, file.path may contain the real OS path
   const nativePath = typeof file.path === "string" && file.path.length > 0 ? file.path : undefined;
 
   return {
     valid: true,
     metadata: {
+      id: generateId("d"),
       filename: file.name,
       format,
       size_mb: Number(sizeMb.toFixed(2)),
-      uploaded_by: "Hardik Bhaskar",
+      uploaded_by: "Project User",
       file_path: nativePath,
       storage_reference: nativePath ? `projects/local/documents/${file.name}` : undefined,
       raw_file: file,
@@ -128,7 +133,7 @@ export class FileDialogService {
   }
 
   /**
-   * Native desktop Tauri file dialog flow using @tauri-apps/plugin-dialog.
+   * Native desktop Tauri file dialog flow using @tauri-apps/plugin-dialog and local staging.
    */
   private async selectFilesViaTauriDialog(
     projectId: string,
@@ -170,24 +175,27 @@ export class FileDialogService {
       if (typeof filePath !== "string") continue;
 
       try {
-        const info = await invoke<TauriDocumentMetadataResponse>("inspect_document_file", {
+        const docId = generateId("d");
+        const info = await invoke<TauriDocumentStagingResponse>("stage_project_document", {
           projectId,
-          path: filePath,
+          documentId: docId,
+          sourcePath: filePath,
         });
 
         validFiles.push({
+          id: info.document_id,
           filename: info.filename,
           format: info.format as DocumentFormat,
           size_mb: info.size_mb,
-          uploaded_by: "Hardik Bhaskar",
-          file_path: info.file_path,
-          storage_reference: info.storage_reference,
+          uploaded_by: "Project User",
+          file_path: info.staged_path,
+          storage_reference: info.local_reference,
         });
       } catch (err) {
         const filename = filePath.split(/[/\\]/).pop() || filePath;
         rejectedFiles.push({
           filename,
-          reason: typeof err === "string" ? err : "Failed to inspect selected document",
+          reason: typeof err === "string" ? err : "Failed to stage selected document",
         });
       }
     }
@@ -242,19 +250,10 @@ export class FileDialogService {
         handleFiles(input.files);
       });
 
-      // Cleanup on window focus if cancelled
-      const handleFocus = () => {
-        setTimeout(() => {
-          if (!settled) {
-            if (!input.files || input.files.length === 0) {
-              handleFiles(null);
-            }
-          }
-          window.removeEventListener("focus", handleFocus);
-        }, 800);
-      };
+      input.addEventListener("cancel", () => {
+        handleFiles(null);
+      });
 
-      window.addEventListener("focus", handleFocus);
       document.body.appendChild(input);
       input.click();
     });

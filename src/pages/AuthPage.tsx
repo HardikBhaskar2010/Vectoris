@@ -1,8 +1,10 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "../router";
+import { Link, useRouter } from "../router";
 import { BrandMark } from "../components/BrandMark";
 import { SystemNotice } from "../components/SystemNotice";
 import { useOnlineStatus } from "../hooks/useOnlineStatus";
+import { authService, type AuthResult } from "../services/authService";
+import { organizationService } from "../services/organizationService";
 
 type AuthMode = "signin" | "signup";
 type FormStatus = "idle" | "submitting" | "blocked" | "success";
@@ -102,6 +104,26 @@ export function AuthPage() {
   const [status, setStatus] = useState<FormStatus>("idle");
   const [errors, setErrors] = useState<FormErrors>({});
   const [formMessage, setFormMessage] = useState("");
+
+  // Email verification check state
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("verify") === "pending" && params.get("email")) {
+      return params.get("email");
+    }
+    return null;
+  });
+  const [isCheckingVerification, setIsCheckingVerification] = useState(false);
+  const [verificationFeedback, setVerificationFeedback] = useState<string | null>(null);
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => prev - 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
 
   // Refs for transitions-dev sliding pill (tabs-sliding §16)
   const tabsRef = useRef<HTMLDivElement>(null);
@@ -221,12 +243,68 @@ export function AuthPage() {
     }
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const { navigate } = useRouter();
+
+  const handleCheckVerification = async () => {
+    if (!unverifiedEmail) return;
+    setIsCheckingVerification(true);
+    setVerificationFeedback(null);
+
+    try {
+      let verifyResult: AuthResult | null = null;
+      if (password) {
+        verifyResult = await authService.signIn({ email: unverifiedEmail, password });
+      } else {
+        const user = await authService.getCurrentUser();
+        if (user && authService.isEmailConfirmed(user)) {
+          verifyResult = { success: true, user, isEmailUnconfirmed: false };
+        }
+      }
+
+      if (verifyResult?.success && !verifyResult.isEmailUnconfirmed) {
+        setVerificationFeedback("Email verified! Initializing your engineering workstation…");
+        const userOrgs = await organizationService.getUserOrganizations();
+        const hasOrg = userOrgs.length > 0;
+        window.setTimeout(() => {
+          if (hasOrg) {
+            navigate("/dashboard");
+          } else {
+            navigate("/onboarding");
+          }
+        }, 500);
+      } else {
+        setVerificationFeedback(
+          "Email is not yet verified. Please click the confirmation link in your inbox, then click Check Verification Status again."
+        );
+      }
+    } catch {
+      setVerificationFeedback("Could not verify status. Please check your inbox or try resending the link.");
+    } finally {
+      setIsCheckingVerification(false);
+    }
+  };
+
+  const handleResendLink = async () => {
+    if (!unverifiedEmail || resendCooldown > 0) return;
+    try {
+      const res = await authService.resendVerificationEmail(unverifiedEmail);
+      if (res.success) {
+        setVerificationFeedback(`A fresh verification link has been dispatched to ${unverifiedEmail}.`);
+        setResendCooldown(60);
+      } else {
+        setVerificationFeedback(res.error || "Failed to resend confirmation email.");
+      }
+    } catch {
+      setVerificationFeedback("Error requesting verification link.");
+    }
+  };
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (!isOnline) {
       setStatus("blocked");
-      setFormMessage("No connection detected. Vectoris needs Supabase Auth connectivity before signing in.");
+      setFormMessage("No connection detected. Vectoris needs network connectivity before authenticating.");
       return;
     }
 
@@ -242,7 +320,6 @@ export function AuthPage() {
     if (Object.keys(nextErrors).length > 0) {
       setStatus("blocked");
       setFormMessage("Resolve the highlighted fields before continuing.");
-      // Shake all invalid fields
       if (nextErrors.fullName) triggerShake("fullName");
       if (nextErrors.email) triggerShake("email");
       if (nextErrors.password) triggerShake("password");
@@ -252,12 +329,55 @@ export function AuthPage() {
     setStatus("submitting");
     setFormMessage("");
 
-    window.setTimeout(() => {
+    try {
+      let result;
+      if (mode === "signin") {
+        result = await authService.signIn({ email, password });
+      } else {
+        result = await authService.signUp({ email, password, fullName });
+      }
+
+      if (result.isEmailUnconfirmed) {
+        setStatus("idle");
+        setUnverifiedEmail(email);
+        setVerificationFeedback(
+          mode === "signup"
+            ? `Account created! A confirmation link has been sent to ${email}. Please confirm your email before entering the workstation.`
+            : `Email verification is required for ${email}. Please check your inbox and confirm your address.`
+        );
+        return;
+      }
+
+      if (result.success && result.session) {
+        setStatus("success");
+        setFormMessage(
+          mode === "signup"
+            ? "Account created successfully. Initializing workspace…"
+            : "Credentials verified. Entering workstation…"
+        );
+        
+        // Resolve user organization membership
+        const userOrgs = await organizationService.getUserOrganizations();
+        const hasOrg = userOrgs.length > 0;
+
+        window.setTimeout(() => {
+          if (hasOrg) {
+            navigate("/dashboard");
+          } else {
+            navigate("/onboarding");
+          }
+        }, 400);
+      } else {
+        setStatus("blocked");
+        setFormMessage(result.error || "Authentication failed. Please check your credentials.");
+        triggerShake("password");
+      }
+    } catch (err: unknown) {
       setStatus("blocked");
-      setFormMessage(
-        "Supabase Auth is not connected in this frontend build yet. The UI is ready to wire to the locked auth provider.",
-      );
-    }, 560);
+      const msg = err instanceof Error ? err.message : "An unexpected error occurred during authentication.";
+      setFormMessage(msg);
+      triggerShake("password");
+    }
   };
 
   return (
@@ -312,184 +432,322 @@ export function AuthPage() {
             </aside>
           ) : null}
 
-          {/* Heading — NO eyebrow label above h1 (impeccable craft-floor ban) */}
-          <div className="auth-heading">
-            <h1 id="auth-title">{isSignup ? "Create your account" : "Sign in to Vectoris"}</h1>
-            <span>
-              {isSignup
-                ? "Join your engineering workspace and start from verified project data."
-                : "Continue to your projects, drawing packages, and review queues."}
-            </span>
-          </div>
+          {/* Conditional: Verification Required Screen vs Standard Auth Form */}
+          {unverifiedEmail ? (
+            <div className="auth-verification-view" style={{ padding: "8px 0" }}>
+              <div className="auth-heading" style={{ marginBottom: "20px" }}>
+                <h1 id="auth-title">Verify your work email</h1>
+                <span>
+                  We sent an engineering activation link to <strong>{unverifiedEmail}</strong>.
+                </span>
+              </div>
 
-          {/* Mode switch — sliding pill (transitions-dev §16) */}
-          <div
-            ref={tabsRef}
-            className="auth-mode-switch t-tabs"
-            role="tablist"
-            aria-label="Authentication mode"
-          >
-            {/* Sliding pill — aria-hidden, purely visual */}
-            <span ref={pillRef} className="auth-mode-switch__pill t-tabs-pill" aria-hidden="true" />
-
-            <button
-              type="button"
-              role="tab"
-              id="tab-signin"
-              aria-selected={!isSignup}
-              aria-controls="panel-auth"
-              className="auth-mode-switch__tab t-tab"
-              onClick={() => switchMode("signin")}
-            >
-              Sign in
-            </button>
-            <button
-              type="button"
-              role="tab"
-              id="tab-signup"
-              aria-selected={isSignup}
-              aria-controls="panel-auth"
-              className="auth-mode-switch__tab t-tab"
-              onClick={() => switchMode("signup")}
-            >
-              Create account
-            </button>
-          </div>
-
-          {/* Form-level alert */}
-          {formMessage ? (
-            <div
-              className={status === "success" ? "auth-alert auth-alert--success" : "auth-alert"}
-              role="alert"
-              tabIndex={-1}
-            >
-              {formMessage}
-            </div>
-          ) : null}
-
-          {/* Auth form */}
-          <form id="panel-auth" className="auth-form" noValidate onSubmit={handleSubmit}>
-            {isSignup ? (
-              <div className="auth-field t-input-wrap">
-                <label htmlFor="fullName">Full name</label>
-                <div className="t-input">
-                  <input
-                    id="fullName"
-                    name="fullName"
-                    type="text"
-                    autoComplete="name"
-                    value={fullName}
-                    onChange={(e) => {
-                      setFullName(e.target.value);
-                      clearFieldError("fullName", "fullName");
+              {/* Status Badge */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "12px",
+                  padding: "14px 16px",
+                  borderRadius: "8px",
+                  background: "rgba(245, 158, 11, 0.12)",
+                  border: "1px solid rgba(245, 158, 11, 0.3)",
+                  marginBottom: "20px",
+                }}
+              >
+                <span
+                  style={{
+                    width: "8px",
+                    height: "8px",
+                    borderRadius: "50%",
+                    background: "#f59e0b",
+                    boxShadow: "0 0 8px rgba(245, 158, 11, 0.6)",
+                    marginTop: "5px",
+                    flexShrink: 0,
+                  }}
+                  aria-hidden="true"
+                />
+                <div>
+                  <div
+                    style={{
+                      fontSize: "12px",
+                      fontWeight: 700,
+                      color: "#fbbf24",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.06em",
                     }}
-                    onBlur={(e) => handleBlur("fullName", e.target.value)}
-                    aria-invalid={Boolean(errors.fullName)}
-                    aria-describedby={errors.fullName ? "fullName-error" : undefined}
-                    disabled={isSubmitting}
-                    placeholder="Jane Doe"
-                  />
+                  >
+                    Status: Email Verification Required
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "12px",
+                      color: "var(--app-text-secondary, #cbd5e1)",
+                      marginTop: "4px",
+                      lineHeight: "1.4",
+                    }}
+                  >
+                    Supabase multi-tenant policy requires verified operator identity before creating organizations or loading project drawings.
+                  </div>
                 </div>
-                {errors.fullName ? (
-                  <p id="fullName-error" className="t-error-msg auth-field__error">{errors.fullName}</p>
-                ) : null}
               </div>
-            ) : null}
 
-            <div className="auth-field t-input-wrap">
-              <label htmlFor="email">Work email</label>
-              <div className="t-input">
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    clearFieldError("email", "email");
-                  }}
-                  onBlur={(e) => handleBlur("email", e.target.value)}
-                  aria-invalid={Boolean(errors.email)}
-                  aria-describedby={errors.email ? "email-error" : undefined}
-                  disabled={isSubmitting || Boolean(inviteContext.email)}
-                  placeholder="jane.doe@company.com"
-                />
-              </div>
-              {errors.email ? (
-                <p id="email-error" className="t-error-msg auth-field__error">{errors.email}</p>
-              ) : null}
-            </div>
+              {verificationFeedback && (
+                <div
+                  className={verificationFeedback.includes("verified") || verificationFeedback.includes("confirmed") ? "auth-alert auth-alert--success" : "auth-alert"}
+                  style={{ marginBottom: "20px" }}
+                  role="status"
+                >
+                  {verificationFeedback}
+                </div>
+              )}
 
-            <div className="auth-field t-input-wrap">
-              <label htmlFor="password">Password</label>
-              <div className="password-control t-input">
-                <input
-                  id="password"
-                  name="password"
-                  type={showPassword ? "text" : "password"}
-                  autoComplete={isSignup ? "new-password" : "current-password"}
-                  value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value);
-                    clearFieldError("password", "password");
-                  }}
-                  onBlur={(e) => handleBlur("password", e.target.value)}
-                  aria-invalid={Boolean(errors.password)}
-                  aria-describedby={errors.password ? "password-error password-hint" : "password-hint"}
-                  disabled={isSubmitting}
-                  placeholder="••••••••"
-                />
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                 <button
                   type="button"
-                  className="password-control__toggle"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                  aria-pressed={showPassword}
-                  onClick={() => setShowPassword((c) => !c)}
-                  disabled={isSubmitting}
+                  className="btn btn--primary"
+                  onClick={handleCheckVerification}
+                  disabled={isCheckingVerification}
+                  style={{
+                    width: "100%",
+                    padding: "12px",
+                    fontSize: "14px",
+                    fontWeight: 600,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "8px",
+                  }}
                 >
-                  {showPassword ? "Hide" : "Show"}
+                  {isCheckingVerification ? (
+                    <span>Checking Status…</span>
+                  ) : (
+                    <>
+                      <span>Check Verification Status</span>
+                      <span>→</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  className="btn btn--secondary"
+                  onClick={handleResendLink}
+                  disabled={resendCooldown > 0 || isCheckingVerification}
+                  style={{
+                    width: "100%",
+                    padding: "10px",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                  }}
+                >
+                  {resendCooldown > 0
+                    ? `Resend link in ${resendCooldown}s`
+                    : "Resend confirmation email"}
+                </button>
+
+                <button
+                  type="button"
+                  className="btn btn--ghost"
+                  onClick={() => {
+                    setUnverifiedEmail(null);
+                    setVerificationFeedback(null);
+                    setStatus("idle");
+                  }}
+                  style={{
+                    width: "100%",
+                    padding: "8px",
+                    fontSize: "13px",
+                    color: "var(--app-text-muted, #94a3b8)",
+                    marginTop: "6px",
+                  }}
+                >
+                  ← Back to Sign In
                 </button>
               </div>
-              {errors.password ? (
-                <p id="password-error" className="t-error-msg auth-field__error">{errors.password}</p>
+            </div>
+          ) : (
+            <>
+              {/* Heading — NO eyebrow label above h1 (impeccable craft-floor ban) */}
+              <div className="auth-heading">
+                <h1 id="auth-title">{isSignup ? "Create your account" : "Sign in to Vectoris"}</h1>
+                <span>
+                  {isSignup
+                    ? "Join your engineering workspace and start from verified project data."
+                    : "Continue to your projects, drawing packages, and review queues."}
+                </span>
+              </div>
+
+              {/* Mode switch — sliding pill (transitions-dev §16) */}
+              <div
+                ref={tabsRef}
+                className="auth-mode-switch t-tabs"
+                role="tablist"
+                aria-label="Authentication mode"
+              >
+                {/* Sliding pill — aria-hidden, purely visual */}
+                <span ref={pillRef} className="auth-mode-switch__pill t-tabs-pill" aria-hidden="true" />
+
+                <button
+                  type="button"
+                  role="tab"
+                  id="tab-signin"
+                  aria-selected={!isSignup}
+                  aria-controls="panel-auth"
+                  className="auth-mode-switch__tab t-tab"
+                  onClick={() => switchMode("signin")}
+                >
+                  Sign in
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  id="tab-signup"
+                  aria-selected={isSignup}
+                  aria-controls="panel-auth"
+                  className="auth-mode-switch__tab t-tab"
+                  onClick={() => switchMode("signup")}
+                >
+                  Create account
+                </button>
+              </div>
+
+              {/* Form-level alert */}
+              {formMessage ? (
+                <div
+                  className={status === "success" ? "auth-alert auth-alert--success" : "auth-alert"}
+                  role="alert"
+                  tabIndex={-1}
+                >
+                  {formMessage}
+                </div>
               ) : null}
-              <span id="password-hint" className="auth-field__hint">Password managers and paste are supported.</span>
-            </div>
 
-            <button className="auth-submit" type="submit" disabled={!canSubmit}>
-              {isSubmitting ? "Checking credentials…" : isSignup ? "Create account" : "Sign in"}
-            </button>
-          </form>
+              {/* Auth form */}
+              <form id="panel-auth" className="auth-form" noValidate onSubmit={handleSubmit}>
+                {isSignup ? (
+                  <div className="auth-field t-input-wrap">
+                    <label htmlFor="fullName">Full name</label>
+                    <div className="t-input">
+                      <input
+                        id="fullName"
+                        name="fullName"
+                        type="text"
+                        autoComplete="name"
+                        value={fullName}
+                        onChange={(e) => {
+                          setFullName(e.target.value);
+                          clearFieldError("fullName", "fullName");
+                        }}
+                        onBlur={(e) => handleBlur("fullName", e.target.value)}
+                        aria-invalid={Boolean(errors.fullName)}
+                        aria-describedby={errors.fullName ? "fullName-error" : undefined}
+                        disabled={isSubmitting}
+                        placeholder="Jane Doe"
+                      />
+                    </div>
+                    {errors.fullName ? (
+                      <p id="fullName-error" className="t-error-msg auth-field__error">{errors.fullName}</p>
+                    ) : null}
+                  </div>
+                ) : null}
 
-          {/* ── OAuth ──────────────────────────────────────────────────────── */}
-          <div className="auth-oauth">
-            <div className="auth-oauth__divider" aria-hidden="true">
-              <span>or continue with</span>
-            </div>
-            <div className="auth-oauth__buttons">
-              <button
-                type="button"
-                className="auth-oauth__btn"
-                disabled
-                aria-disabled="true"
-                aria-label="Sign in with Google (coming soon)"
-                title="Google sign-in — coming soon"
-              >
-                <GoogleWordmark />
-              </button>
-              <button
-                type="button"
-                className="auth-oauth__btn"
-                disabled
-                aria-disabled="true"
-                aria-label="Sign in with Microsoft (coming soon)"
-                title="Microsoft sign-in — coming soon"
-              >
-                <MicrosoftWordmark />
-              </button>
-            </div>
-          </div>
+                <div className="auth-field t-input-wrap">
+                  <label htmlFor="email">Work email</label>
+                  <div className="t-input">
+                    <input
+                      id="email"
+                      name="email"
+                      type="email"
+                      autoComplete="email"
+                      value={email}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        clearFieldError("email", "email");
+                      }}
+                      onBlur={(e) => handleBlur("email", e.target.value)}
+                      aria-invalid={Boolean(errors.email)}
+                      aria-describedby={errors.email ? "email-error" : undefined}
+                      disabled={isSubmitting || Boolean(inviteContext.email)}
+                      placeholder="jane.doe@company.com"
+                    />
+                  </div>
+                  {errors.email ? (
+                    <p id="email-error" className="t-error-msg auth-field__error">{errors.email}</p>
+                  ) : null}
+                </div>
+
+                <div className="auth-field t-input-wrap">
+                  <label htmlFor="password">Password</label>
+                  <div className="password-control t-input">
+                    <input
+                      id="password"
+                      name="password"
+                      type={showPassword ? "text" : "password"}
+                      autoComplete={isSignup ? "new-password" : "current-password"}
+                      value={password}
+                      onChange={(e) => {
+                        setPassword(e.target.value);
+                        clearFieldError("password", "password");
+                      }}
+                      onBlur={(e) => handleBlur("password", e.target.value)}
+                      aria-invalid={Boolean(errors.password)}
+                      aria-describedby={errors.password ? "password-error password-hint" : "password-hint"}
+                      disabled={isSubmitting}
+                      placeholder="••••••••"
+                    />
+                    <button
+                      type="button"
+                      className="password-control__toggle"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      aria-pressed={showPassword}
+                      onClick={() => setShowPassword((c) => !c)}
+                      disabled={isSubmitting}
+                    >
+                      {showPassword ? "Hide" : "Show"}
+                    </button>
+                  </div>
+                  {errors.password ? (
+                    <p id="password-error" className="t-error-msg auth-field__error">{errors.password}</p>
+                  ) : null}
+                  <span id="password-hint" className="auth-field__hint">Password managers and paste are supported.</span>
+                </div>
+
+                <button className="auth-submit" type="submit" disabled={!canSubmit}>
+                  {isSubmitting ? "Checking credentials…" : isSignup ? "Create account" : "Sign in"}
+                </button>
+              </form>
+
+              {/* ── OAuth ──────────────────────────────────────────────────────── */}
+              <div className="auth-oauth">
+                <div className="auth-oauth__divider" aria-hidden="true">
+                  <span>or continue with</span>
+                </div>
+                <div className="auth-oauth__buttons">
+                  <button
+                    type="button"
+                    className="auth-oauth__btn"
+                    disabled
+                    aria-disabled="true"
+                    aria-label="Sign in with Google (coming soon)"
+                    title="Google sign-in — coming soon"
+                  >
+                    <GoogleWordmark />
+                  </button>
+                  <button
+                    type="button"
+                    className="auth-oauth__btn"
+                    disabled
+                    aria-disabled="true"
+                    aria-label="Sign in with Microsoft (coming soon)"
+                    title="Microsoft sign-in — coming soon"
+                  >
+                    <MicrosoftWordmark />
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
 
           {/* Secondary actions */}
           <div className="auth-secondary-actions">

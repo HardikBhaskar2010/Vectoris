@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { engineService } from "../services/engineService";
+import { organizationService } from "../services/organizationService";
 
 interface DesktopTitleBarProps {
   /** Optional title override or breadcrumb */
@@ -119,6 +120,20 @@ export function DesktopTitleBar({ title, isAuthenticated = false }: DesktopTitle
     message: "Local Engine · Standby",
     is_tauri: false,
   });
+
+  const [orgName, setOrgName] = useState<string>("Workspace");
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      organizationService.getUserOrganizations().then((orgs) => {
+        const activeId = organizationService.getActiveOrganizationId();
+        const activeOrg = orgs.find((o) => o.id === activeId) || orgs[0];
+        if (activeOrg) {
+          setOrgName(activeOrg.name);
+        }
+      });
+    }
+  }, [isAuthenticated]);
 
   useEffect(() => {
     engineService.getEngineStatus().then((res) => {
@@ -310,7 +325,7 @@ export function DesktopTitleBar({ title, isAuthenticated = false }: DesktopTitle
       <div className="desktop-titlebar__right">
         {isAuthenticated && (
           <div className="desktop-titlebar__org-badge" title="Active Workspace">
-            <span>Apex Eng</span>
+            <span>{orgName}</span>
           </div>
         )}
 

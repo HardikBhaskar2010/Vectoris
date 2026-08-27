@@ -73,9 +73,9 @@ export default function ProjectWorkspacePage() {
   };
 
   const [isLoading,      setIsLoading]      = useState(true);
-  const [activeSheetId,  setActiveSheetId]  = useState("s3");
+  const [activeSheetId,  setActiveSheetId]  = useState<string | null>(() => sheets[0]?.id || null);
   const [layerVis,       setLayerVis]       = useState<Record<string, boolean>>({ LT: true, CT: true, PF: true, AW: true });
-  const activeDets                          = useDetections(activeSheetId);
+  const activeDets                          = useDetections(activeSheetId || "");
   const [selectedDetId,  setSelectedDetId]  = useState<string | null>(null);
   const [hoveredDetId,   setHoveredDetId]   = useState<string | null>(null);
   const [toolMode,       setToolMode]       = useState<ToolMode>("select");
@@ -89,16 +89,17 @@ export default function ProjectWorkspacePage() {
 
   useEffect(() => { const t = setTimeout(() => setIsLoading(false), 900); return () => clearTimeout(t); }, []);
 
-  const activeSheet = sheets.find(s => s.id === activeSheetId) ?? sheets[0] ?? {
-    id: "s3",
-    project_id: projectId,
-    sheet_id: "E-104",
-    name: "Cable Tray Layout",
-    type: "floor_plan" as const,
-    detection_count: 47,
-    document_name: "E-104_CableTrayLayout.dwg",
-    is_empty: false,
-  };
+  useEffect(() => {
+    if (sheets.length > 0) {
+      if (!activeSheetId || !sheets.some(s => s.id === activeSheetId)) {
+        setActiveSheetId(sheets[0].id);
+      }
+    } else {
+      setActiveSheetId(null);
+    }
+  }, [sheets, activeSheetId]);
+
+  const activeSheet = sheets.find(s => s.id === activeSheetId) ?? sheets[0] ?? null;
 
   // Derive Live Takeoff table items directly from canonical detections and line items
   const activeTakeoff: TakeoffItem[] = useMemo(() => {
@@ -150,13 +151,15 @@ export default function ProjectWorkspacePage() {
 
   // Actions
   const handleApprove = useCallback((id: string) => {
-    dataService.updateDetectionStatus(activeSheetId, id, "approved", "Hardik Bhaskar");
+    if (!activeSheetId) return;
+    dataService.updateDetectionStatus(activeSheetId, id, "approved", "Project Reviewer");
     setJustApproved(id);
     setTimeout(() => setJustApproved(null), 600);
   }, [activeSheetId]);
 
   const handleReject = useCallback((id: string, reason?: string) => {
-    dataService.updateDetectionStatus(activeSheetId, id, "rejected", "Hardik Bhaskar", reason);
+    if (!activeSheetId) return;
+    dataService.updateDetectionStatus(activeSheetId, id, "rejected", "Project Reviewer", reason || "Rejected by reviewer");
     setSelectedDetId(null);
   }, [activeSheetId]);
 
@@ -218,6 +221,70 @@ export default function ProjectWorkspacePage() {
       <WorkspaceSkeleton />
     </ProjectShell>
   );
+
+  if (!activeSheet || sheets.length === 0) {
+    return (
+      <ProjectShell
+        project={projectMeta}
+        activeTab="workspace"
+        headerActions={
+          <Link to={`/project/${projectId}/documents`} className="btn btn--primary btn--sm" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <path d="M8 12V3M4 6l4-4 4 4M2 14h12" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span>Upload Documents</span>
+          </Link>
+        }
+      >
+        <div
+          style={{
+            height: "calc(100dvh - var(--app-header-h) - 113px)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "#0c0c0f",
+            color: "#f8fafc",
+            textAlign: "center",
+            padding: "32px 24px",
+          }}
+        >
+          <div
+            style={{
+              width: "60px",
+              height: "60px",
+              borderRadius: "14px",
+              background: "rgba(255, 255, 255, 0.04)",
+              border: "1px solid rgba(255, 255, 255, 0.08)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              marginBottom: "16px",
+              color: "var(--accent-primary, #7d4047)",
+            }}
+          >
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
+              <polygon points="3 21 21 21 21 3 3 21" />
+              <line x1="9" y1="21" x2="9" y2="17" />
+              <line x1="13" y1="21" x2="13" y2="15" />
+              <line x1="17" y1="21" x2="17" y2="13" />
+            </svg>
+          </div>
+          <h2 style={{ fontSize: "1.2rem", fontWeight: 700, margin: "0 0 8px 0" }}>No Drawing Sheets in Workspace</h2>
+          <p style={{ fontSize: "13.5px", color: "rgba(255, 255, 255, 0.6)", maxWidth: "420px", margin: "0 0 20px 0", lineHeight: 1.5 }}>
+            Upload PDF drawing packages, DWG CAD files, or BIM schedules in the Documents tab to generate takeoff sheets and detect symbols.
+          </p>
+          <Link
+            to={`/project/${projectId}/documents`}
+            className="btn btn--primary"
+            style={{ padding: "9px 20px", fontSize: "13px", fontWeight: 600 }}
+          >
+            Go to Documents Tab →
+          </Link>
+        </div>
+      </ProjectShell>
+    );
+  }
 
   return (
     <ProjectShell
@@ -336,7 +403,7 @@ export default function ProjectWorkspacePage() {
           <div className={`wks-canvas ${cursorClass}`} onClick={handleCanvasClick} aria-label="Drawing canvas viewport">
             <div className="wks-blueprint" style={{ transform: `scale(${zoom / 100})` }}>
               <BlueprintSVG
-                activeSheetId={activeSheetId}
+                activeSheetId={activeSheet.id}
                 activeSheet={activeSheet}
                 activeDets={activeDets}
                 layerVis={layerVis}
@@ -348,6 +415,7 @@ export default function ProjectWorkspacePage() {
                 handleDetClick={handleDetClick}
                 setHoveredDetId={setHoveredDetId}
                 setTooltipPos={setTooltipPos}
+                projectName={projectMeta.name}
               />
             </div>
 
@@ -583,9 +651,10 @@ interface BlueprintProps {
   handleDetClick: (e: React.MouseEvent | React.KeyboardEvent, id: string) => void;
   setHoveredDetId: (id: string | null) => void;
   setTooltipPos: (p: { x: number; y: number } | null) => void;
+  projectName?: string;
 }
 
-function BlueprintSVG({ activeSheet, activeDets, layerVis, selectedDetId, measureLine, measureStart, dCls, handleDetClick, setHoveredDetId, setTooltipPos }: BlueprintProps) {
+function BlueprintSVG({ activeSheet, activeDets, layerVis, selectedDetId, measureLine, measureStart, dCls, handleDetClick, setHoveredDetId, setTooltipPos, projectName }: BlueprintProps) {
   function detStatus(id: string): DetectionStatus {
     return activeDets.find(d => d.id === id)?.status ?? "proposed";
   }
@@ -611,9 +680,22 @@ function BlueprintSVG({ activeSheet, activeDets, layerVis, selectedDetId, measur
       <rect x="510" y="444" width="280" height="46" fill="none" stroke="rgba(226,226,226,0.1)" strokeWidth="0.5" />
       <text x="650" y="460" fill="rgba(226,226,226,0.28)" fontSize="7" fontFamily="IBM Plex Mono, monospace" textAnchor="middle">VECTORIS ENGINEERING INTELLIGENCE</text>
       <text x="650" y="472" fill="rgba(226,226,226,0.5)" fontSize="9" fontFamily="IBM Plex Mono, monospace" textAnchor="middle" fontWeight="700">
-        ABC DATA CENTER — {activeSheet.sheet_id} {activeSheet.name.toUpperCase()}
+        {projectName ? projectName.toUpperCase() : "VECTORIS WORKSPACE"} — {activeSheet.sheet_id} {activeSheet.name.toUpperCase()}
       </text>
       <text x="650" y="484" fill="rgba(226,226,226,0.22)" fontSize="6.5" fontFamily="IBM Plex Mono, monospace" textAnchor="middle">REV B  |  SCALE 1:100 METRIC  |  CONFIDENTIAL</text>
+
+      {/* When no detections exist on a new sheet */}
+      {activeDets.length === 0 && (
+        <g>
+          <rect x="120" y="100" width="560" height="300" fill="none" stroke="rgba(226,226,226,0.12)" strokeWidth="1.5" strokeDasharray="6 4" />
+          <text x="400" y="240" fill="rgba(226,226,226,0.35)" fontSize="13" fontFamily="IBM Plex Mono, monospace" textAnchor="middle" fontWeight="600">
+            DRAWING SHEET INDEXED
+          </text>
+          <text x="400" y="265" fill="rgba(226,226,226,0.2)" fontSize="9" fontFamily="IBM Plex Mono, monospace" textAnchor="middle">
+            {activeSheet.document_name} · Ready for AI Takeoff & Symbol Inspection
+          </text>
+        </g>
+      )}
 
       {/* Architectural walls */}
       {layerVis.AW && (

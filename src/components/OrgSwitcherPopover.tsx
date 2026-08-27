@@ -1,12 +1,15 @@
 /**
- * OrgSwitcherPopover.tsx — Honest Workspace / Organization Popover.
+ * OrgSwitcherPopover.tsx — Reactive Multi-Tenant Workspace & Organization Switcher.
  *
- * Communicates current workstation scope honestly without faking organization switches.
+ * Connects with Supabase organization records, allowing users to switch between
+ * workspaces or create new organizational boundaries seamlessly.
  */
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "../router";
+import { organizationService, type OrganizationWithRole } from "../services/organizationService";
+import { dataService } from "../services/dataService";
 
 interface OrgSwitcherPopoverProps {
   isOpen: boolean;
@@ -19,8 +22,31 @@ export function OrgSwitcherPopover({ isOpen, onClose, anchorRef }: OrgSwitcherPo
   const [coords, setCoords] = useState<{ top: number; left: number; width: number }>({
     top: 0,
     left: 0,
-    width: 260,
+    width: 280,
   });
+
+  const [orgs, setOrgs] = useState<OrganizationWithRole[]>([]);
+  const [activeOrgId, setActiveOrgId] = useState<string | null>(() => organizationService.getActiveOrganizationId());
+  const [isCreating, setIsCreating] = useState(false);
+  const [newOrgName, setNewOrgName] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Load organizations
+  useEffect(() => {
+    if (!isOpen) return;
+
+    organizationService.getUserOrganizations().then((list) => {
+      setOrgs(list);
+      const current = organizationService.getActiveOrganizationId();
+      if (!current && list.length > 0) {
+        organizationService.setActiveOrganizationId(list[0].id);
+        setActiveOrgId(list[0].id);
+      } else {
+        setActiveOrgId(current);
+      }
+    });
+  }, [isOpen]);
 
   // Dynamically calculate and track anchor position
   useEffect(() => {
@@ -32,7 +58,7 @@ export function OrgSwitcherPopover({ isOpen, onClose, anchorRef }: OrgSwitcherPo
       setCoords({
         top: rect.bottom + 6,
         left: rect.left,
-        width: Math.max(rect.width, 260),
+        width: Math.max(rect.width, 280),
       });
     };
 
@@ -74,7 +100,44 @@ export function OrgSwitcherPopover({ isOpen, onClose, anchorRef }: OrgSwitcherPo
     };
   }, [isOpen, onClose, anchorRef]);
 
+  const handleSelectOrg = async (orgId: string) => {
+    if (orgId === activeOrgId) {
+      onClose();
+      return;
+    }
+    organizationService.setActiveOrganizationId(orgId);
+    setActiveOrgId(orgId);
+    await dataService.refreshFromSupabase();
+    onClose();
+  };
+
+  const handleCreateOrg = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newOrgName.trim()) return;
+
+    setIsSubmitting(true);
+    setErrorMsg(null);
+    try {
+      const createdId = await organizationService.createOrganization(newOrgName.trim());
+      if (createdId) {
+        await dataService.refreshFromSupabase();
+        const updated = await organizationService.getUserOrganizations();
+        setOrgs(updated);
+        setActiveOrgId(createdId);
+        setIsCreating(false);
+        setNewOrgName("");
+        onClose();
+      }
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : "Failed to create organization.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   if (!isOpen) return null;
+
+  const activeOrg = orgs.find((o) => o.id === activeOrgId);
 
   const content = (
     <div
@@ -93,38 +156,154 @@ export function OrgSwitcherPopover({ isOpen, onClose, anchorRef }: OrgSwitcherPo
     >
       <div className="org-popover__header">
         <span className="org-popover__tag">Active Workspace</span>
-        <h3 className="org-popover__title">Apex Engineering</h3>
-        <p className="org-popover__subtitle">Local Workstation Environment</p>
+        <h3 className="org-popover__title">
+          {activeOrg?.name || "Vectoris Engineering Labs"}
+        </h3>
+        <p className="org-popover__subtitle">
+          Role: <strong style={{ textTransform: "capitalize" }}>{activeOrg?.role || "Owner"}</strong> · Multi-Tenant Isolation
+        </p>
       </div>
 
-      <div className="org-popover__body">
-        <div className="org-popover__row">
-          <span className="org-popover__label">Active Seat</span>
-          <span className="org-popover__value">Lead Estimator / Owner</span>
-        </div>
-        <div className="org-popover__row">
-          <span className="org-popover__label">Storage Scope</span>
-          <span className="org-popover__value">Local-First (Isolated)</span>
-        </div>
-        <div className="org-popover__row">
-          <span className="org-popover__label">Team Members</span>
-          <span className="org-popover__value">12 Local Profiles</span>
+      <div className="org-popover__body" style={{ padding: "8px 12px" }}>
+        <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--color-neutral-400, #94a3b8)", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+          Available Workspaces ({orgs.length || 1})
         </div>
 
-        <div className="org-popover__notice" role="note">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-            <circle cx="8" cy="8" r="7" />
-            <path d="M8 5v3.5M8 11.5v.5" strokeLinecap="round" />
-          </svg>
-          <span>
-            Single-organization workstation mode. Multi-tenant switching will be available when cloud organization sync is connected.
-          </span>
+        <div style={{ display: "flex", flexDirection: "column", gap: "4px", maxHeight: "180px", overflowY: "auto" }}>
+          {orgs.length > 0 ? (
+            orgs.map((org) => {
+              const isSelected = org.id === activeOrgId;
+              return (
+                <button
+                  key={org.id}
+                  type="button"
+                  onClick={() => handleSelectOrg(org.id)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    width: "100%",
+                    padding: "8px 10px",
+                    borderRadius: "6px",
+                    border: isSelected ? "1px solid var(--accent-primary, #3b82f6)" : "1px solid transparent",
+                    background: isSelected ? "var(--bg-active, rgba(59, 130, 246, 0.12))" : "transparent",
+                    color: "inherit",
+                    cursor: "pointer",
+                    textAlign: "left",
+                    transition: "background 150ms ease-out",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span
+                      style={{
+                        width: "24px",
+                        height: "24px",
+                        borderRadius: "4px",
+                        background: isSelected ? "var(--accent-primary, #3b82f6)" : "var(--color-neutral-700, #334155)",
+                        color: "#fff",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "12px",
+                        fontWeight: 600,
+                      }}
+                    >
+                      {org.name[0]?.toUpperCase() || "W"}
+                    </span>
+                    <div>
+                      <div style={{ fontSize: "13px", fontWeight: 500 }}>{org.name}</div>
+                      <div style={{ fontSize: "10px", color: "var(--color-neutral-400, #94a3b8)", textTransform: "capitalize" }}>
+                        {org.role}
+                      </div>
+                    </div>
+                  </div>
+
+                  {isSelected && (
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="var(--accent-primary, #3b82f6)" strokeWidth="2">
+                      <path d="M3 8.5l3.5 3.5 6.5-7" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  )}
+                </button>
+              );
+            })
+          ) : (
+            <div style={{ padding: "8px", fontSize: "12px", color: "var(--color-neutral-400, #94a3b8)" }}>
+              Vectoris Engineering Labs (Dev)
+            </div>
+          )}
         </div>
+
+        {isCreating ? (
+          <form onSubmit={handleCreateOrg} style={{ marginTop: "10px", paddingTop: "8px", borderTop: "1px solid var(--border-subtle, rgba(255,255,255,0.08))" }}>
+            <input
+              type="text"
+              placeholder="Organization Name..."
+              value={newOrgName}
+              onChange={(e) => setNewOrgName(e.target.value)}
+              autoFocus
+              style={{
+                width: "100%",
+                padding: "6px 8px",
+                fontSize: "12px",
+                borderRadius: "4px",
+                border: "1px solid var(--border-default, #475569)",
+                background: "var(--bg-input, rgba(0,0,0,0.2))",
+                color: "inherit",
+                marginBottom: "6px",
+              }}
+            />
+            {errorMsg && <div style={{ fontSize: "10px", color: "var(--color-danger, #ef4444)", marginBottom: "4px" }}>{errorMsg}</div>}
+            <div style={{ display: "flex", gap: "6px", justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                className="btn btn--ghost"
+                style={{ padding: "4px 8px", fontSize: "11px" }}
+                onClick={() => { setIsCreating(false); setErrorMsg(null); }}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="btn btn--primary"
+                style={{ padding: "4px 10px", fontSize: "11px" }}
+                disabled={isSubmitting || !newOrgName.trim()}
+              >
+                {isSubmitting ? "Creating…" : "Create"}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setIsCreating(true)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              width: "100%",
+              marginTop: "8px",
+              padding: "6px 8px",
+              borderRadius: "4px",
+              border: "1px dashed var(--border-default, #475569)",
+              background: "transparent",
+              color: "var(--accent-primary, #3b82f6)",
+              fontSize: "12px",
+              fontWeight: 500,
+              cursor: "pointer",
+              justifyContent: "center",
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M6 2.5v7M2.5 6h7" strokeLinecap="round" />
+            </svg>
+            <span>Create New Workspace</span>
+          </button>
+        )}
       </div>
 
       <div className="org-popover__footer">
         <Link to="/settings" className="org-popover__link" onClick={() => onClose()}>
-          <span>Manage Workspace Settings</span>
+          <span>Manage Team &amp; Workspace Settings</span>
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
             <path d="M2.5 6h7M6.5 3l3 3-3 3" strokeLinecap="round" strokeLinejoin="round" />
           </svg>

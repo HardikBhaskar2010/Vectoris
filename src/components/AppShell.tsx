@@ -31,6 +31,8 @@ import { NotificationsPopover } from "./NotificationsPopover";
 import { UserProfileMenu } from "./UserProfileMenu";
 import { EngineStatusDialog } from "./EngineStatusDialog";
 import { updateService, type UpdateState } from "../services/updateService";
+import { useAuth } from "../hooks/useAuth";
+import { useActiveOrganization } from "../services/organizationService";
 
 // ── Canonical global nav — LOCKED (docs/02_DESIGN/NAVIGATION.md §1) ──────────
 const NAV_ITEMS = [
@@ -51,6 +53,7 @@ interface AppShellProps {
 export function AppShell({ children, activePath }: AppShellProps) {
   const engine = useEngineStatus();
   const allDocs = useAllDocuments();
+  const { org: activeOrg, role: activeRole } = useActiveOrganization();
   const totalSheets = allDocs.reduce((sum, d) => sum + (d.sheet_count || 0), 0);
   const queuedDocs = allDocs.filter(
     (d) => d.upload_status === "queued" || d.upload_status === "ingesting" || d.upload_status === "detecting"
@@ -58,6 +61,24 @@ export function AppShell({ children, activePath }: AppShellProps) {
   const isTauri =
     typeof window !== "undefined" &&
     Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__);
+
+  const { user, isAuthenticated } = useAuth();
+  const userDisplayName =
+    user?.user_metadata?.full_name ||
+    (user?.email ? user.email.split("@")[0].replace(/[._-]/g, " ") : "Lead Estimator");
+  const userInitials = userDisplayName
+    .split(" ")
+    .map((n: string) => n[0])
+    .join("")
+    .substring(0, 2)
+    .toUpperCase() || "LE";
+
+  const orgDisplayName = activeOrg?.name || "Apex Engineering";
+  const orgInitial = orgDisplayName[0]?.toUpperCase() || "A";
+  const roleLabel = activeRole
+    ? activeRole.charAt(0).toUpperCase() + activeRole.slice(1)
+    : (isAuthenticated ? "Owner" : "Estimator");
+  const userRole = isAuthenticated ? `${roleLabel} · Active` : "Local Standby";
 
   // Chrome interaction states
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -117,15 +138,16 @@ export function AppShell({ children, activePath }: AppShellProps) {
             ref={orgAnchorRef}
             type="button"
             className="app-org-switcher"
-            aria-label="Workspace options — Apex Engineering"
+            data-tour="workspace-header"
+            aria-label={`Workspace options — ${orgDisplayName}`}
             aria-haspopup="dialog"
             aria-expanded={isOrgOpen}
             onClick={() => setIsOrgOpen((prev) => !prev)}
           >
-            <span className="app-org-switcher__avatar" aria-hidden="true">A</span>
+            <span className="app-org-switcher__avatar" aria-hidden="true">{orgInitial}</span>
             <div className="app-org-switcher__info">
-              <span className="app-org-switcher__name">Apex Engineering</span>
-              <span className="app-org-switcher__meta">12 members</span>
+              <span className="app-org-switcher__name">{orgDisplayName}</span>
+              <span className="app-org-switcher__meta">{roleLabel} · Multi-Tenant</span>
             </div>
             <IconChevronUpDown aria-hidden="true" />
           </button>
@@ -147,10 +169,21 @@ export function AppShell({ children, activePath }: AppShellProps) {
                 : item.path === "/dashboard"
                 ? activePath === "/dashboard" || activePath === "/"
                 : activePath.startsWith(item.path);
+
+            const tourId =
+              item.path === "/projects"
+                ? "nav-projects"
+                : item.path === "/sessions"
+                ? "nav-sessions"
+                : item.path === "/settings"
+                ? "nav-settings"
+                : "nav-dashboard";
+
             return (
               <Link
                 key={item.path}
                 to={item.path}
+                data-tour={tourId}
                 className={`app-nav-item${isActive ? " app-nav-item--active" : ""}`}
                 aria-current={isActive ? "page" : undefined}
               >
@@ -311,10 +344,10 @@ export function AppShell({ children, activePath }: AppShellProps) {
                 }
               }}
             >
-              <div className="app-user-chip__avatar" aria-hidden="true">HB</div>
+              <div className="app-user-chip__avatar" aria-hidden="true">{userInitials}</div>
               <div className="app-user-chip__info" aria-hidden="true">
-                <span className="app-user-chip__name">Hardik Bhaskar</span>
-                <span className="app-user-chip__role">Owner · Apex Eng</span>
+                <span className="app-user-chip__name">{userDisplayName}</span>
+                <span className="app-user-chip__role">{userRole}</span>
               </div>
             </div>
 

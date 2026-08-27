@@ -1,98 +1,60 @@
 /**
- * mockDocuments.ts — Consolidated source of truth for documents across all projects.
+ * mockDocuments.ts — Consolidated development baseline for documents.
+ *
+ * Source of Truth: Real historical engineering documents:
+ *   - Research Folder/Sample BOQ/BOQ for GB 300 -R1.xlsx
+ *   - Research Folder/Sample BOQ/GB 300 Electrical Single Line Diagram.pdf
+ *   - Research Folder/Sample BOQ/BOQ. Emerson Climate Technologies.pdf
+ *   - Research Folder/1862-V9-Final CS-Emerson Noida-24.08.2026.xlsx
  */
 
 import type { ProjectDocument } from "./types";
 
 export const INITIAL_DOCUMENTS: ProjectDocument[] = [
+  // GB 300 Project Documents
   {
-    id: "d1",
-    project_id: "p1",
-    filename: "E-101_LightingPlan.pdf",
-    format: "PDF",
-    size_mb: 2.4,
+    id: "d1111111-1111-1111-1111-111111111111",
+    project_id: "33333333-3333-3333-3333-333333333333",
+    filename: "BOQ for GB 300 -R1.xlsx",
+    format: "XLSX",
+    size_mb: 0.46,
     upload_status: "complete",
-    sheet_count: 32,
-    uploaded_by: "Hardik Bhaskar",
-    uploaded_at: "3h ago",
+    sheet_count: 2,
+    uploaded_by: "Lead Estimator",
+    uploaded_at: "1h ago",
   },
   {
-    id: "d2",
-    project_id: "p1",
-    filename: "E-102_PowerDistribution.dwg",
-    format: "DWG",
-    size_mb: 3.1,
-    upload_status: "complete",
-    sheet_count: 48,
-    uploaded_by: "Hardik Bhaskar",
-    uploaded_at: "3h ago",
-  },
-  {
-    id: "d3",
-    project_id: "p1",
-    filename: "E-103_SingleLine.pdf",
+    id: "d1111111-1111-1111-1111-222222222222",
+    project_id: "33333333-3333-3333-3333-333333333333",
+    filename: "GB 300 Electrical Single Line Diagram.pdf",
     format: "PDF",
     size_mb: 1.8,
-    upload_status: "detecting",
-    sheet_count: 24,
-    uploaded_by: "Rina Mehta",
+    upload_status: "complete",
+    sheet_count: 1,
+    uploaded_by: "Lead Estimator",
     uploaded_at: "1h ago",
   },
+  // Emerson PAC Project Documents
   {
-    id: "d4",
-    project_id: "p1",
-    filename: "E-104_CableTrayLayout.dwg",
-    format: "DWG",
-    size_mb: 4.2,
-    upload_status: "ingesting",
-    sheet_count: 38,
-    uploaded_by: "Rina Mehta",
-    uploaded_at: "1h ago",
-  },
-  {
-    id: "d5",
-    project_id: "p1",
-    filename: "Spec_Division_26.pdf",
+    id: "d2222222-2222-2222-2222-111111111111",
+    project_id: "44444444-4444-4444-4444-444444444444",
+    filename: "BOQ. Emerson Climate Technologies.pdf",
     format: "PDF",
-    size_mb: 12.5,
-    upload_status: "parsed",
-    sheet_count: null,
-    uploaded_by: "Zaid Siddiqui",
-    uploaded_at: "2d ago",
-  },
-  {
-    id: "d6",
-    project_id: "p1",
-    filename: "E-105_EmergencyLighting.pdf",
-    format: "PDF",
-    size_mb: 1.1,
-    upload_status: "error",
-    sheet_count: null,
-    uploaded_by: "Hardik Bhaskar",
-    uploaded_at: "4h ago",
-    error_message: "Unable to parse PDF: file may be encrypted or corrupted.",
-  },
-  // Sample documents for project p2
-  {
-    id: "d201",
-    project_id: "p2",
-    filename: "M-101_HVAC_FloorPlan.dwg",
-    format: "DWG",
-    size_mb: 8.4,
+    size_mb: 0.13,
     upload_status: "complete",
-    sheet_count: 120,
-    uploaded_by: "Arjun Nair",
-    uploaded_at: "1d ago",
+    sheet_count: 1,
+    uploaded_by: "Lead Estimator",
+    uploaded_at: "45m ago",
   },
   {
-    id: "d202",
-    project_id: "p2",
-    filename: "M-102_DuctworkRouting.dwg",
-    format: "DWG",
-    size_mb: 6.2,
+    id: "d2222222-2222-2222-2222-222222222222",
+    project_id: "44444444-4444-4444-4444-444444444444",
+    filename: "1862-V9-Final CS-Emerson Noida-24.08.2026.xlsx",
+    format: "XLSX",
+    size_mb: 17.3,
     upload_status: "complete",
-    sheet_count: 88,
-    uploaded_by: "Arjun Nair",
-    uploaded_at: "1d ago",
+    sheet_count: 12,
+    uploaded_by: "Lead Estimator",
+    uploaded_at: "30m ago",
   },
 ];

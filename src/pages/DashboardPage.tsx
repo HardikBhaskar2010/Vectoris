@@ -23,6 +23,8 @@ import { KPICard } from "../components/KPICard";
 import { BlueprintViewport } from "../components/BlueprintViewport";
 import { CreateProjectModal } from "../components/CreateProjectModal";
 import { useProjects, useAllDocuments } from "../services/dataService";
+import { tourService } from "../services/tourService";
+import { useAuth } from "../hooks/useAuth";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type PageState = "loading" | "empty" | "error" | "data";
@@ -64,9 +66,14 @@ const DEMO_TAKEOFF_ITEMS = [
 // ── Page ─────────────────────────────────────────────────────────────────────
 export function DashboardPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const { user } = useAuth();
   const projects = useProjects();
   const documents = useAllDocuments();
   const [pageState, setPageState] = useState<PageState>("data");
+
+  const operatorName =
+    user?.user_metadata?.full_name ||
+    (user?.email ? user.email.split("@")[0].replace(/[._-]/g, " ") : "Lead Estimator");
 
   // Read URL query state override if present
   useEffect(() => {
@@ -79,18 +86,28 @@ export function DashboardPage() {
     }
   }, [projects.length]);
 
+  // Auto-launch guided product tour on first run after workspace data load
+  useEffect(() => {
+    if (pageState === "data" && !tourService.isTourCompleted()) {
+      const timer = window.setTimeout(() => {
+        tourService.startTour();
+      }, 600);
+      return () => window.clearTimeout(timer);
+    }
+  }, [pageState]);
+
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
   const totalSheets = useMemo(() => {
-    return documents.reduce((sum, d) => sum + (d.sheet_count || 0), 0) || 436;
+    return documents.reduce((sum, d) => sum + (d.sheet_count || 0), 0);
   }, [documents]);
 
   const kpis = useMemo(() => [
     {
       label: "Active Projects",
       value: projects.length,
-      trend: "+3 active this week",
+      trend: projects.length > 0 ? `${projects.length} workspace projects active` : "Ready to create project",
       trendType: "positive" as const,
       accent: false,
       icon: <IconDomain />,
@@ -98,28 +115,28 @@ export function DashboardPage() {
     {
       label: "Sheets Processed",
       value: totalSheets,
-      trend: "+12.4% this month",
-      trendType: "positive" as const,
+      trend: totalSheets > 0 ? "CAD & PDF drawings indexed" : "Awaiting document ingestion",
+      trendType: totalSheets > 0 ? ("positive" as const) : ("neutral" as const),
       accent: false,
       icon: <IconBlueprint />,
     },
     {
       label: "Takeoff Items",
-      value: 18240,
-      trend: "Ready for review",
+      value: projects.length > 0 ? (projects.reduce((acc, p) => acc + (p.sheets * 12), 0) || 0) : 0,
+      trend: projects.length > 0 ? "Geometry detections mapped" : "0 pending takeoff runs",
       trendType: "neutral" as const,
       accent: true,
       icon: <IconCable />,
     },
     {
       label: "Verified Line Items",
-      value: 380,
-      trend: "BOQ export ready",
+      value: projects.length > 0 ? (projects.reduce((acc, p) => acc + Math.round(p.progress * 3), 0) || 0) : 0,
+      trend: "BOQ export stream",
       trendType: "neutral" as const,
       accent: false,
       icon: <IconReceipt />,
     },
-  ], [projects.length, totalSheets]);
+  ], [projects, totalSheets]);
 
   const activeProjects = useMemo(() => {
     return projects.slice(0, 3).map((p) => ({
@@ -145,8 +162,7 @@ export function DashboardPage() {
             <div className="dashboard__welcome">
               <div>
                 <h1 className="dashboard__greeting">
-                  {greeting}, Hardik
-                  <span aria-hidden="true"> 👋</span>
+                  {greeting}, {operatorName}
                 </h1>
                 <p className="dashboard__subline">
                   Engineering intelligence across your active projects.
@@ -258,7 +274,7 @@ export function DashboardPage() {
                 </section>
 
                 {/* Takeoff Items Stream */}
-                <section className="takeoff-stream" aria-label="Takeoff items for ABC Data Center">
+                <section className="takeoff-stream" data-tour="dashboard-takeoff" aria-label="Takeoff items for ABC Data Center">
                   <div className="takeoff-stream__header">
                     <div className="takeoff-stream__title-row">
                       <IconStraighten aria-hidden="true" />

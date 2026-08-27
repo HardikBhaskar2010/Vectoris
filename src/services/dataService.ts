@@ -2,7 +2,8 @@
  * dataService.ts — Unified reactive data layer and service boundary.
  *
  * Provides a clean seam between the UI and backend/local engine capabilities.
- * Persists modifications in localStorage and notifies subscribers of state changes.
+ * Persists modifications to Supabase when authenticated, with local cache & fallback.
+ * Notifies subscribers of state changes.
  */
 
 import { useState, useEffect } from "react";
@@ -33,6 +34,14 @@ import {
   INITIAL_DETECTIONS,
 } from "../data/mockTakeoff";
 import { INITIAL_ENGINE_STATUS } from "../data/mockEngine";
+import { projectService } from "./projectService";
+import { organizationService } from "./organizationService";
+import { documentService } from "./documentService";
+import { takeoffService } from "./takeoffService";
+import { sessionService } from "./sessionService";
+import { agentRuntime } from "../ai/runtime/agentRuntime";
+import { authService } from "./authService";
+import { isSupabaseConfigured } from "./supabaseClient";
 
 const STORAGE_KEY_PREFIX = "vectoris.store.v1.";
 
@@ -65,6 +74,7 @@ class DataService {
   private detections: Record<string, Detection[]>;
   private engineStatus: EngineStatusInfo;
   private listeners: Set<() => void> = new Set();
+  private isSyncing = false;
 
   constructor() {
     this.projects = loadFromStorage<Project[]>("projects", INITIAL_PROJECTS);
@@ -79,6 +89,101 @@ class DataService {
     this.layers = loadFromStorage<LayerDef[]>("layers", INITIAL_LAYERS);
     this.detections = loadFromStorage<Record<string, Detection[]>>("detections", INITIAL_DETECTIONS);
     this.engineStatus = loadFromStorage<EngineStatusInfo>("engineStatus", INITIAL_ENGINE_STATUS);
+
+    this.initAuthSync();
+  }
+
+  private initAuthSync(): void {
+    if (!isSupabaseConfigured()) return;
+
+    // Initial check
+    authService.getSession().then((session) => {
+      if (session?.user) {
+        this.refreshFromSupabase();
+      }
+    });
+
+    // Listen for auth state changes
+    authService.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "INITIAL_SESSION") {
+        if (session?.user) {
+          this.refreshFromSupabase();
+        }
+      } else if (event === "SIGNED_OUT") {
+        // Reset projects to local store cache
+        this.projects = loadFromStorage<Project[]>("projects", INITIAL_PROJECTS);
+        this.notify();
+      }
+    });
+  }
+
+  /**
+   * Refreshes project and organization records from Supabase for the current user.
+   */
+  public async refreshFromSupabase(): Promise<void> {
+    if (this.isSyncing || !isSupabaseConfigured()) return;
+    this.isSyncing = true;
+
+    try {
+      let activeOrgId = organizationService.getActiveOrganizationId();
+
+      // If no active org stored, find user's orgs
+      if (!activeOrgId) {
+        const orgs = await organizationService.getUserOrganizations();
+        if (orgs.length > 0) {
+          activeOrgId = orgs[0].id;
+          organizationService.setActiveOrganizationId(activeOrgId);
+        } else {
+          // User has no organization yet - create a default one
+          try {
+            activeOrgId = await organizationService.createOrganization("Personal Workspace");
+          } catch (createOrgErr) {
+            console.warn("Could not auto-create default org:", createOrgErr);
+          }
+        }
+      }
+
+      if (activeOrgId) {
+        const remoteProjects = await projectService.getProjects(activeOrgId);
+        this.projects = remoteProjects || [];
+        saveToStorage("projects", this.projects);
+
+        // Fetch documents and line items for each active project
+        const allRemoteDocs: ProjectDocument[] = [];
+        const allRemoteLineItems: LineItem[] = [];
+
+        for (const proj of this.projects) {
+          const docs = await documentService.getDocuments(proj.id);
+          allRemoteDocs.push(...docs);
+
+          const items = await takeoffService.getLineItems(proj.id);
+          allRemoteLineItems.push(...items);
+
+          const summary = await takeoffService.getTakeoff(proj.id);
+          if (summary) {
+            this.takeoffSummaries[proj.id] = summary;
+          }
+        }
+
+        this.documents = allRemoteDocs;
+        saveToStorage("documents", this.documents);
+
+        this.lineItems = allRemoteLineItems;
+        saveToStorage("lineItems", this.lineItems);
+        saveToStorage("takeoffSummaries", this.takeoffSummaries);
+
+        // Fetch investigation sessions
+        const remoteSessions = await sessionService.getSessions();
+        this.sessions = remoteSessions || [];
+        saveToStorage("sessions", this.sessions);
+
+        this.notify();
+      }
+    } catch (err) {
+      console.warn("Failed to refresh data from Supabase:", err);
+    } finally {
+      this.isSyncing = false;
+    }
   }
 
   public subscribe(listener: () => void): () => void {
@@ -135,13 +240,110 @@ class DataService {
       created_at: new Date().toISOString().split("T")[0],
       updated_at: "Just now",
       member_count: 1,
-      members: [{ name: "Hardik Bhaskar", initials: "HB", role: "Owner", avatarColor: "#2d4a6e" }],
+      members: [{ name: "Current User", initials: "CU", role: "Owner", avatarColor: "#2d4a6e" }],
     };
 
     this.projects.unshift(newProject);
     saveToStorage("projects", this.projects);
     this.notify();
+
+    // Async background persistence to Supabase if configured
+    if (isSupabaseConfigured()) {
+      this.persistProjectToSupabase(newProject, data);
+    }
+
     return newProject;
+  }
+
+  public async createProjectAsync(data: {
+    name: string;
+    description?: string;
+    client?: string;
+    sector?: ProjectSector;
+    discipline?: string;
+  }): Promise<Project> {
+    if (!isSupabaseConfigured()) {
+      return this.createProject(data);
+    }
+
+    try {
+      let activeOrgId = organizationService.getActiveOrganizationId();
+      if (!activeOrgId) {
+        const orgs = await organizationService.getUserOrganizations();
+        if (orgs.length > 0) {
+          activeOrgId = orgs[0].id;
+          organizationService.setActiveOrganizationId(activeOrgId);
+        } else {
+          activeOrgId = await organizationService.createOrganization("Personal Workspace");
+        }
+      }
+
+      if (!activeOrgId) {
+        return this.createProject(data);
+      }
+
+      const remoteProj = await projectService.createProject({
+        organizationId: activeOrgId,
+        name: data.name,
+        description: data.description,
+        client: data.client,
+        sector: data.sector,
+        discipline: data.discipline,
+      });
+
+      this.projects.unshift(remoteProj);
+      saveToStorage("projects", this.projects);
+      this.notify();
+      return remoteProj;
+    } catch (err) {
+      console.warn("Supabase project creation failed, falling back to local:", err);
+      return this.createProject(data);
+    }
+  }
+
+  private async persistProjectToSupabase(
+    tempProject: Project,
+    data: {
+      name: string;
+      description?: string;
+      client?: string;
+      sector?: ProjectSector;
+      discipline?: string;
+    }
+  ): Promise<void> {
+    try {
+      let activeOrgId = organizationService.getActiveOrganizationId();
+      if (!activeOrgId) {
+        const orgs = await organizationService.getUserOrganizations();
+        if (orgs.length > 0) {
+          activeOrgId = orgs[0].id;
+          organizationService.setActiveOrganizationId(activeOrgId);
+        } else {
+          activeOrgId = await organizationService.createOrganization("Personal Workspace");
+        }
+      }
+
+      if (!activeOrgId) return;
+
+      const remote = await projectService.createProject({
+        organizationId: activeOrgId,
+        name: data.name,
+        description: data.description,
+        client: data.client,
+        sector: data.sector,
+        discipline: data.discipline,
+      });
+
+      // Swap temp local id with remote database id
+      const idx = this.projects.findIndex((p) => p.id === tempProject.id);
+      if (idx !== -1) {
+        this.projects[idx] = remote;
+        saveToStorage("projects", this.projects);
+        this.notify();
+      }
+    } catch (err) {
+      console.warn("Background project persistence to Supabase failed:", err);
+    }
   }
 
   public updateProjectType(
@@ -165,6 +367,17 @@ class DataService {
 
     saveToStorage("projects", this.projects);
     this.notify();
+
+    // Async sync to Supabase
+    if (isSupabaseConfigured() && !projectId.startsWith("p-")) {
+      projectService
+        .updateProjectType({
+          projectId,
+          displayType,
+          provenance,
+        })
+        .catch((err) => console.warn("Supabase project type update failed:", err));
+    }
   }
 
   // ── Documents ───────────────────────────────────────────────────────────────
@@ -184,6 +397,7 @@ class DataService {
   public addDocuments(
     projectId: string,
     files: Array<{
+      id?: string;
       filename: string;
       format: DocumentFormat;
       size_mb: number;
@@ -193,7 +407,7 @@ class DataService {
     }>
   ): ProjectDocument[] {
     const newDocs: ProjectDocument[] = files.map((f) => {
-      const docId = generateId("d");
+      const docId = f.id || generateId("d");
       return {
         id: docId,
         project_id: projectId,
@@ -202,7 +416,7 @@ class DataService {
         size_mb: Number(f.size_mb.toFixed(2)),
         upload_status: "queued", // Honest state: Queued awaiting engine processing
         sheet_count: null,
-        uploaded_by: f.uploaded_by || "Hardik Bhaskar",
+        uploaded_by: f.uploaded_by || "Project Engineer",
         uploaded_at: "Just now",
         file_path: f.file_path,
         storage_reference: f.storage_reference || `projects/${projectId}/documents/${docId}/${f.filename}`,
@@ -212,6 +426,27 @@ class DataService {
     this.documents = [...newDocs, ...this.documents];
     saveToStorage("documents", this.documents);
 
+    // Auto-generate Sheet entries for the new documents in this project
+    const newSheets: Sheet[] = newDocs.map((doc, idx) => {
+      const existingProjectSheets = this.sheets.filter((s) => s.project_id === projectId);
+      const sheetNumber = existingProjectSheets.length + idx + 1;
+      const cleanName = doc.filename.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
+      const sheetCode = doc.format === "PDF" ? `A-${100 + sheetNumber}` : `E-${100 + sheetNumber}`;
+      return {
+        id: generateId("s"),
+        project_id: projectId,
+        sheet_id: sheetCode,
+        name: cleanName,
+        type: doc.format === "Excel" ? "schedule" : "floor_plan",
+        detection_count: 0,
+        document_name: doc.filename,
+        is_empty: false,
+      };
+    });
+
+    this.sheets = [...this.sheets, ...newSheets];
+    saveToStorage("sheets", this.sheets);
+
     // Update project updated_at & sheets metadata if needed
     const proj = this.projects.find((p) => p.id === projectId);
     if (proj) {
@@ -220,13 +455,56 @@ class DataService {
     }
 
     this.notify();
+
+    // Async sync to Supabase if configured
+    if (isSupabaseConfigured() && !projectId.startsWith("p-")) {
+      documentService
+        .createDocuments(
+          projectId,
+          newDocs.map((d) => ({
+            id: d.id,
+            filename: d.filename,
+            format: d.format,
+            size_mb: d.size_mb,
+            file_path: d.file_path,
+            storage_reference: d.storage_reference,
+          }))
+        )
+        .then((remoteDocs) => {
+          if (remoteDocs && remoteDocs.length > 0) {
+            // Update documents in local store with remote records
+            for (const r of remoteDocs) {
+              const idx = this.documents.findIndex((d) => d.id === r.id || (d.filename === r.filename && d.project_id === projectId));
+              if (idx !== -1) {
+                this.documents[idx] = r;
+              }
+            }
+            saveToStorage("documents", this.documents);
+            this.notify();
+          }
+        })
+        .catch((err) => console.warn("Supabase document persistence failed:", err));
+    }
+
     return newDocs;
   }
 
   public removeDocument(docId: string): void {
+    const doc = this.documents.find((d) => d.id === docId);
     this.documents = this.documents.filter((d) => d.id !== docId);
+    if (doc) {
+      this.sheets = this.sheets.filter((s) => s.document_name !== doc.filename || s.project_id !== doc.project_id);
+      saveToStorage("sheets", this.sheets);
+    }
     saveToStorage("documents", this.documents);
     this.notify();
+
+    // Async soft-delete on Supabase if configured
+    if (isSupabaseConfigured() && !docId.startsWith("d-")) {
+      documentService
+        .softDeleteDocument(docId)
+        .catch((err) => console.warn("Supabase document soft-delete failed:", err));
+    }
   }
 
   // ── Takeoff & Line Items ─────────────────────────────────────────────────────
@@ -284,13 +562,38 @@ class DataService {
     }
 
     this.notify();
+
+    // Async sync to Supabase if configured
+    if (isSupabaseConfigured() && !projectId.startsWith("p-")) {
+      takeoffService
+        .createManualLineItem({
+          projectId,
+          name: item.name,
+          itemCode: item.item_code,
+          category: item.category,
+          quantity: item.quantity,
+          unit: item.unit,
+        })
+        .then((remoteItem) => {
+          if (remoteItem) {
+            const idx = this.lineItems.findIndex((li) => li.id === newLineItem.id);
+            if (idx !== -1) {
+              this.lineItems[idx] = remoteItem;
+              saveToStorage("lineItems", this.lineItems);
+              this.notify();
+            }
+          }
+        })
+        .catch((err) => console.warn("Supabase manual line item persistence failed:", err));
+    }
+
     return newLineItem;
   }
 
   public updateLineItemStatus(
     id: string,
     status: LineItemStatus,
-    user: string = "Hardik Bhaskar",
+    user: string = "Project Reviewer",
     reason?: string
   ): void {
     const item = this.lineItems.find((li) => li.id === id);
@@ -302,20 +605,22 @@ class DataService {
     item.reviewed_at = "Just now";
     if (reason) item.rejection_reason = reason;
 
+    const correctionType = status === "rejected" ? (reason?.toLowerCase().includes("scope") ? "scope_excluded" : "manual_override") : "manual_override";
+
     if (!item.correction_history) item.correction_history = [];
     item.correction_history.push({
       id: generateId("corr"),
       line_item_id: item.id,
       timestamp: "Just now",
       user,
-      user_id: "u-hb",
+      user_id: "u-active",
       action: `Status changed from ${prev} to ${status}`,
       previous_value: prev,
       new_value: status,
       ai_value: `${item.quantity} ${item.unit} proposed`,
       human_value: status === "approved" ? `${item.quantity} ${item.unit} verified` : "0 (rejected)",
       delta: status === "approved" ? "0" : `-${item.quantity}`,
-      correction_type: status === "rejected" ? (reason?.toLowerCase().includes("scope") ? "scope_excluded" : "manual_override") : "manual_override",
+      correction_type: correctionType,
       correction_reason: reason,
       reason,
       source: "verification",
@@ -347,6 +652,28 @@ class DataService {
     }
 
     this.notify();
+
+    // Async RPC sync to Supabase if configured
+    if (isSupabaseConfigured() && !id.startsWith("li-mock") && !id.startsWith("li-")) {
+      if (status === "approved") {
+        takeoffService
+          .approveLineItem({
+            lineItemId: id,
+            humanValue: `${item.quantity} ${item.unit}`,
+            correctionType,
+            reason,
+          })
+          .catch((err) => console.warn("Supabase approve_line_item RPC failed:", err));
+      } else if (status === "rejected") {
+        takeoffService
+          .rejectLineItem({
+            lineItemId: id,
+            correctionType,
+            reason: reason || "Rejected by user during review",
+          })
+          .catch((err) => console.warn("Supabase reject_line_item RPC failed:", err));
+      }
+    }
   }
 
   public getSheets(projectId: string): Sheet[] {
@@ -365,7 +692,7 @@ class DataService {
     sheetId: string,
     detectionId: string,
     status: LineItemStatus,
-    user: string = "Hardik Bhaskar",
+    user: string = "Project Reviewer",
     reason?: string
   ): void {
     const sheetDets = this.detections[sheetId];
@@ -395,7 +722,7 @@ class DataService {
         line_item_id: linkedItem.id,
         timestamp: "Just now",
         user,
-        user_id: "u-hb",
+        user_id: "u-active",
         action: `Status changed from ${prev} to ${status}`,
         previous_value: prev,
         new_value: status,
@@ -450,7 +777,7 @@ class DataService {
       title: data.title,
       last_message_preview: data.initialMessage || "New discussion started",
       message_count: data.initialMessage ? 1 : 0,
-      created_by: "Hardik Bhaskar",
+      created_by: "Project User",
       created_at: "Just now",
       updated_at: "Just now",
       messages: data.initialMessage
@@ -468,6 +795,29 @@ class DataService {
     this.sessions.unshift(newSession);
     saveToStorage("sessions", this.sessions);
     this.notify();
+
+    // Async sync to Supabase if configured
+    if (isSupabaseConfigured()) {
+      sessionService
+        .createSession({
+          project_id: data.project_id || null,
+          project_name: data.project_name || null,
+          title: data.title,
+          initialMessage: data.initialMessage,
+        })
+        .then((remoteSession) => {
+          if (remoteSession) {
+            const idx = this.sessions.findIndex((s) => s.id === sessionId);
+            if (idx !== -1) {
+              this.sessions[idx] = remoteSession;
+              saveToStorage("sessions", this.sessions);
+              this.notify();
+            }
+          }
+        })
+        .catch((err) => console.warn("Supabase chat_session persistence failed:", err));
+    }
+
     return newSession;
   }
 
@@ -475,6 +825,12 @@ class DataService {
     this.sessions = this.sessions.filter((s) => s.id !== sessionId);
     saveToStorage("sessions", this.sessions);
     this.notify();
+
+    if (isSupabaseConfigured() && !sessionId.startsWith("s1")) {
+      sessionService
+        .deleteSession(sessionId)
+        .catch((err) => console.warn("Supabase delete session failed:", err));
+    }
   }
 
   public addSessionMessage(
@@ -509,6 +865,49 @@ class DataService {
 
     saveToStorage("sessions", this.sessions);
     this.notify();
+
+    // Async sync message to Supabase
+    if (isSupabaseConfigured() && !sessionId.startsWith("s1")) {
+      sessionService
+        .addMessage({
+          sessionId,
+          role: msg.role,
+          content: msg.content,
+          thought_trace: msg.thought_trace,
+          tool_steps: msg.tool_steps,
+          evidence: msg.evidence,
+          action_proposal: msg.action_proposal,
+        })
+        .catch((err) => console.warn("Supabase message persistence failed:", err));
+    }
+
+    // If a user message was sent, run the Vectoris Agent investigation asynchronously
+    if (msg.role === "user") {
+      agentRuntime
+        .runInvestigation({
+          sessionId,
+          projectId: session.project_id,
+          inquiry: msg.content,
+        })
+        .then((result) => {
+          this.addSessionMessage(sessionId, {
+            role: "assistant",
+            content: result.content,
+            thought_trace: result.thoughtTrace,
+            tool_steps: result.toolSteps,
+            evidence: result.evidence,
+            action_proposal: result.actionProposal,
+          });
+        })
+        .catch((err) => {
+          console.error("Agent investigation runtime error:", err);
+          this.addSessionMessage(sessionId, {
+            role: "assistant",
+            content: "⚠️ The Vectoris Agent encountered an unexpected runtime error during the investigation. Please check project permissions and try again.",
+          });
+        });
+    }
+
     return newMsg;
   }
 
@@ -516,7 +915,7 @@ class DataService {
     sessionId: string,
     messageId: string,
     status: "approved" | "rejected",
-    user: string = "Hardik Bhaskar"
+    user: string = "Project User"
   ): void {
     const session = this.sessions.find((s) => s.id === sessionId);
     if (!session) return;
@@ -574,7 +973,7 @@ class DataService {
                 line_item_id: itemCode,
                 timestamp: "Just now",
                 user,
-                user_id: "u-hb",
+                user_id: "u-active",
                 action: "Item committed and verified from Investigation Workshop",
                 previous_value: "proposed (investigation)",
                 new_value: "approved",

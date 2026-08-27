@@ -43,7 +43,7 @@ export interface Project {
   status: ProjectStatus;
   progress: number;
   sheets: number;
-  sheetType: "DWG" | "PDF" | "BIM";
+  sheetType: "DWG" | "PDF" | "BIM" | "XLSX" | string;
   created_at: string;
   updated_at: string;
   member_count: number;
@@ -62,7 +62,7 @@ export interface ProjectMeta {
 
 // ── Document Types ───────────────────────────────────────────────────────────
 
-export type DocumentFormat = "PDF" | "DWG" | "DXF" | "BIM" | "TIFF" | "Excel" | "Other";
+export type DocumentFormat = "PDF" | "DWG" | "DXF" | "BIM" | "TIFF" | "Excel" | "XLSX" | "Other";
 
 /**
  * Processing states per document (docs/06_PAGES/PROCESSING.md):
@@ -137,6 +137,47 @@ export interface CorrectionRecord {
   model_version?: string;
 }
 
+export type LineItemCategory =
+  | "Lighting"
+  | "Cable Tray"
+  | "Cable Trays"
+  | "Power Distribution"
+  | "Conduit"
+  | "Equipment"
+  | "Safety"
+  | "Power Cables"
+  | "Control Cabling"
+  | "Automatic Transfer Switches"
+  | "Receptacles & Sockets"
+  | "Cable Accessories"
+  | "Earthing & Grounding"
+  | "Refrigerant Piping"
+  | "Thermal Insulation"
+  | "Structural Fabrication"
+  | "Condensate Drainage"
+  | "Refrigerants & Chemicals"
+  | "Extended Piping"
+  | "Humidification Water"
+  | "Valves & Fittings"
+  | "Equipment Commissioning"
+  | "Drainage Equipment"
+  | (string & {});
+
+export type LineItemUnit =
+  | "EA"
+  | "m"
+  | "ft"
+  | "SET"
+  | "LOT"
+  | "NOS"
+  | "MTR"
+  | "RM"
+  | "KGS"
+  | "LTR"
+  | "sqm"
+  | "Rmt"
+  | (string & {});
+
 export interface LineItem {
   id: string;
   project_id: string;
@@ -144,9 +185,9 @@ export interface LineItem {
   name: string;
   description: string;
   specification: string;
-  category: "Lighting" | "Cable Tray" | "Power Distribution" | "Conduit" | "Equipment" | "Safety";
+  category: LineItemCategory;
   quantity: number;
-  unit: "EA" | "m" | "ft" | "SET" | "LOT";
+  unit: LineItemUnit;
   source_document_id: string;
   source_document_name: string;
   source_sheet: string;

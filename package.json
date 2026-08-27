@@ -14,10 +14,12 @@
     "tauri:build": "node scripts/tauri.js build --target x86_64-pc-windows-gnu"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.4",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-dialog": "^2.2.0",
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-updater": "^2.10.1",
+    "driver.js": "^1.8.0",
     "motion": "^13.1.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"

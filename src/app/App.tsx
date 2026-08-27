@@ -24,6 +24,7 @@ import { useEffect } from "react";
 import { RouterProvider, useRouter } from "../router";
 import { DesktopTitleBar } from "../components/DesktopTitleBar";
 import { AuthPage } from "../pages/AuthPage";
+import { OnboardingPage } from "../pages/OnboardingPage";
 import { DashboardPage } from "../pages/DashboardPage";
 import ProjectsPage from "../pages/ProjectsPage";
 import ProjectOverviewPage from "../pages/ProjectOverviewPage";
@@ -75,10 +76,12 @@ function AppContent() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  const isUnauthenticated = currentPath === "/" || currentPath.startsWith("/auth");
+  const isUnauthenticated =
+    currentPath === "/" || currentPath.startsWith("/auth") || currentPath.startsWith("/onboarding");
 
   const getPageTitle = () => {
     if (currentPath === "/" || currentPath.startsWith("/auth")) return "Workstation Login";
+    if (currentPath.startsWith("/onboarding")) return "Workspace Onboarding";
     if (currentPath.startsWith("/dashboard")) return "Command Dashboard";
     if (currentPath.startsWith("/projects")) return "Project Index";
     if (currentPath.startsWith("/sessions")) return "Investigation Workshop";
@@ -93,6 +96,7 @@ function AppContent() {
   const renderContent = () => {
     // ── Root Entry Surface & Auth ──────────────────────────────────────────────
     if (currentPath === "/" || currentPath.startsWith("/auth")) return <AuthPage />;
+    if (currentPath === "/onboarding" || currentPath.startsWith("/onboarding")) return <OnboardingPage />;
 
     // ── Top-level nav ───────────────────────────────────────────────────────────
     if (currentPath === "/dashboard" || currentPath.startsWith("/dashboard")) return <DashboardPage />;

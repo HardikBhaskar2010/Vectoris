@@ -175,7 +175,7 @@ export default function SessionsPage() {
   // Approve takeoff proposal
   const handleApproveProposal = (msgId: string) => {
     if (isViewer) return;
-    dataService.updateProposalStatus(activeSession.id, msgId, "approved", "Hardik Bhaskar");
+    dataService.updateProposalStatus(activeSession.id, msgId, "approved", "Project Reviewer");
   };
 
   // Toggle trace expansion

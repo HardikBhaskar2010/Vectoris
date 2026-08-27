@@ -33,7 +33,7 @@ export interface ProjectItem {
   discipline: string;
   status: ProjectStatus;
   sheets: number;
-  sheetType: "DWG" | "PDF" | "BIM";
+  sheetType: "DWG" | "PDF" | "BIM" | "XLSX" | string;
   progress: number;
   updatedAt: string;
   members: Array<{ name: string; initials: string; avatarColor?: string }>;

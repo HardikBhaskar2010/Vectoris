@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use tauri::Manager;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct EngineStatusResponse {
@@ -111,6 +112,105 @@ fn inspect_document_file(project_id: String, path: String) -> Result<DocumentMet
     })
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct DocumentStagingResponse {
+    pub document_id: String,
+    pub filename: String,
+    pub original_path: String,
+    pub staged_path: String,
+    pub local_reference: String,
+    pub size_bytes: u64,
+    pub size_mb: f64,
+    pub format: String,
+    pub is_supported: bool,
+}
+
+#[tauri::command]
+fn stage_project_document(
+    app_handle: tauri::AppHandle,
+    project_id: String,
+    document_id: String,
+    source_path: String,
+) -> Result<DocumentStagingResponse, String> {
+    let src = std::path::Path::new(&source_path);
+    if !src.exists() || !src.is_file() {
+        return Err("Source document does not exist or is not an accessible file".to_string());
+    }
+
+    let filename = src
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("document")
+        .to_string();
+
+    let ext = src
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+
+    let (format, is_supported) = match ext.as_str() {
+        "pdf" => ("PDF", true),
+        "dwg" => ("DWG", true),
+        "dxf" => ("DXF", true),
+        "bim" | "rvt" | "ifc" => ("BIM", true),
+        "tiff" | "tif" => ("TIFF", true),
+        "xlsx" | "xls" | "csv" => ("Excel", true),
+        _ => ("Other", false),
+    };
+
+    if !is_supported {
+        return Err(format!(
+            "Unsupported file extension '.{}'. Supported: PDF, DWG, DXF, BIM, TIFF, Excel",
+            ext
+        ));
+    }
+
+    let metadata = std::fs::metadata(src).map_err(|e| format!("Failed to read file metadata: {}", e))?;
+    let size_bytes = metadata.len();
+    let size_mb = (size_bytes as f64) / (1024.0 * 1024.0);
+
+    if size_mb > 500.0 {
+        return Err(format!("File size ({:.1} MB) exceeds maximum limit of 500 MB", size_mb));
+    }
+
+    // Resolve app data directory for staging
+    let app_data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to resolve app data directory: {}", e))?;
+
+    let target_dir = app_data_dir
+        .join("projects")
+        .join(&project_id)
+        .join("documents")
+        .join(&document_id);
+
+    std::fs::create_dir_all(&target_dir)
+        .map_err(|e| format!("Failed to create project document directory: {}", e))?;
+
+    let target_file = target_dir.join(&filename);
+
+    // Copy file into project storage directory
+    std::fs::copy(src, &target_file)
+        .map_err(|e| format!("Failed to stage document file: {}", e))?;
+
+    let staged_path = target_file.to_string_lossy().to_string();
+    let local_reference = format!("projects/{}/documents/{}/{}", project_id, document_id, filename);
+
+    Ok(DocumentStagingResponse {
+        document_id,
+        filename,
+        original_path: source_path,
+        staged_path,
+        local_reference,
+        size_bytes,
+        size_mb: (size_mb * 100.0).round() / 100.0,
+        format: format.to_string(),
+        is_supported,
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -126,6 +226,7 @@ pub fn run() {
             get_engine_status,
             get_platform_info,
             inspect_document_file,
+            stage_project_document,
         ])
         .setup(|_app| Ok(()))
         .run(tauri::generate_context!())

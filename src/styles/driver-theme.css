@@ -1,0 +1,185 @@
+/**
+ * driver-theme.css — Custom Vectoris Design System theme for Driver.js.
+ *
+ * Implements locked specifications:
+ * - Urbanist typography hierarchy
+ * - Dark & light theme token compliance
+ * - Non-blocking overlay with subtle backdrop blur
+ * - Emil Kowalski & Impeccable micro-interactions (:active transform, custom ease)
+ * - prefers-reduced-motion support
+ */
+
+@import "driver.js/dist/driver.css";
+
+/* ── Overlay Dimmer ────────────────────────────────────────────────────────── */
+.driver-overlay {
+  background: rgba(0, 0, 0, 0.65) !important;
+  backdrop-filter: blur(3px) !important;
+  transition: opacity 200ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+[data-theme="light"] .driver-overlay {
+  background: rgba(15, 23, 42, 0.45) !important;
+}
+
+/* ── Popover Container ─────────────────────────────────────────────────────── */
+.driver-popover.vectoris-driver-popover {
+  background: var(--app-surface-1, #18191c) !important;
+  border: 1px solid var(--app-border, rgba(255, 255, 255, 0.12)) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.05) !important;
+  color: var(--app-text-primary, #f8fafc) !important;
+  font-family: var(--font-technical, "Urbanist", system-ui, -apple-system, sans-serif) !important;
+  padding: 18px 20px 16px 20px !important;
+  max-width: 360px !important;
+  min-width: 280px !important;
+  z-index: 100000 !important;
+  animation: vectorisPopoverIn 200ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+[data-theme="light"] .driver-popover.vectoris-driver-popover {
+  background: var(--app-surface-1, #ffffff) !important;
+  border: 1px solid var(--app-border, rgba(0, 0, 0, 0.12)) !important;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.14), 0 0 0 1px rgba(0, 0, 0, 0.05) !important;
+}
+
+@keyframes vectorisPopoverIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* ── Popover Header & Title ────────────────────────────────────────────────── */
+.driver-popover.vectoris-driver-popover .driver-popover-title {
+  font-family: var(--font-technical, "Urbanist", sans-serif) !important;
+  font-size: 1.05rem !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.01em !important;
+  color: var(--app-text-primary, #f8fafc) !important;
+  margin: 0 0 8px 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+/* ── Popover Description ───────────────────────────────────────────────────── */
+.driver-popover.vectoris-driver-popover .driver-popover-description {
+  font-size: 0.875rem !important;
+  line-height: 1.55 !important;
+  color: var(--app-text-secondary, #cbd5e1) !important;
+  margin: 0 0 16px 0 !important;
+}
+
+/* ── Popover Footer ────────────────────────────────────────────────────────── */
+.driver-popover.vectoris-driver-popover .driver-popover-footer {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 10px !important;
+  padding-top: 12px !important;
+  border-top: 1px solid var(--app-border, rgba(255, 255, 255, 0.08)) !important;
+  margin-top: 4px !important;
+}
+
+/* ── Progress Counter ──────────────────────────────────────────────────────── */
+.driver-popover.vectoris-driver-popover .driver-popover-progress-text {
+  font-family: var(--font-technical, "Urbanist", sans-serif) !important;
+  font-size: 0.75rem !important;
+  font-weight: 600 !important;
+  color: var(--app-text-muted, #94a3b8) !important;
+  letter-spacing: 0.04em !important;
+}
+
+/* ── Action Buttons ────────────────────────────────────────────────────────── */
+.driver-popover.vectoris-driver-popover .driver-popover-navigation-btns {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.driver-popover.vectoris-driver-popover .driver-popover-next-btn,
+.driver-popover.vectoris-driver-popover .driver-popover-prev-btn,
+.driver-popover.vectoris-driver-popover .driver-popover-close-btn {
+  font-family: inherit !important;
+  font-size: 0.8125rem !important;
+  font-weight: 600 !important;
+  border-radius: 6px !important;
+  cursor: pointer !important;
+  outline: none !important;
+  transition: all 160ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+  text-shadow: none !important;
+}
+
+.driver-popover.vectoris-driver-popover .driver-popover-next-btn {
+  background: var(--accent-primary, #3b82f6) !important;
+  color: #ffffff !important;
+  border: 1px solid transparent !important;
+  padding: 6px 14px !important;
+}
+
+.driver-popover.vectoris-driver-popover .driver-popover-next-btn:hover {
+  background: #2563eb !important;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.35) !important;
+}
+
+.driver-popover.vectoris-driver-popover .driver-popover-next-btn:active {
+  transform: scale(0.97) !important;
+}
+
+.driver-popover.vectoris-driver-popover .driver-popover-prev-btn {
+  background: transparent !important;
+  color: var(--app-text-secondary, #cbd5e1) !important;
+  border: 1px solid var(--app-border, rgba(255, 255, 255, 0.15)) !important;
+  padding: 6px 12px !important;
+}
+
+.driver-popover.vectoris-driver-popover .driver-popover-prev-btn:hover {
+  background: var(--app-surface-2, rgba(255, 255, 255, 0.06)) !important;
+  color: var(--app-text-primary, #f8fafc) !important;
+}
+
+.driver-popover.vectoris-driver-popover .driver-popover-prev-btn:active {
+  transform: scale(0.97) !important;
+}
+
+.driver-popover.vectoris-driver-popover .driver-popover-close-btn {
+  color: var(--app-text-muted, #94a3b8) !important;
+  background: transparent !important;
+  border: none !important;
+  padding: 4px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.driver-popover.vectoris-driver-popover .driver-popover-close-btn:hover {
+  color: var(--app-text-primary, #f8fafc) !important;
+}
+
+/* ── Popover Arrow ─────────────────────────────────────────────────────────── */
+.driver-popover.vectoris-driver-popover .driver-popover-arrow {
+  border-color: var(--app-surface-1, #18191c) !important;
+}
+
+/* ── Cutout Highlight Stage ────────────────────────────────────────────────── */
+.driver-stage {
+  border-radius: 8px !important;
+  box-shadow: 0 0 0 3px var(--accent-primary, #3b82f6), 0 0 24px rgba(59, 130, 246, 0.3) !important;
+}
+
+/* ── prefers-reduced-motion ────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .driver-overlay,
+  .driver-popover.vectoris-driver-popover,
+  .driver-popover.vectoris-driver-popover .driver-popover-next-btn,
+  .driver-popover.vectoris-driver-popover .driver-popover-prev-btn {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}

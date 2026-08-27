@@ -96,18 +96,18 @@ export default function ProjectTakeoffPage() {
 
   // Actions
   const handleApprove = (id: string) => {
-    dataService.updateLineItemStatus(id, "approved", "Hardik Bhaskar");
+    dataService.updateLineItemStatus(id, "approved", "Project Reviewer");
   };
 
   const handleReject = (id: string, reason?: string) => {
-    dataService.updateLineItemStatus(id, "rejected", "Hardik Bhaskar", reason);
+    dataService.updateLineItemStatus(id, "rejected", "Project Reviewer", reason || "Rejected by reviewer");
   };
 
   const handleBulkApproveProposed = () => {
     items
       .filter((i) => i.status === "proposed")
       .forEach((i) => {
-        dataService.updateLineItemStatus(i.id, "approved", "Hardik Bhaskar");
+        dataService.updateLineItemStatus(i.id, "approved", "Project Reviewer");
       });
   };
 
