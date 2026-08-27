@@ -79,12 +79,19 @@ class AuthService {
       });
 
       if (error) {
+        let userFacingError = error.message;
+        const lower = (error.message || "").toLowerCase();
         const isUnconfirmed =
-          error.message?.toLowerCase().includes("email not confirmed") ||
-          error.message?.toLowerCase().includes("unconfirmed");
+          lower.includes("email not confirmed") ||
+          lower.includes("unconfirmed");
+
+        if (lower.includes("invalid login credentials") || lower.includes("invalid_grant")) {
+          userFacingError = "Invalid email or password. Please verify your credentials.";
+        }
+
         return {
           success: false,
-          error: error.message || "Failed to sign in. Please verify your credentials.",
+          error: userFacingError,
           isEmailUnconfirmed: isUnconfirmed,
         };
       }
@@ -141,9 +148,19 @@ class AuthService {
       });
 
       if (error) {
+        let userFacingError = error.message;
+        const lower = (error.message || "").toLowerCase();
+        if (lower.includes("error sending confirmation email")) {
+          userFacingError = "Supabase could not dispatch the confirmation email. Check your SMTP / Resend settings in the Supabase Dashboard (Project Settings > Auth > SMTP Settings).";
+        } else if (lower.includes("user already registered")) {
+          userFacingError = "An account with this email address already exists. Please switch to Sign In.";
+        } else if (lower.includes("rate limit") || lower.includes("too many requests")) {
+          userFacingError = "Email rate limit exceeded. Please wait a few minutes or configure Custom SMTP in Supabase.";
+        }
+
         return {
           success: false,
-          error: error.message || "Failed to create account. Please try again.",
+          error: userFacingError,
         };
       }
 
