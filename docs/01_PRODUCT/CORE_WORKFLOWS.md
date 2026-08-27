@@ -77,7 +77,7 @@ sequenceDiagram
     V->>B: Invitation link (per USER_ROLES.md §4)
     B->>V: Accept
     V->>B: Present Project Intelligence-curated entry (not raw document dump)
-    B->>V: Ask discipline-framed or general questions via AI Session
+    B->>V: Ask discipline-framed or general questions via Investigation Workshop
 ```
 
 This workflow does not change the invitation mechanism already specified in `USER_ROLES.md` §4. It adds an optional Discipline Role tag and a Project Intelligence-driven landing experience — see `../DOMAIN/COLLABORATION.md` and `../DOMAIN/PROJECT_INTELLIGENCE.md`. Status: NEAR-TERM, OPEN DECISION (OD-25) — not yet authorized for build.
@@ -85,7 +85,7 @@ This workflow does not change the invitation mechanism already specified in `USE
 ## 6b. Workflow: Project Understanding Synthesis (NEAR-TERM — see `../DOMAIN/PROJECT_INTELLIGENCE.md`)
 
 ```text
-User asks (in an AI Session, project-scoped): "Explain this project to me" / "What's unresolved?"
+User asks (in Investigation Workshop, project-scoped): "Explain this project to me" / "What's unresolved?"
    -> Agent reads across: documents, takeoff state, prior sessions, decisions, activity
    -> Agent classifies each claim: known-from-evidence / inferred / human-decided / unresolved
    -> Agent responds, evidence-linked, explicitly marking gaps as gaps (not silently omitted)

@@ -144,6 +144,29 @@ class DataService {
     return newProject;
   }
 
+  public updateProjectType(
+    projectId: string,
+    displayType: string,
+    provenance: "ai_inferred" | "user_provided" | "verified"
+  ): void {
+    const project = this.projects.find((p) => p.id === projectId);
+    if (!project) return;
+
+    if (provenance === "verified") {
+      project.verified_type = displayType;
+    } else if (provenance === "user_provided") {
+      project.user_provided_type = displayType;
+    } else {
+      project.inferred_type = displayType;
+    }
+    project.displayType = displayType;
+    project.typeProvenance = provenance;
+    project.updated_at = "Just now";
+
+    saveToStorage("projects", this.projects);
+    this.notify();
+  }
+
   // ── Documents ───────────────────────────────────────────────────────────────
 
   public getDocuments(projectId: string): ProjectDocument[] {
@@ -402,7 +425,7 @@ class DataService {
     this.notify();
   }
 
-  // ── AI Sessions ─────────────────────────────────────────────────────────────
+  // ── Investigation Workshop (Sessions) ───────────────────────────────────────
 
   public getSessions(projectId?: string | null): ChatSession[] {
     if (projectId === undefined) return [...this.sessions];
@@ -460,6 +483,7 @@ class DataService {
       role: "user" | "assistant";
       content: string;
       thought_trace?: string[];
+      tool_steps?: ChatMessage["tool_steps"];
       evidence?: ChatMessage["evidence"];
       action_proposal?: ChatMessage["action_proposal"];
     }
@@ -473,6 +497,7 @@ class DataService {
       content: msg.content,
       timestamp: "Just now",
       thought_trace: msg.thought_trace,
+      tool_steps: msg.tool_steps,
       evidence: msg.evidence,
       action_proposal: msg.action_proposal,
     };
@@ -485,6 +510,104 @@ class DataService {
     saveToStorage("sessions", this.sessions);
     this.notify();
     return newMsg;
+  }
+
+  public updateProposalStatus(
+    sessionId: string,
+    messageId: string,
+    status: "approved" | "rejected",
+    user: string = "Hardik Bhaskar"
+  ): void {
+    const session = this.sessions.find((s) => s.id === sessionId);
+    if (!session) return;
+
+    const msg = session.messages.find((m) => m.id === messageId || m.action_proposal?.id === messageId);
+    if (!msg || !msg.action_proposal) return;
+
+    msg.action_proposal.status = status;
+    if (status === "approved") {
+      msg.action_proposal.committed_at = "Just now";
+      msg.action_proposal.committed_by = user;
+
+      // If attached to a project, update or create the takeoff line item
+      if (session.project_id) {
+        const itemCode = msg.action_proposal.item_code;
+        const existing = this.lineItems.find(
+          (li) => li.project_id === session.project_id && li.item_code === itemCode
+        );
+
+        if (existing) {
+          this.updateLineItemStatus(
+            existing.id,
+            "approved",
+            user,
+            `Approved via Investigation Workshop: ${session.title}`
+          );
+        } else {
+          // Parse quantity as number
+          const rawQty = msg.action_proposal.quantity;
+          const qty = typeof rawQty === "number" ? rawQty : parseInt(String(rawQty).replace(/[^\d.]/g, ""), 10) || 1;
+          const unit = (msg.action_proposal.unit as any) || "EA";
+          const category = (msg.action_proposal.category as any) || "Power Distribution";
+
+          const newItem: LineItem = {
+            id: generateId("li"),
+            project_id: session.project_id,
+            item_code: itemCode,
+            name: msg.action_proposal.item_name || msg.action_proposal.title,
+            description: msg.action_proposal.description,
+            specification: "Verified via Vectoris Investigation Workshop",
+            category,
+            quantity: qty,
+            unit,
+            source_document_id: msg.evidence?.doc_id || "d1",
+            source_document_name: msg.evidence?.doc_name || "Single Line Diagram",
+            source_sheet: msg.evidence?.sheet || "E-001",
+            status: "approved",
+            detection_source: "ai_detection",
+            model_version: "v2.4-native",
+            reviewed_by: user,
+            reviewed_at: "Just now",
+            correction_history: [
+              {
+                id: generateId("corr"),
+                line_item_id: itemCode,
+                timestamp: "Just now",
+                user,
+                user_id: "u-hb",
+                action: "Item committed and verified from Investigation Workshop",
+                previous_value: "proposed (investigation)",
+                new_value: "approved",
+                ai_value: `${qty} ${unit} proposed`,
+                human_value: `${qty} ${unit} verified`,
+                delta: "0",
+                correction_type: "manual_override",
+                reason: `Approved from investigation: ${session.title}`,
+                source: "verification",
+                model_version: "v2.4-native",
+              },
+            ],
+          };
+
+          this.lineItems.push(newItem);
+          saveToStorage("lineItems", this.lineItems);
+
+          const summary = this.takeoffSummaries[session.project_id];
+          if (summary) {
+            summary.line_items_proposed = this.lineItems.filter(
+              (li) => li.project_id === session.project_id
+            ).length;
+            summary.line_items_approved = this.lineItems.filter(
+              (li) => li.project_id === session.project_id && li.status === "approved"
+            ).length;
+            saveToStorage("takeoffSummaries", this.takeoffSummaries);
+          }
+        }
+      }
+    }
+
+    saveToStorage("sessions", this.sessions);
+    this.notify();
   }
 
   // ── Engine Status ───────────────────────────────────────────────────────────

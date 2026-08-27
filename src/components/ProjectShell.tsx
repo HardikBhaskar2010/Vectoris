@@ -66,15 +66,18 @@ interface ProjectShellProps {
   headerActions?: ReactNode;
 }
 
-// ── Tab definitions (canonical, per PROJECT_NAVIGATION.md §2) ─────────────────
+// ── Tab definitions (canonical, per PROJECT_NAVIGATION.md & PROJECT_INTELLIGENCE.md) ──
 const TABS: Tab[] = [
-  { id: "overview",   label: "Overview",  segment: "" },
-  { id: "documents",  label: "Documents", segment: "documents" },
-  { id: "workspace",  label: "Workspace", segment: "workspace" },
-  { id: "takeoff",    label: "Takeoff",   segment: "takeoff" },
-  { id: "estimate",   label: "Estimate",  segment: "estimate",  future: true },
-  { id: "bid",        label: "Bid",       segment: "bid",       future: true },
-  { id: "reports",    label: "Reports",   segment: "reports" },
+  { id: "overview",    label: "Overview",             segment: "" },
+  { id: "documents",   label: "Documents",            segment: "documents" },
+  { id: "workspace",   label: "Workspace",            segment: "workspace" },
+  { id: "takeoff",     label: "Takeoff",              segment: "takeoff" },
+  { id: "boq",         label: "BOQ",                  segment: "boq",         future: true },
+  { id: "engineering", label: "Engineering",          segment: "engineering", future: true },
+  { id: "estimate",    label: "Estimate",             segment: "estimate",    future: true },
+  { id: "bid",         label: "Bid",                  segment: "bid",         future: true },
+  { id: "activity",    label: "Activity / Decisions", segment: "activity",    future: true },
+  { id: "reports",     label: "Reports",              segment: "reports" },
 ];
 
 // ── Helper — build a tab href ──────────────────────────────────────────────────
@@ -163,15 +166,16 @@ export function ProjectShell({
 
             if (tab.future) {
               return (
-                <span
+                <Link
                   key={tab.id}
-                  className="project-shell__tab project-shell__tab--future"
-                  aria-disabled="true"
-                  title="Coming soon"
+                  to={href}
+                  className={`project-shell__tab project-shell__tab--future${isActive ? " project-shell__tab--active" : ""}`}
+                  title={`${tab.label} — Planned Roadmap Horizon (Click to view specification status)`}
+                  aria-current={isActive ? "page" : undefined}
                 >
                   {tab.label}
                   <span className="project-shell__tab-soon">Soon</span>
-                </span>
+                </Link>
               );
             }
 

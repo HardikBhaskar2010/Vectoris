@@ -49,7 +49,7 @@ This list is a **starting set surfaced by the founder brief**, not a final taxon
 A Discipline Role changes **defaults and framing**, never **access boundaries**:
 
 - **Project Overview default view:** may surface the subset of documents/drawings/takeoff most relevant to the tagged discipline first, with a clear, one-click path to the full project (never a hidden or hard-walled subset).
-- **AI Session framing:** when a session is opened by a user with a Discipline Role, the Agent's first-turn context and clarifying-question style lean toward that discipline's typical vocabulary and concerns (per the question patterns in §3) — but the Agent still answers questions outside that discipline if asked; it does not refuse or redirect.
+- **Investigation Workshop framing:** when an investigation is opened by a user with a Discipline Role, the Agent's first-turn context and clarifying-question style lean toward that discipline's typical vocabulary and concerns (per the question patterns in §3) — but the Agent still answers questions outside that discipline if asked; it does not refuse or redirect.
 - **Referral flow (§5):** when inviting someone to a project, the inviter may tag the invitee's discipline, which seeds their first-visit context curation. The invitee can change or add discipline tags for themselves at any time.
 
 **Hard boundary:** Discipline Role must never be implemented as a data-access filter that hides project content a person's Permission Role would otherwise allow them to see. That would silently create a two-tier access system through the back door of a UX convenience feature. If a project genuinely needs to restrict what a Viewer/Editor can see (not just what's shown first), that is a Permission Role / project-scoping decision, not a Discipline Role decision — flag it in `USER_ROLES.md`, not here.
@@ -65,7 +65,7 @@ sequenceDiagram
     V->>B: Invitation (link-based, per USER_ROLES.md §4)
     B->>V: Accept invitation
     V->>B: Present project entry curated toward tagged discipline (Project Intelligence, evidence-linked)
-    B->>V: Ask discipline-framed or general questions via AI Session
+    B->>V: Ask discipline-framed or general questions via Investigation Workshop
     V-->>B: Grounded answers, scoped by Permission Role, framed by Discipline Role
 ```
 

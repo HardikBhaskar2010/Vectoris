@@ -2,7 +2,7 @@
 
 **Status:** LOCKED (Architecture & Workspace Framing) · Details as marked
 **Owner of:** What "the Project understands about itself" means, how that understanding is assembled and grounded, and how a person (or the Agent, on a person's behalf) draws on it
-**Does not own:** MVP scope authority (→ `../MVP_BOUNDARY.md`, `../00_PROJECT/PRODUCT_SCOPE.md`), org/role mechanics (→ `COLLABORATION.md`), AI Session UI (→ `../06_PAGES/AI_SESSION.md`), takeoff mechanics (→ `TAKEOFF.md`)
+**Does not own:** MVP scope authority (→ `../MVP_BOUNDARY.md`, `../00_PROJECT/PRODUCT_SCOPE.md`), org/role mechanics (→ `COLLABORATION.md`), Investigation Workshop UI (→ `../06_PAGES/AI_SESSION.md`), takeoff mechanics (→ `TAKEOFF.md`)
 
 > Vectoris is fundamentally an **AI-native Project Management & Project Intelligence workspace**, where estimating, takeoff, and bidding are major sequential workflows inside the Project container.
 
@@ -12,7 +12,7 @@
 
 Project Intelligence is the answer Vectoris can give, at any point in a project's life, to: **"What is this project, and what do we currently know about it?"**
 
-It is **not** an ad-hoc add-on feature deferred to the future. It is the foundational architectural container and context layer connecting all data Vectoris manages for a project — drawings, documents, AI sessions, takeoff runs, line items, and collaborative activity.
+It is **not** an ad-hoc add-on feature deferred to the future. It is the foundational architectural container and context layer connecting all data Vectoris manages for a project — drawings, documents, investigations, takeoff runs, line items, and collaborative activity.
 
 This directly embodies `VISION.md`'s core principle — **"AI proposes. The human decides. The system remembers why."** — at the project scope: the workspace maintains a grounded, evidence-backed understanding of project state.
 
@@ -41,10 +41,10 @@ The gap this closes: today, a general question like *"Explain this project to me
 - Project Intelligence distinguishes: **known from evidence**, **inferred**, **explicitly decided by a human**, and **unresolved/unknown**.
 - A human Decision, once recorded, outranks automated inference.
 
-## 5. Relationship to AI Sessions
+## 5. Relationship to Investigation Workshop
 
-Project Intelligence is the shared grounding layer that project-scoped AI Sessions draw upon:
-- A project-scoped AI Session's context is grounded in Project Intelligence (what exists, what's verified, what's outstanding).
+Project Intelligence is the shared grounding layer that project-scoped investigations draw upon:
+- A project-scoped investigation's context is grounded in Project Intelligence (what exists, what's verified, what's outstanding).
 - Role-aware inquiries route to the relevant domain slice (e.g. electrical/lighting vs power feeder vs HVAC).
 - Works with the Agent's tool-use and evidence-card mechanics (`AI_SESSION.md`).
 
@@ -104,7 +104,7 @@ Export
 | Capability | Horizon | Rationale |
 |---|---|---|
 | Project workspace container + documents + takeoff summary scanning | **MVP (Built/In Scope)** | Core foundational container |
-| Evidence-linked answers to project-scoped questions via AI Session | **MVP (Built/In Scope)** | Fully supported via `AI_SESSION.md` |
+| Evidence-linked answers to project-scoped questions via Investigation Workshop | **MVP (Built/In Scope)** | Fully supported via `AI_SESSION.md` |
 | Deep automated cross-document synthesis ("explain this project") | **NEAR-TERM (OD-24)** | Requires standardized grounding heuristic before release |
 | Curated first-view by discipline role | **NEAR-TERM (OD-25)** | Builds on `COLLABORATION.md` discipline model |
 | Downstream estimating, BOQ, bidding, delivery workflows | **SEQUENTIAL HORIZONS** | Built on the validated takeoff foundation |

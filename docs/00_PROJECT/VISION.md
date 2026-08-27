@@ -90,7 +90,7 @@ UNDERSTAND → EXPLORE → COLLABORATE → ENGINEER → ESTIMATE → BID → DEL
 ```
 
 These are not disconnected products — they are progressive stages of the same underlying Project Intelligence workspace used by teams over time:
-- **Drawings, Documents, AI Sessions, Collaboration**: Shared evidence and interaction surfaces within the project container (see `../DOMAIN/PROJECT_INTELLIGENCE.md`, `../DOMAIN/COLLABORATION.md`).
+- **Drawings, Documents, Investigation Workshop, Collaboration**: Shared evidence and interaction surfaces within the project container (see `../DOMAIN/PROJECT_INTELLIGENCE.md`, `../DOMAIN/COLLABORATION.md`).
 - **Takeoff → BOQ → Engineering → Estimation → Commercial → Bids → Delivery**: Sequential downstream workflows operating on validated project data.
 
 **Scope Discipline**: Establishing the Project as the root architectural container does not mean building every downstream stage immediately. The MVP focuses strictly on the drawing-first takeoff wedge, while the project-centric architecture guarantees seamless extension into downstream estimating and commercial workflows.

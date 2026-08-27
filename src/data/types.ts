@@ -208,27 +208,62 @@ export interface Detection {
 
 // ── AI Chat Session Types ─────────────────────────────────────────────────────
 
+export interface ToolTraceStep {
+  id: string;
+  name: string;
+  label: string;
+  status: "complete" | "running" | "pending";
+  output?: string;
+}
+
+export interface EvidenceData {
+  doc_id: string;
+  doc_name: string;
+  sheet: string;
+  sheet_id?: string;
+  region?: string;
+  coordinates?: string;
+  thumbnail_type?: "switchgear" | "tray" | "conduit" | "lighting" | "panel";
+  specs?: Array<{ label: string; value: string }>;
+}
+
+export interface ActionProposal {
+  id: string;
+  title: string;
+  description: string;
+  item_code: string;
+  item_name?: string;
+  category?: string;
+  quantity: string | number;
+  unit?: string;
+  status: "pending" | "approved" | "rejected";
+  committed_at?: string;
+  committed_by?: string;
+}
+
+export interface MetricHighlight {
+  label: string;
+  value: string;
+  status?: "pass" | "warn" | "info";
+}
+
+export interface ReferencedSource {
+  sheet: string;
+  desc: string;
+  doc_id?: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
   timestamp: string;
   thought_trace?: string[];
-  evidence?: {
-    doc_id: string;
-    doc_name: string;
-    sheet: string;
-    region?: string;
-    coordinates?: string;
-  };
-  action_proposal?: {
-    id: string;
-    title: string;
-    description: string;
-    item_code: string;
-    quantity: string;
-    status: "pending" | "approved" | "rejected";
-  };
+  tool_steps?: ToolTraceStep[];
+  evidence?: EvidenceData;
+  action_proposal?: ActionProposal;
+  metric_highlights?: MetricHighlight[];
+  referenced_sources?: ReferencedSource[];
 }
 
 export interface ChatSession {
@@ -242,6 +277,10 @@ export interface ChatSession {
   created_at: string;
   updated_at: string;
   messages: ChatMessage[];
+  investigation_status?: "verified" | "calculated" | "review_required" | "in_progress";
+  key_metric?: string;
+  primary_sheet?: string;
+  source_count?: number;
 }
 
 // ── Export / Report Types ─────────────────────────────────────────────────────

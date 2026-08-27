@@ -1,47 +1,24 @@
 /**
- * ProjectOverviewPage — Per-project hub.
+ * ProjectOverviewPage — Central Project Intelligence Hub.
  *
  * SOURCE OF TRUTH (in order of authority):
+ *   docs/00_PROJECT/VISION.md §3a ("The Project Is the Primary Object")
  *   docs/06_PAGES/PROJECT_OVERVIEW.md
+ *   docs/DOMAIN/PROJECT_INTELLIGENCE.md §5
  *   docs/03_ARCHITECTURE/DATA_MODEL.md
- *   docs/01_PRODUCT/APP_FLOW.md
- *   docs/01_PRODUCT/CORE_WORKFLOWS.md
+ *   docs/01_PRODUCT/USER_ROLES.md §2–3 (Locked Permission Matrix)
  *   docs/02_DESIGN/DESIGN_SYSTEM.md
  *
- * STATES (per PROJECT_OVERVIEW.md §State Model):
- *   loading       → Skeleton while project data loads.
- *   empty         → Newly created project, no documents yet → prompts Document Upload.
- *   data          → Populated overview with documents, takeoff, sessions.
- *   error         → ErrorState with retry.
- *   permission    → Viewer role: read-only, upload/edit actions hidden.
- *   offline       → Local-cached state; upload may queue.
+ * WORKFLOW PROGRESSION:
+ *   UNDERSTAND (Documents) → EXPLORE (Workspace) → QUANTIFY (Takeoff) →
+ *   [FUTURE: BOQ → Engineering → Estimate → Bid] → REPORTS (Export)
  *
- * WORKFLOW (CORE_WORKFLOWS.md §1):
- *   Project → Upload Drawings → Processing → Drawing Workspace →
- *   AI Detection / Takeoff → Human Review → BOQ / Reports
- *
- * DATA MODEL (DATA_MODEL.md §2):
- *   Project: id, name, description, inferred_type, user_provided_type, verified_type
- *   Document: id, project_id, filename, format, upload_status, uploaded_at
- *   TakeoffRun: id, project_id, status, started_at, completed_at
- *   ChatSession: id, project_id, title, created_by, created_at
- *
- * DESIGN:
- *   - Urbanist for UI; IBM Plex Mono for technical values (sheet IDs, sizes, coordinates)
- *   - SOLID surfaces for engineering data — no glass on content
- *   - Liquid Glass ONLY for floating controls (per DESIGN_SYSTEM.md §5)
- *   - Racing Red / Vintage Rosewood as accent — NOT "danger" (per DESIGN_SYSTEM.md note)
- *   - 8px base grid (4/8/12/16/20/24/32/40px spacing scale)
- *   - cubic-bezier(0.22, 1, 0.36, 1) for transitions
- *   - scale(0.97) on :active (Emil rule)
- *   - No transition: all; only named props
- *
- * NAVIGATION:
- *   activePath="/projects" so Projects stays active in sidebar.
- *   Breadcrumb: Projects > Project Name shown in-page.
+ * SCANNABILITY PRINCIPLE:
+ *   The Overview summarizes project state and links out.
+ *   It does NOT duplicate the full document table, full line-item table, or drawing canvas.
  */
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link, useRouter } from "../router";
 import { ProjectShell } from "../components/ProjectShell";
 import type { ProjectMeta } from "../components/ProjectShell";
@@ -51,24 +28,22 @@ import type {
   TakeoffRunSummary,
   ChatSession,
   TypeProvenance,
+  LineItem,
 } from "../data";
 import {
   INITIAL_PROJECTS,
-  INITIAL_DOCUMENTS,
-  INITIAL_TAKEOFF_SUMMARY,
-  INITIAL_SESSIONS,
 } from "../data";
-
 import {
   useProject,
   useDocuments,
   useTakeoff,
   useSessions,
+  useLineItems,
+  dataService,
 } from "../services/dataService";
 
 type PageState = "loading" | "empty" | "data" | "error" | "permission" | "offline";
 
-// ── Component ─────────────────────────────────────────────────────────────────
 export default function ProjectOverviewPage() {
   const { params, searchParams } = useRouter();
   const projectId = params.id || "p1";
@@ -78,33 +53,33 @@ export default function ProjectOverviewPage() {
       ? stateParam
       : "data";
 
-  const [activeTab, setActiveTab] = useState<"documents" | "takeoff" | "reports">("documents");
-
   const project = useProject(projectId) || INITIAL_PROJECTS[0];
   const documents = useDocuments(projectId);
   const takeoff = useTakeoff(projectId);
   const sessions = useSessions(projectId);
+  const lineItems = useLineItems(projectId);
 
-  // Determine type provenance for the project
+  const [isVerifyingType, setIsVerifyingType] = useState(false);
+
+  // Type provenance
   const typeProvenance: TypeProvenance = project.verified_type
     ? "verified"
     : project.user_provided_type
     ? "user_provided"
     : "ai_inferred";
 
-  // Strip any parenthetical confidence suffix — confidence is internal, never user-facing
-  // (UX_PRINCIPLES.md §2). Defensive: strips even if real API leaks it.
+  // Display type clean formatting
   const displayType = (
     project.verified_type ||
     project.user_provided_type ||
     project.inferred_type ||
-    "Unknown"
+    `${project.sector.replace("-", " ")} · ${project.discipline}`
   ).replace(/\s*\([^)]*\)/g, "").trim();
 
   // Role simulation: "viewer" shows read-only
   const isViewer = pageState === "permission";
   const canUpload = !isViewer;
-  const canEdit   = !isViewer;
+  const canEdit = !isViewer;
 
   // Build ProjectMeta for ProjectShell
   const projectMeta: ProjectMeta = {
@@ -127,21 +102,45 @@ export default function ProjectOverviewPage() {
     <>
       {canUpload && (
         <Link to={`/project/${projectId}/documents`} className="btn btn--secondary btn--sm">
-          <IconUpload /> Upload
+          <IconUpload /> Upload Drawings
         </Link>
       )}
       <Link
         to={`/project/${projectId}/workspace`}
         className={`btn btn--primary btn--sm${!documents.length ? " btn--disabled" : ""}`}
         aria-disabled={!documents.length}
+        title={!documents.length ? "Upload drawings first" : "Open active drawing sheet in Workspace"}
       >
         <IconWorkspace /> Open Workspace
       </Link>
-      <button type="button" className="btn btn--icon btn--sm" aria-label="More project options">
-        <IconEllipsis />
-      </button>
+      <Link
+        to={`/sessions?project=${projectId}`}
+        className="btn btn--secondary btn--sm"
+        title="Open project investigation session"
+      >
+        <IconSession /> Investigation
+      </Link>
     </>
   );
+
+  // Handle confirming AI-inferred project type
+  const handleConfirmType = () => {
+    setIsVerifyingType(true);
+    dataService.updateProjectType(projectId, displayType, "verified");
+    setTimeout(() => setIsVerifyingType(false), 400);
+  };
+
+  // Compute category breakdown from real line items
+  const categoryStats = lineItems.reduce<Record<string, { total: number; approved: number }>>((acc, item) => {
+    if (!acc[item.category]) {
+      acc[item.category] = { total: 0, approved: 0 };
+    }
+    acc[item.category].total += item.quantity;
+    if (item.status === "approved") {
+      acc[item.category].approved += item.quantity;
+    }
+    return acc;
+  }, {});
 
   return (
     <ProjectShell
@@ -150,543 +149,567 @@ export default function ProjectOverviewPage() {
       pipelineStatus={pipelineStatusBanner}
       headerActions={headerActionsEl}
     >
-
-      {/* ── Loading ───────────────────────────────────────────────── */}
+      {/* ── Loading State ─────────────────────────────────────────── */}
       {pageState === "loading" && <ProjectOverviewSkeleton />}
 
-      {/* ── Error ────────────────────────────────────────────────── */}
+      {/* ── Error State ──────────────────────────────────────────── */}
       {pageState === "error" && (
-          <div className="po-state-page">
-          <div className="po-error-icon" aria-hidden="true"><IconErrorCloud /></div>
-          <h2 className="po-state-heading">Failed to load project</h2>
-          <p className="po-state-body">There was a problem fetching this project's data. Check your connection and try again.</p>
-          <button type="button" className="btn btn--secondary po-retry-btn" onClick={() => window.location.reload()}>
+        <div className="po-state-page">
+          <div className="po-error-icon" aria-hidden="true">
+            <IconErrorCloud />
+          </div>
+          <h2 className="po-state-heading">Failed to load project context</h2>
+          <p className="po-state-body">
+            There was a problem fetching this project's intelligence data. Check your connection and try again.
+          </p>
+          <button
+            type="button"
+            className="btn btn--secondary po-retry-btn"
+            onClick={() => window.location.reload()}
+          >
             <IconRefresh /> Retry
           </button>
         </div>
       )}
 
-      {/* ── Offline ──────────────────────────────────────────────── */}
+      {/* ── Offline State ────────────────────────────────────────── */}
       {pageState === "offline" && (
-          <div className="po-offline-banner" role="alert">
-            <IconOffline />
-            <span><strong>No connection.</strong> Viewing cached project data. Uploads will queue when connectivity resumes.</span>
-          </div>
+        <div className="po-offline-banner" role="alert">
+          <IconOffline />
+          <span>
+            <strong>No connection.</strong> Viewing local-cached project data. Uploads will queue when connectivity resumes.
+          </span>
+        </div>
       )}
 
-      {/* ── Empty — newly created project ────────────────────────── */}
+      {/* ── Empty State ──────────────────────────────────────────── */}
       {(pageState === "empty" || (pageState === "data" && documents.length === 0)) && (
         <div className="po-empty-state">
           <div className="po-empty-icon" aria-hidden="true">
             <EmptyProjectIllustration />
           </div>
-          <h2 className="po-empty-heading">No documents yet</h2>
+          <h2 className="po-empty-heading">Project Container Initialized</h2>
           <p className="po-empty-body">
-            Upload drawings, requirements, specifications, or supporting documents to begin.
-            Vectoris will organize the project context and queue AI analysis automatically.
+            Upload drawings (DWG/PDF), specifications, or single-line diagrams to begin.
+            Vectoris will analyze sheets, detect electrical components, and assemble verified project evidence.
           </p>
           <div className="po-empty-actions">
             <Link to={`/project/${projectId}/documents`} className="btn btn--primary">
               <IconUpload /> Upload Drawings &amp; Documents
             </Link>
-            <Link to="/sessions" className="btn btn--ghost">
-              Start an AI Session instead
+            <Link to={`/sessions?project=${projectId}`} className="btn btn--ghost">
+              Start Project AI Investigation
             </Link>
           </div>
         </div>
       )}
 
-      {/* ── Permission (Viewer role) ──────────────────────────────── */}
+      {/* ── Viewer Permission Notice ─────────────────────────────── */}
       {pageState === "permission" && (
         <div className="po-permission-notice" role="note">
           <IconShield />
-          <span>You have <strong>Viewer</strong> access to this project. Upload and edit actions are disabled.</span>
+          <span>
+            You have <strong>Viewer</strong> access to this project. Modifications and exports are read-only.
+          </span>
         </div>
       )}
 
-      {/* ── Data / Permission / Offline (show Overview content) ─── */}
+      {/* ── Data / Content View ──────────────────────────────────── */}
       {((pageState === "data" && documents.length > 0) || pageState === "permission" || pageState === "offline") && (
         <div className="po-body">
-          {/* ── Left: recent document activity + takeoff progress ── */}
-          <div className="po-main-col">
-            {/* Recent documents (summary strip — not full Documents tab) */}
-            <section className="po-overview-section" aria-labelledby="recent-docs-heading">
-              <div className="po-overview-section__header">
-                <h2 id="recent-docs-heading" className="po-overview-section__title">
-                  <IconDoc /> Recent Documents
-                </h2>
-                <Link to={`/project/${projectId}/documents`} className="po-overview-section__link">
-                  View all →
-                </Link>
+
+          {/* ── Project Lifecycle Progression Tracker ──────────────── */}
+          <section className="po-stage-tracker" aria-label="Project Workflow Progression">
+            <div className="po-stage-tracker__header">
+              <span className="po-stage-tracker__title">
+                <IconWorkflow /> Sequential Workflow Progression
+              </span>
+              <span className="po-stage-tracker__current-stage">
+                Active Stage: <strong>Takeoff &amp; Verification</strong>
+              </span>
+            </div>
+
+            <div className="po-stage-tracker__steps">
+              <div className="po-stage-step po-stage-step--completed">
+                <div className="po-stage-step__badge">
+                  <IconCheckmark />
+                </div>
+                <div className="po-stage-step__info">
+                  <span className="po-stage-step__name">1. Understand</span>
+                  <span className="po-stage-step__desc">{documents.length} Drawings Uploaded</span>
+                </div>
               </div>
-              <ul className="po-doc-list" aria-label="Recent uploaded documents">
-                {documents.slice(0, 3).map((doc) => (
-                  <DocumentRow key={doc.id} doc={doc} projectId={projectId} />
-                ))}
-              </ul>
-              {documents.length > 3 && (
-                <Link to={`/project/${projectId}/documents`} className="po-overview-section__more">
-                  +{documents.length - 3} more documents
-                </Link>
-              )}
-            </section>
 
-            {/* Takeoff progress (summary — not full Takeoff tab) */}
-            <section className="po-overview-section" aria-labelledby="takeoff-progress-heading">
-              <div className="po-overview-section__header">
-                <h2 id="takeoff-progress-heading" className="po-overview-section__title">
-                  <IconTakeoff /> Takeoff Progress
-                </h2>
-                <Link to={`/project/${projectId}/takeoff`} className="po-overview-section__link">
-                  Review →
-                </Link>
+              <div className="po-stage-step__divider" />
+
+              <div className="po-stage-step po-stage-step--completed">
+                <div className="po-stage-step__badge">
+                  <IconCheckmark />
+                </div>
+                <div className="po-stage-step__info">
+                  <span className="po-stage-step__name">2. Explore</span>
+                  <span className="po-stage-step__desc">CAD Spatial Coordinated</span>
+                </div>
               </div>
-              <TakeoffPanel takeoff={takeoff} canView={true} projectId={projectId} />
-            </section>
-          </div>
 
-              {/* ── Right column: Sessions + Metadata ─────────────── */}
-              <div className="po-side-col">
+              <div className="po-stage-step__divider" />
 
-                {/* AI Sessions */}
-                <section className="po-side-card" aria-labelledby="sessions-heading">
-                  <div className="po-side-card__header">
-                    <h2 id="sessions-heading" className="po-side-card__title">
-                      <IconSession /> AI Sessions
-                    </h2>
-                    <Link to={`/sessions?project=${projectId}`} className="po-side-card__action">
-                      New session
-                    </Link>
-                  </div>
+              <div className="po-stage-step po-stage-step--active">
+                <div className="po-stage-step__badge">3</div>
+                <div className="po-stage-step__info">
+                  <span className="po-stage-step__name">3. Quantify</span>
+                  <span className="po-stage-step__desc">Verified Takeoff Review</span>
+                </div>
+              </div>
 
-                  {sessions.length === 0 ? (
-                    <p className="po-side-empty">No sessions yet. Start one to ask questions about this project.</p>
-                  ) : (
-                    <ul className="po-session-list" aria-label="AI sessions">
-                      {sessions.map((session) => (
-                        <SessionRow key={session.id} session={session} projectId={projectId} />
-                      ))}
-                    </ul>
-                  )}
+              <div className="po-stage-step__divider po-stage-step__divider--future" />
 
-                  <Link to={`/sessions?project=${projectId}`} className="po-side-card__footer-link">
-                    View all sessions →
-                  </Link>
-                </section>
+              <Link to={`/project/${projectId}/boq`} className="po-stage-step po-stage-step--future">
+                <div className="po-stage-step__badge">4</div>
+                <div className="po-stage-step__info">
+                  <span className="po-stage-step__name">4. BOQ &amp; Eng</span>
+                  <span className="po-stage-step__desc">Planned · Post-Takeoff</span>
+                </div>
+              </Link>
 
-                {/* Project Metadata */}
-                <section className="po-side-card" aria-labelledby="meta-heading">
-                  <div className="po-side-card__header">
-                    <h2 id="meta-heading" className="po-side-card__title">
-                      <IconMeta /> Project Details
-                    </h2>
-                    {canEdit && (
-                      <button type="button" className="po-side-card__action" aria-label="Edit project settings">
-                        Edit
-                      </button>
-                    )}
-                  </div>
+              <div className="po-stage-step__divider po-stage-step__divider--future" />
 
-                  <dl className="po-meta-list">
-                    <div className="po-meta-row">
-                      <dt>Client</dt>
-                      <dd>{project.client}</dd>
-                    </div>
-                    <div className="po-meta-row">
-                      <dt>Sector</dt>
-                      <dd>{project.sector}</dd>
-                    </div>
-                    <div className="po-meta-row">
-                      <dt>Discipline</dt>
-                      <dd>{project.discipline}</dd>
-                    </div>
-                    <div className="po-meta-row">
-                      <dt>Created</dt>
-                      <dd className="font-mono">{project.created_at}</dd>
-                    </div>
-                    <div className="po-meta-row">
-                      <dt>Last updated</dt>
-                      <dd className="font-mono">{project.updated_at}</dd>
-                    </div>
-                  </dl>
+              <Link to={`/project/${projectId}/estimate`} className="po-stage-step po-stage-step--future">
+                <div className="po-stage-step__badge">5</div>
+                <div className="po-stage-step__info">
+                  <span className="po-stage-step__name">5. Estimate &amp; Bid</span>
+                  <span className="po-stage-step__desc">Planned · Pricing</span>
+                </div>
+              </Link>
 
-                  {project.description && (
-                    <p className="po-meta-description">{project.description}</p>
-                  )}
-                </section>
+              <div className="po-stage-step__divider" />
 
-                {/* Project Team */}
-                <section className="po-side-card" aria-labelledby="team-heading">
-                  <div className="po-side-card__header">
-                    <h2 id="team-heading" className="po-side-card__title">
-                      <IconTeam /> Team
-                    </h2>
-                    {canEdit && (
-                      <button type="button" className="po-side-card__action">
-                        Manage
-                      </button>
-                    )}
-                  </div>
+              <Link to={`/project/${projectId}/reports`} className="po-stage-step po-stage-step--ready">
+                <div className="po-stage-step__badge">
+                  <IconDownload />
+                </div>
+                <div className="po-stage-step__info">
+                  <span className="po-stage-step__name">6. Reports</span>
+                  <span className="po-stage-step__desc">XLSX / PDF Export</span>
+                </div>
+              </Link>
+            </div>
+          </section>
 
-                  <ul className="po-team-list" aria-label="Project team members">
-                    {project.members.map((m, i) => (
-                      <li key={i} className="po-team-member">
-                        <div className="po-team-member__avatar" style={{ background: m.avatarColor }} aria-hidden="true">
-                          {m.initials}
-                        </div>
-                        <div className="po-team-member__info">
-                          <span className="po-team-member__name">{m.name}</span>
-                          <span className="po-team-member__role">{m.role}</span>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
+          {/* ── Type Provenance Notification / Confirmation ────────── */}
+          {typeProvenance === "ai_inferred" && canEdit && (
+            <div className="po-provenance-banner" role="alert">
+              <div className="po-provenance-banner__left">
+                <IconAI />
+                <div>
+                  <strong>AI Inferred Classification:</strong>
+                  <span className="po-provenance-banner__type"> {displayType}</span>
+                  <p className="po-provenance-banner__sub">
+                    Inferred from CAD drawing titles and schedules. Confirm to lock classification into project context.
+                  </p>
+                </div>
+              </div>
+              <div className="po-provenance-banner__actions">
+                <button
+                  type="button"
+                  className="btn btn--sm btn--primary"
+                  onClick={handleConfirmType}
+                  disabled={isVerifyingType}
+                >
+                  <IconVerified /> Confirm as Verified
+                </button>
               </div>
             </div>
-        )}
+          )}
+
+          {/* ── Main Two-Column Layout ─────────────────────────────── */}
+          <div className="po-body-grid">
+
+            {/* ── Left Column: Documents & Takeoff Summary ──────────── */}
+            <div className="po-main-col">
+
+              {/* Recent Documents Summary Strip */}
+              <section className="po-card" aria-labelledby="recent-docs-heading">
+                <div className="po-card__header">
+                  <div className="po-card__title-group">
+                    <h2 id="recent-docs-heading" className="po-card__title">
+                      <IconDoc /> Project Evidence &amp; Drawings
+                    </h2>
+                    <span className="po-card__count font-mono">{documents.length} files</span>
+                  </div>
+                  <Link to={`/project/${projectId}/documents`} className="po-card__header-link">
+                    View Documents Tab →
+                  </Link>
+                </div>
+
+                <ul className="po-doc-list" aria-label="Recent uploaded drawings">
+                  {documents.slice(0, 3).map((doc) => (
+                    <DocumentRow key={doc.id} doc={doc} projectId={projectId} />
+                  ))}
+                </ul>
+
+                <div className="po-card__footer">
+                  <Link to={`/project/${projectId}/documents`} className="po-card__footer-action">
+                    <IconUpload /> Add Drawings or Specifications
+                  </Link>
+                  {documents.length > 3 && (
+                    <Link to={`/project/${projectId}/documents`} className="po-card__footer-muted font-mono">
+                      +{documents.length - 3} additional documents in repository
+                    </Link>
+                  )}
+                </div>
+              </section>
+
+              {/* Takeoff Progress & Scope Summary */}
+              <section className="po-card" aria-labelledby="takeoff-heading">
+                <div className="po-card__header">
+                  <div className="po-card__title-group">
+                    <h2 id="takeoff-heading" className="po-card__title">
+                      <IconTakeoff /> Takeoff Quantification &amp; Review
+                    </h2>
+                    <span className="po-card__count font-mono">
+                      {takeoff.line_items_approved} / {takeoff.line_items_proposed} Approved
+                    </span>
+                  </div>
+                  <Link to={`/project/${projectId}/takeoff`} className="po-card__header-link">
+                    Review Takeoff Tab →
+                  </Link>
+                </div>
+
+                <div className="po-takeoff-summary">
+                  <div className="po-takeoff-summary__stats">
+                    <div className="po-metric-box">
+                      <span className="po-metric-box__label">Total Detected</span>
+                      <span className="po-metric-box__value font-mono">
+                        {takeoff.line_items_proposed.toLocaleString()}
+                      </span>
+                    </div>
+
+                    <div className="po-metric-box po-metric-box--approved">
+                      <span className="po-metric-box__label">Human Verified</span>
+                      <span className="po-metric-box__value font-mono">
+                        {takeoff.line_items_approved.toLocaleString()}
+                      </span>
+                    </div>
+
+                    <div className="po-metric-box po-metric-box--pending">
+                      <span className="po-metric-box__label">Pending Review</span>
+                      <span className="po-metric-box__value font-mono">
+                        {(takeoff.line_items_proposed - takeoff.line_items_approved).toLocaleString()}
+                      </span>
+                    </div>
+
+                    <div className="po-metric-box">
+                      <span className="po-metric-box__label">Sheets Indexed</span>
+                      <span className="po-metric-box__value font-mono">
+                        {takeoff.sheets_processed} / {takeoff.sheets_total}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Progress bar */}
+                  <div className="po-takeoff-bar-wrap">
+                    <div className="po-takeoff-bar-labels">
+                      <span>Verification Progress</span>
+                      <span className="font-mono">
+                        {Math.round((takeoff.line_items_approved / (takeoff.line_items_proposed || 1)) * 100)}% Verified
+                      </span>
+                    </div>
+                    <div className="po-takeoff-track" aria-hidden="true">
+                      <div
+                        className="po-takeoff-fill"
+                        style={{
+                          width: `${Math.min(
+                            100,
+                            Math.round((takeoff.line_items_approved / (takeoff.line_items_proposed || 1)) * 100)
+                          )}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Categories Breakdown */}
+                  {Object.keys(categoryStats).length > 0 && (
+                    <div className="po-category-breakdown">
+                      <span className="po-category-breakdown__title">Scope by Discipline Category</span>
+                      <div className="po-category-grid">
+                        {Object.entries(categoryStats).map(([cat, stat]) => (
+                          <div key={cat} className="po-category-chip">
+                            <span className="po-category-chip__name">{cat}</span>
+                            <span className="po-category-chip__qty font-mono">
+                              {stat.approved > 0 ? `${stat.approved}/` : ""}{stat.total}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="po-card__footer">
+                  <Link to={`/project/${projectId}/takeoff`} className="btn btn--primary btn--sm">
+                    Open Line Item Review
+                  </Link>
+                  <Link to={`/project/${projectId}/workspace`} className="btn btn--secondary btn--sm">
+                    View in Drawing Workspace
+                  </Link>
+                </div>
+              </section>
+
+            </div>
+
+            {/* ── Right Column: Investigation Workshop, Metadata & Team ────────── */}
+            <div className="po-side-col">
+
+              {/* Investigation Workshop */}
+              <section className="po-card" aria-labelledby="sessions-heading">
+                <div className="po-card__header">
+                  <div className="po-card__title-group">
+                    <h2 id="sessions-heading" className="po-card__title">
+                      <IconBrain /> Investigation Workshop
+                    </h2>
+                    <span className="po-card__count font-mono">{sessions.length}</span>
+                  </div>
+                  <Link
+                    to={`/sessions?project=${projectId}`}
+                    className="btn btn--secondary btn--xs"
+                    title="Launch new investigation for this project"
+                  >
+                    + New Investigation
+                  </Link>
+                </div>
+
+                {sessions.length === 0 ? (
+                  <div className="po-side-empty">
+                    <p>No project investigations active yet.</p>
+                    <Link to={`/sessions?project=${projectId}`} className="btn btn--secondary btn--sm">
+                      Open Workshop
+                    </Link>
+                  </div>
+                ) : (
+                  <ul className="po-session-list" aria-label="Investigations for this project">
+                    {sessions.map((s) => (
+                      <SessionRow key={s.id} session={s} projectId={projectId} />
+                    ))}
+                  </ul>
+                )}
+
+                <div className="po-card__footer">
+                  <Link to={`/sessions?project=${projectId}`} className="po-card__footer-link">
+                    Open Investigation Workshop ({sessions.length}) →
+                  </Link>
+                </div>
+              </section>
+
+              {/* Project Details & Metadata */}
+              <section className="po-card" aria-labelledby="meta-heading">
+                <div className="po-card__header">
+                  <h2 id="meta-heading" className="po-card__title">
+                    <IconMeta /> Project Intelligence Metadata
+                  </h2>
+                </div>
+
+                <dl className="po-meta-dl">
+                  <div className="po-meta-row">
+                    <dt>Client</dt>
+                    <dd>{project.client}</dd>
+                  </div>
+                  <div className="po-meta-row">
+                    <dt>Sector</dt>
+                    <dd className="po-meta-sector">{project.sector.replace("-", " ")}</dd>
+                  </div>
+                  <div className="po-meta-row">
+                    <dt>Discipline</dt>
+                    <dd>{project.discipline}</dd>
+                  </div>
+                  <div className="po-meta-row">
+                    <dt>Type Provenance</dt>
+                    <dd>
+                      <span className={`po-prov-badge po-prov-badge--${typeProvenance}`}>
+                        {typeProvenance === "verified" && "Human Verified"}
+                        {typeProvenance === "user_provided" && "User Provided"}
+                        {typeProvenance === "ai_inferred" && "AI Inferred"}
+                      </span>
+                    </dd>
+                  </div>
+                  <div className="po-meta-row">
+                    <dt>Created</dt>
+                    <dd className="font-mono">{project.created_at}</dd>
+                  </div>
+                  <div className="po-meta-row">
+                    <dt>Last Activity</dt>
+                    <dd className="font-mono">{project.updated_at}</dd>
+                  </div>
+                </dl>
+
+                {project.description && (
+                  <div className="po-meta-desc">
+                    <span className="po-meta-desc__label">Scope Description:</span>
+                    <p>{project.description}</p>
+                  </div>
+                )}
+              </section>
+
+              {/* Project Team & Locked Permission Roles */}
+              <section className="po-card" aria-labelledby="team-heading">
+                <div className="po-card__header">
+                  <div className="po-card__title-group">
+                    <h2 id="team-heading" className="po-card__title">
+                      <IconTeam /> Project Access &amp; Roles
+                    </h2>
+                    <span className="po-card__count font-mono">{project.members.length}</span>
+                  </div>
+                </div>
+
+                <ul className="po-team-list" aria-label="Project team members">
+                  {project.members.map((m, i) => (
+                    <li key={i} className="po-team-item">
+                      <div
+                        className="po-team-item__avatar"
+                        style={{ background: m.avatarColor || "var(--accent-secondary)" }}
+                        aria-hidden="true"
+                      >
+                        {m.initials}
+                      </div>
+                      <div className="po-team-item__info">
+                        <span className="po-team-item__name">{m.name}</span>
+                        <span className="po-team-item__role">{m.role}</span>
+                      </div>
+                      <span className="po-team-item__badge">{m.role}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+
+            </div>
+
+          </div>
+
+        </div>
+      )}
     </ProjectShell>
   );
 }
 
-// ── Project Header ────────────────────────────────────────────────────────────
-function ProjectHeader({
-  project,
-  typeProvenance,
-  displayType,
-  canUpload,
-  canEdit,
-  isEmpty,
-}: {
-  project: Project;
-  typeProvenance: TypeProvenance;
-  displayType: string;
-  canUpload: boolean;
-  canEdit: boolean;
-  isEmpty: boolean;
-}) {
-  return (
-    <div className="po-project-header">
-      <div className="po-project-header__left">
-        {/* Sector icon */}
-        <div className="po-project-header__icon" aria-hidden="true">
-          <IconDataCenter />
-        </div>
+// ── Subcomponents ─────────────────────────────────────────────────────────────
 
-        <div className="po-project-header__identity">
-          <h1 className="po-project-header__name">{project.name}</h1>
-          <div className="po-project-header__meta">
-            <span className="po-project-header__client font-mono">{project.client}</span>
-            <span className="po-project-header__sep" aria-hidden="true">·</span>
-            {/* Type provenance badge — DATA_MODEL.md §2 */}
-            <span
-              className={`po-type-badge po-type-badge--${typeProvenance}`}
-              title={
-                typeProvenance === "ai_inferred"
-                  ? "Project type inferred by AI — can be confirmed or overridden via chat"
-                  : typeProvenance === "user_provided"
-                  ? "Project type confirmed by a user"
-                  : "Project type verified and locked"
-              }
-            >
-              {typeProvenance === "ai_inferred" && <IconAI />}
-              {typeProvenance === "user_provided" && <IconUser />}
-              {typeProvenance === "verified"     && <IconVerified />}
-              <span>{displayType}</span>
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div className="po-project-header__actions">
-        {canUpload && (
-          <Link to={`/project/${project.id}/documents`} className="btn btn--secondary">
-            <IconUpload /> Upload
-          </Link>
-        )}
-        <Link
-          to={isEmpty ? "#" : `/project/${project.id}/workspace`}
-          className={`btn btn--primary${isEmpty ? " btn--disabled" : ""}`}
-          aria-disabled={isEmpty}
-          title={isEmpty ? "Upload drawings first to open the workspace" : undefined}
-        >
-          <IconWorkspace /> Open Workspace
-        </Link>
-        {canEdit && (
-          <button type="button" className="btn btn--icon" aria-label="Project actions">
-            <IconMore />
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Processing Status Bar ─────────────────────────────────────────────────────
-// Shows inline when a takeoff run is active — communicates pipeline progress.
 function ProcessingStatusBar({ takeoff }: { takeoff: TakeoffRunSummary }) {
-  const pct = Math.round((takeoff.sheets_processed / takeoff.sheets_total) * 100);
+  const pct = Math.round((takeoff.sheets_processed / (takeoff.sheets_total || 1)) * 100);
   return (
     <div className="po-processing-bar" role="status" aria-label={`Processing: ${pct}% complete`}>
       <div className="po-processing-bar__left">
         <span className="po-processing-bar__pulse" aria-hidden="true" />
-        <span className="po-processing-bar__label">AI Detection running</span>
+        <span className="po-processing-bar__label">CAD AI Extraction in Progress</span>
         <span className="po-processing-bar__detail font-mono">
-          Sheet {takeoff.sheets_processed} of {takeoff.sheets_total} ·{" "}
-          {takeoff.line_items_proposed.toLocaleString()} items detected
+          Sheet {takeoff.sheets_processed} of {takeoff.sheets_total} · {takeoff.line_items_proposed.toLocaleString()} detections
         </span>
       </div>
       <div className="po-processing-bar__track" aria-hidden="true">
         <div className="po-processing-bar__fill" style={{ width: `${pct}%` }} />
       </div>
       <span className="po-processing-bar__pct font-mono">{pct}%</span>
-      <Link to={`/project/${takeoff.project_id}/workspace`} className="po-processing-bar__link">
-        View pipeline →
-      </Link>
     </div>
   );
 }
 
-// ── Document Row ──────────────────────────────────────────────────────────────
-function DocumentRow({ doc, projectId }: { doc: Document; projectId?: string }) {
-  const pId = projectId || doc.project_id || "p1";
-  const statusLabel: Record<Document["upload_status"], string> = {
-    complete:    "Complete",
-    ingesting:   "Ingesting",
-    classifying: "Classifying",
-    detecting:   "Detecting",
-    queued:      "Queued",
-    error:       "Error",
-    parsed:      "Parsed",
-  };
-
+function DocumentRow({ doc, projectId }: { doc: Document; projectId: string }) {
   const isProcessing = ["ingesting", "classifying", "detecting"].includes(doc.upload_status);
 
   return (
-    <li className={`po-doc-row po-doc-row--${doc.upload_status}`}>
+    <li className="po-doc-row">
       <div className="po-doc-row__icon" aria-hidden="true">
         <DocFormatIcon format={doc.format} />
       </div>
 
       <div className="po-doc-row__main">
         <span className="po-doc-row__name font-mono">{doc.filename}</span>
-        <span className="po-doc-row__meta">
+        <div className="po-doc-row__meta">
           <span className="font-mono">{doc.size_mb} MB</span>
           {doc.sheet_count !== null && doc.sheet_count > 0 && (
-            <><span aria-hidden="true">·</span><span className="font-mono">{doc.sheet_count} sheets</span></>
+            <>
+              <span aria-hidden="true">·</span>
+              <span className="font-mono">{doc.sheet_count} sheets</span>
+            </>
           )}
           <span aria-hidden="true">·</span>
           <span>{doc.uploaded_by}</span>
-          <span aria-hidden="true">·</span>
-          <span className="font-mono">{doc.uploaded_at}</span>
-        </span>
+        </div>
       </div>
 
-      <div className="po-doc-row__status-wrap">
-        <span className={`po-doc-status po-doc-status--${doc.upload_status}`}>
+      <div className="po-doc-row__status">
+        <span className={`po-status-badge po-status-badge--${doc.upload_status}`}>
           {isProcessing && <span className="po-spin-icon" aria-hidden="true"><IconSync /></span>}
-          {doc.upload_status === "complete"   && <IconCheckmark />}
-          {doc.upload_status === "parsed"     && <IconCheckmark />}
-          {doc.upload_status === "queued"     && <IconClock />}
-          {doc.upload_status === "error"      && <IconError />}
-          {statusLabel[doc.upload_status] || "Queued"}
+          {doc.upload_status === "complete" && <IconCheckmark />}
+          {doc.upload_status === "parsed" && <IconCheckmark />}
+          {doc.upload_status === "queued" && <IconClock />}
+          {doc.upload_status === "error" && <IconError />}
+          {doc.upload_status}
         </span>
-        {isProcessing && (
-          <div className="po-doc-progress" aria-hidden="true">
-            <div className="po-doc-progress__fill" />
-          </div>
-        )}
       </div>
 
-      {(doc.upload_status === "complete" || doc.upload_status === "parsed") && (
-        <Link to={`/project/${pId}/workspace?doc=${doc.id}`} className="po-doc-row__open" aria-label={`Open ${doc.filename} in workspace`}>
+      <div className="po-doc-row__actions">
+        <Link
+          to={`/project/${projectId}/workspace?doc=${doc.id}`}
+          className="po-doc-row__link"
+          title="Open drawing in Workspace"
+        >
           Open →
         </Link>
-      )}
+      </div>
     </li>
   );
 }
 
-// ── Takeoff Panel ─────────────────────────────────────────────────────────────
-function TakeoffPanel({ takeoff, canView, projectId }: { takeoff: TakeoffRunSummary; canView: boolean; projectId?: string }) {
-  const pId = projectId || takeoff.project_id || "p1";
-  const pct = Math.round((takeoff.sheets_processed / takeoff.sheets_total) * 100);
-  const reviewPct = Math.round((takeoff.line_items_approved / takeoff.line_items_proposed) * 100);
-
-  return (
-    <div className="po-takeoff">
-      <div className="po-panel__header">
-        <span className="po-panel__label">
-          Run <span className="font-mono">{takeoff.id}</span> · Model <span className="font-mono">{takeoff.model_version}</span>
-        </span>
-        {canView && takeoff.status === "complete" && (
-          <Link to={`/project/${pId}/takeoff`} className="btn btn--sm btn--primary">
-            Review Takeoff →
-          </Link>
-        )}
-      </div>
-
-      {/* Processing progress */}
-      <div className="po-takeoff__grid">
-        <div className="po-takeoff__stat">
-          <span className="po-takeoff__stat-label">Sheets processed</span>
-          <span className="po-takeoff__stat-value font-mono">{takeoff.sheets_processed} / {takeoff.sheets_total}</span>
-          <div className="po-takeoff__bar">
-            <div className={`po-takeoff__bar-fill po-takeoff__bar-fill--${takeoff.status}`} style={{ width: `${pct}%` }} />
-          </div>
-        </div>
-        <div className="po-takeoff__stat">
-          <span className="po-takeoff__stat-label">Items detected</span>
-          <span className="po-takeoff__stat-value font-mono">{takeoff.line_items_proposed.toLocaleString()}</span>
-        </div>
-        <div className="po-takeoff__stat">
-          <span className="po-takeoff__stat-label">Items approved</span>
-          <span className="po-takeoff__stat-value font-mono">{takeoff.line_items_approved.toLocaleString()}</span>
-          <div className="po-takeoff__bar">
-            <div className="po-takeoff__bar-fill po-takeoff__bar-fill--approved" style={{ width: `${reviewPct}%` }} />
-          </div>
-        </div>
-        <div className="po-takeoff__stat">
-          <span className="po-takeoff__stat-label">Started</span>
-          <span className="po-takeoff__stat-value font-mono">{takeoff.started_at}</span>
-        </div>
-      </div>
-
-      {/* Status note */}
-      {takeoff.status === "running" && (
-        <div className="po-takeoff__note po-takeoff__note--running">
-          <IconSync /> Detection in progress — results update in real time when you open the workspace.
-        </div>
-      )}
-      {takeoff.status === "complete" && (
-        <div className="po-takeoff__note po-takeoff__note--complete">
-          <IconCheckmark /> Detection complete. Review and approve line items in the Drawing Workspace.
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Reports Panel ─────────────────────────────────────────────────────────────
-function ReportsPanel({ canExport, takeoff }: { canExport: boolean; takeoff: TakeoffRunSummary }) {
-  const isReady = takeoff.status === "complete" && takeoff.line_items_approved > 0;
-
-  return (
-    <div className="po-reports">
-      <div className="po-panel__header">
-        <span className="po-panel__label">Exports &amp; reports</span>
-      </div>
-
-      {!isReady ? (
-        <div className="po-reports__unavailable">
-          <IconReport />
-          <span>BOQ export is available after takeoff review is complete and at least one line item is approved.</span>
-        </div>
-      ) : (
-        <div className="po-reports__formats">
-          {(["XLSX", "CSV", "JSON", "PDF"] as const).map((fmt) => (
-            <div key={fmt} className="po-report-format">
-              <div className="po-report-format__info">
-                <span className="po-report-format__name font-mono">{fmt}</span>
-                <span className="po-report-format__desc">
-                  {fmt === "XLSX" ? "Excel workbook — BOQ summary + line items"
-                   : fmt === "CSV"  ? "Comma-separated — raw line items"
-                   : fmt === "JSON" ? "Structured data — API integration"
-                   : "PDF report — client-ready summary"}
-                </span>
-              </div>
-              <button
-                type="button"
-                className="btn btn--sm btn--secondary"
-                disabled={!canExport}
-                aria-label={`Export as ${fmt}`}
-              >
-                <IconDownload /> Export
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Session Row ───────────────────────────────────────────────────────────────
 function SessionRow({ session, projectId }: { session: ChatSession; projectId: string }) {
   return (
     <li className="po-session-row">
       <Link
         to={`/sessions?project=${projectId}&session=${session.id}`}
         className="po-session-row__link"
-        aria-label={`Open AI session: ${session.title}`}
+        aria-label={`Open AI investigation: ${session.title}`}
       >
         <div className="po-session-row__main">
           <span className="po-session-row__title">{session.title}</span>
           <span className="po-session-row__preview">{session.last_message_preview}</span>
         </div>
-        <div className="po-session-row__meta">
-          <span className="font-mono">{session.updated_at}</span>
-          <span className="po-session-row__count font-mono">{session.message_count} msgs</span>
+        <div className="po-session-row__meta font-mono">
+          <span>{session.updated_at}</span>
+          <span className="po-session-row__count">{session.message_count} msgs</span>
         </div>
       </Link>
     </li>
   );
 }
 
-// ── Skeleton ──────────────────────────────────────────────────────────────────
 function ProjectOverviewSkeleton() {
   return (
-    <div className="po-skeleton" aria-busy="true" aria-label="Loading project">
-      {/* Header skeleton */}
-      <div className="po-skel-header">
-        <div className="po-skel-icon" />
-        <div className="po-skel-titles">
-          <div className="po-skel-line po-skel-line--xl" />
-          <div className="po-skel-line po-skel-line--md" />
+    <div className="po-skeleton" aria-busy="true" aria-label="Loading project overview">
+      <div className="po-skel-bar" style={{ height: 50, marginBottom: 24 }} />
+      <div className="po-body-grid">
+        <div className="po-main-col">
+          <div className="po-skel-bar" style={{ height: 220, marginBottom: 20 }} />
+          <div className="po-skel-bar" style={{ height: 240 }} />
         </div>
-      </div>
-      {/* Body skeleton */}
-      <div className="po-skel-body">
-        <div className="po-skel-main">
-          {[1,2,3,4].map(i => (
-            <div key={i} className="po-skel-doc-row">
-              <div className="po-skel-circle po-skel-circle--sm" />
-              <div className="po-skel-lines">
-                <div className="po-skel-line po-skel-line--lg" />
-                <div className="po-skel-line po-skel-line--sm" />
-              </div>
-              <div className="po-skel-line po-skel-line--xs" />
-            </div>
-          ))}
-        </div>
-        <div className="po-skel-side">
-          {[1,2].map(i => (
-            <div key={i} className="po-skel-card">
-              <div className="po-skel-line po-skel-line--md" />
-              {[1,2,3].map(j => (
-                <div key={j} className="po-skel-line po-skel-line--full" style={{marginTop:"10px"}} />
-              ))}
-            </div>
-          ))}
+        <div className="po-side-col">
+          <div className="po-skel-bar" style={{ height: 200, marginBottom: 20 }} />
+          <div className="po-skel-bar" style={{ height: 180 }} />
         </div>
       </div>
     </div>
   );
 }
 
-// ── Inline SVG Icons ──────────────────────────────────────────────────────────
-function IconDataCenter() {
+// ── SVG Icons ─────────────────────────────────────────────────────────────────
+
+function DocFormatIcon({ format }: { format: string }) {
+  const isDwg = format === "DWG" || format === "DXF";
   return (
-    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-      <rect x="3" y="3" width="14" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.5"/>
-      <rect x="3" y="12" width="14" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.5"/>
-      <circle cx="6" cy="5.5" r="0.85" fill="currentColor"/>
-      <circle cx="8.2" cy="5.5" r="0.85" fill="currentColor"/>
-      <circle cx="6" cy="14.5" r="0.85" fill="currentColor"/>
-      <circle cx="8.2" cy="14.5" r="0.85" fill="currentColor"/>
-    </svg>
+    <span className={`po-format-pill po-format-pill--${format.toLowerCase()}`}>
+      {isDwg ? "CAD" : format}
+    </span>
   );
 }
+
 function IconUpload() {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
@@ -695,208 +718,179 @@ function IconUpload() {
     </svg>
   );
 }
+
 function IconWorkspace() {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
       <rect x="1.5" y="1.5" width="11" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
-      <path d="M4 5l3 3 3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M7 8v3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-    </svg>
-  );
-}
-function IconMore() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <circle cx="4" cy="8" r="1.2" fill="currentColor"/>
-      <circle cx="8" cy="8" r="1.2" fill="currentColor"/>
-      <circle cx="12" cy="8" r="1.2" fill="currentColor"/>
-    </svg>
-  );
-}
-function IconDoc() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-      <path d="M3 1.5h5.5L11.5 5V12A1.5 1.5 0 0110 13.5H4A1.5 1.5 0 012.5 12V3A1.5 1.5 0 014 1.5H3z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
-      <path d="M8.5 1.5V5H11.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  );
-}
-function IconTakeoff() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-      <path d="M1.5 10.5L5 7l2.5 2L10 6l2.5 2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M1.5 12.5h11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-    </svg>
-  );
-}
-function IconReport() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-      <rect x="2" y="1.5" width="10" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
-      <path d="M4.5 4.5h5M4.5 7h5M4.5 9.5h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-    </svg>
-  );
-}
-function IconSession() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-      <path d="M7 1.5a5.5 5.5 0 100 11A5.5 5.5 0 007 1.5z" stroke="currentColor" strokeWidth="1.3"/>
-      <path d="M4.5 9c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-      <circle cx="7" cy="4.5" r="0.85" fill="currentColor"/>
-    </svg>
-  );
-}
-function IconMeta() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-      <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.3"/>
-      <path d="M7 6v4M7 4.5v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-    </svg>
-  );
-}
-function IconTeam() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-      <circle cx="5.5" cy="4.5" r="2" stroke="currentColor" strokeWidth="1.3"/>
-      <path d="M1.5 12a4 4 0 018 0" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-      <circle cx="10.5" cy="4.5" r="1.5" stroke="currentColor" strokeWidth="1.2"/>
-      <path d="M12.5 12a3 3 0 00-4-2.8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-    </svg>
-  );
-}
-function IconAI() {
-  return (
-    <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden="true">
-      <path d="M5.5 1L6.7 4.3H10.3L7.3 6.3 8.5 9.5 5.5 7.5 2.5 9.5 3.7 6.3 0.7 4.3H4.3L5.5 1Z"
-        stroke="currentColor" strokeWidth="1" strokeLinejoin="round"/>
-    </svg>
-  );
-}
-function IconUser() {
-  return (
-    <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden="true">
-      <circle cx="5.5" cy="3.5" r="2" stroke="currentColor" strokeWidth="1.1"/>
-      <path d="M1 10a4.5 4.5 0 019 0" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/>
-    </svg>
-  );
-}
-function IconVerified() {
-  return (
-    <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden="true">
-      <path d="M5.5 1L7 2.5 9 2l.5 2L11 5.5 9.5 7 10 9l-2-.5L5.5 10 4 8.5 2 9 1.5 7 0 5.5 1.5 4 1 2l2 .5L5.5 1z" stroke="currentColor" strokeWidth="1" strokeLinejoin="round"/>
-      <path d="M3.5 5.5l1.5 1.5 2.5-2.5" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  );
-}
-function DocFormatIcon({ format }: { format: Document["format"] }) {
-  const colors: Record<Document["format"], string> = {
-    DWG: "#3b82f6",
-    PDF: "#ef4444",
-    DXF: "#6366f1",
-    BIM: "#8b5cf6",
-    TIFF: "#10b981",
-    Excel: "#22c55e",
-    Other: "#64748b",
-  };
-  const color = colors[format] || "#64748b";
-  return (
-    <svg width="28" height="32" viewBox="0 0 28 32" fill="none" aria-hidden="true">
-      <rect x="0" y="0" width="28" height="32" rx="3" fill={color} fillOpacity="0.12" stroke={color} strokeWidth="1" strokeOpacity="0.3"/>
-      <text x="14" y="20" textAnchor="middle" fontSize="8" fontWeight="700" fontFamily="monospace" fill={color}>{format}</text>
-    </svg>
-  );
-}
-function IconSync() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="po-spin" aria-hidden="true">
-      <path d="M1 6a5 5 0 018.5-3.6L10.5 4M10.5 1.5V4H8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M11 6a5 5 0 01-8.5 3.6L1.5 8M1.5 10.5V8H4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  );
-}
-function IconCheckmark() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-      <circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1.2"/>
-      <path d="M3.5 6l2 2 3.5-3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  );
-}
-function IconClock() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-      <circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1.2"/>
-      <path d="M6 3v3l2 1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-    </svg>
-  );
-}
-function IconError() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-      <circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1.2"/>
-      <path d="M6 3.5v3M6 8.5v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-    </svg>
-  );
-}
-function IconDownload() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
-      <path d="M6.5 1.5v7M4 6.5l2.5 2 2.5-2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M1.5 10.5v1A1 1 0 002.5 12.5h8a1 1 0 001-1v-1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-    </svg>
-  );
-}
-function IconRefresh() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-      <path d="M1.5 7a5.5 5.5 0 019.5-3.8L12.5 5M12.5 1.5V5H9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  );
-}
-function IconOffline() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M2 2l12 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-      <path d="M8 13a1 1 0 100 2 1 1 0 000-2z" fill="currentColor"/>
-    </svg>
-  );
-}
-function IconShield() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M8 1.5l5.5 2.5v4C13.5 11 11 13.5 8 14.5 5 13.5 2.5 11 2.5 8v-4L8 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
-      <path d="M5.5 8l2 2 3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  );
-}
-function IconErrorCloud() {
-  return (
-    <svg width="64" height="52" viewBox="0 0 64 52" fill="none" aria-hidden="true">
-      <path d="M16 40a12 12 0 01-2-23.8A16 16 0 0148 18h2a12 12 0 010 24H16z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
-      <path d="M32 26v7M32 36v2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-    </svg>
-  );
-}
-function EmptyProjectIllustration() {
-  return (
-    <svg width="100" height="80" viewBox="0 0 100 80" fill="none" aria-hidden="true">
-      {[20,40,60,80].map(x => [15,35,55,75].map(y => (
-        <circle key={`${x}-${y}`} cx={x} cy={y} r="1" fill="currentColor" opacity="0.1"/>
-      )))}
-      <rect x="22" y="18" width="56" height="44" rx="3" stroke="currentColor" strokeWidth="1.3" strokeDasharray="4 3" opacity="0.3"/>
-      <path d="M50 28v24M38 40h24" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 2" opacity="0.35"/>
-      <circle cx="50" cy="40" r="12" stroke="currentColor" strokeWidth="1.4" opacity="0.55"/>
-      <path d="M45 40h10M50 35v10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" opacity="0.65"/>
-    </svg>
-  );
-}
-function IconEllipsis() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
-      <circle cx="3.5" cy="7.5" r="1" fill="currentColor"/>
-      <circle cx="7.5" cy="7.5" r="1" fill="currentColor"/>
-      <circle cx="11.5" cy="7.5" r="1" fill="currentColor"/>
+      <path d="M1.5 5.5h11M5.5 5.5v7" stroke="currentColor" strokeWidth="1.3"/>
     </svg>
   );
 }
 
+function IconSession() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <path d="M12.5 7A5.5 5.5 0 012.8 10.8L1.5 12.5l1.7-1.3A5.48 5.48 0 011.5 7 5.5 5.5 0 1112.5 7z"
+        stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+function IconBrain() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M5.5 2.5a2.5 2.5 0 00-2.5 2.5v.5a2.5 2.5 0 000 5v.5a2.5 2.5 0 002.5 2.5h1v-11h-1zM10.5 2.5a2.5 2.5 0 012.5 2.5v.5a2.5 2.5 0 010 5v.5a2.5 2.5 0 01-2.5 2.5h-1v-11h1z" stroke="currentColor" strokeWidth="1.3"/>
+    </svg>
+  );
+}
+
+function IconWorkflow() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <circle cx="3" cy="7" r="2" stroke="currentColor" strokeWidth="1.3"/>
+      <circle cx="11" cy="7" r="2" stroke="currentColor" strokeWidth="1.3"/>
+      <path d="M5 7h4" stroke="currentColor" strokeWidth="1.3" strokeDasharray="1.5 1.5"/>
+    </svg>
+  );
+}
+
+function IconDoc() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <path d="M3 1.5h5l4 4v7A1.5 1.5 0 0110.5 14H3A1.5 1.5 0 011.5 12.5v-9.5A1.5 1.5 0 013 1.5z" stroke="currentColor" strokeWidth="1.3"/>
+      <path d="M8 1.5V5.5h4" stroke="currentColor" strokeWidth="1.3"/>
+    </svg>
+  );
+}
+
+function IconTakeoff() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <path d="M2 3.5h10M2 7h7M2 10.5h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+      <circle cx="10.5" cy="9.5" r="2" stroke="currentColor" strokeWidth="1.3"/>
+    </svg>
+  );
+}
+
+function IconMeta() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.3"/>
+      <path d="M7 4.5v.5M7 6.5v3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+function IconTeam() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <circle cx="5" cy="4.5" r="2" stroke="currentColor" strokeWidth="1.3"/>
+      <path d="M1.5 12c0-2 1.6-3.5 3.5-3.5s3.5 1.5 3.5 3.5" stroke="currentColor" strokeWidth="1.3"/>
+      <circle cx="10" cy="4.5" r="1.5" stroke="currentColor" strokeWidth="1.2"/>
+      <path d="M9 8.5c1.4.3 2.5 1.4 2.5 3" stroke="currentColor" strokeWidth="1.2"/>
+    </svg>
+  );
+}
+
+function IconVerified() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true" style={{ marginRight: 3 }}>
+      <circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1.2"/>
+      <path d="M3.5 6l2 2 3-3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+function IconAI() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true" style={{ marginRight: 3 }}>
+      <path d="M6 1l1.2 3.5H11L8.1 6.6l1.1 3.4L6 8.2 2.9 10l1.1-3.4L1 4.5h3.8L6 1z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+function IconCheckmark() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+      <path d="M2.5 6.5l2.5 2.5 4.5-5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+function IconClock() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+      <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.2"/>
+      <path d="M6 3.5v2.5l1.5 1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+function IconError() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+      <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.2"/>
+      <path d="M6 3.5v3M6 8v.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+function IconSync() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+      <path d="M10 6A4 4 0 116 2c1.2 0 2.3.5 3 1.4L10.5 2v3H7.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+function IconDownload() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+      <path d="M6 1.5v6M3.5 5.5L6 8l2.5-2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M2 9.5v1h8v-1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+function IconShield() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <path d="M7 1.5l5 2v4c0 3-2.5 4.5-5 5.5-2.5-1-5-2.5-5-5.5v-4l5-2z" stroke="currentColor" strokeWidth="1.3"/>
+    </svg>
+  );
+}
+
+function IconErrorCloud() {
+  return (
+    <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+      <path d="M12 28a7 7 0 01-1.5-13.8 10 10 0 0119.5-2A7 7 0 0130 28H12z" stroke="var(--danger)" strokeWidth="2"/>
+      <path d="M20 18v5M20 27v.5" stroke="var(--danger)" strokeWidth="2" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+function IconRefresh() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <path d="M12 7A5 5 0 117 2c1.5 0 2.8.6 3.8 1.6L12.5 2v4H8.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+function IconOffline() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <path d="M1 1l12 12M5.5 5.5A6 6 0 001 7a9 9 0 0112 0M7 11a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+function EmptyProjectIllustration() {
+  return (
+    <svg width="64" height="64" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+      <rect x="12" y="16" width="40" height="36" rx="4" stroke="var(--border-strong)" strokeWidth="2" strokeDasharray="4 4"/>
+      <path d="M32 26v16M24 34h16" stroke="var(--primary)" strokeWidth="2.5" strokeLinecap="round"/>
+    </svg>
+  );
+}

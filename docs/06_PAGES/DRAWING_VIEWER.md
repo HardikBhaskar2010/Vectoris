@@ -35,7 +35,7 @@ Navigate the drawing package, inspect AI-proposed detections in spatial context,
 ## Exit Conditions
 - → Takeoff Review (tabular view of the same data)
 - → Line Item Details (panel opens within or alongside workspace — TBD)
-- → AI Session (open a session about this project)
+- → Investigation Workshop (open an investigation about this project)
 - → Project Overview (breadcrumb navigation)
 
 ---
@@ -112,14 +112,14 @@ Canvas-dominant. Right panel may be a collapsible drawer or a fixed split. Exact
 ### Global
 - Undo / Redo (Ctrl/Cmd+Z / Shift+Ctrl/Cmd+Z)
 - Search within drawing (sheet search, not OCR search — TBD)
-- Open AI Session for this project
+- Open Investigation Workshop for this project
 
 ---
 
 ## AI Behavior
 - Detections are rendered as AI-proposed overlays — visually distinct from human-approved items
 - No confidence score shown as primary UI (per `../02_DESIGN/UX_PRINCIPLES.md` §2)
-- The Vectoris Agent (via an AI Session) can be asked to re-inspect a region or sheet; results appear as new proposed detections — never silently overwriting approved ones
+- The Vectoris Agent (via the Investigation Workshop) can be asked to re-inspect a region or sheet; results appear as new proposed detections — never silently overwriting approved ones
 - All detection actions (approve, reject, edit, add, delete) produce Correction Events (per `../03_ARCHITECTURE/DATA_MODEL.md`)
 - Evidence chain: every detection links to: source document, sheet ID, bounding box coordinates, model version, takeoff run ID
 

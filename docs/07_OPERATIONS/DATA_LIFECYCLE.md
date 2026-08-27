@@ -16,7 +16,7 @@
 | Project metadata (name, type, description) | Vectoris (on behalf of Org) | Cloud DB | Retained while Org account is active; deleted on account erasure request |
 | Takeoff run results (detections, line items) | Vectoris (on behalf of Org) | Cloud DB | Retained while project exists; deleted on project deletion or account erasure |
 | Correction Events (audit ledger) | Vectoris (on behalf of Org) | Cloud DB | Retained for [TBD] period; subject to erasure request with restrictions (see §4) |
-| AI Session messages and history | Vectoris (on behalf of Org) | Cloud DB | Retained while session exists; deleted on session deletion or account erasure |
+| Investigation Workshop messages and history | Vectoris (on behalf of Org) | Cloud DB | Retained while session exists; deleted on session deletion or account erasure |
 | User identity / auth data | Auth provider + Vectoris | Cloud DB + auth provider | Retained while user account is active |
 | Analytics event data (PostHog) | Vectoris | PostHog cloud | Per PostHog's retention policy + Vectoris configuration — TBD |
 | Training dataset entries (opted-in) | Vectoris | Separate training store | Per consent agreement — TBD; explicitly NOT commingled with project operational data |

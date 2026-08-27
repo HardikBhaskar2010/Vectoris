@@ -18,13 +18,13 @@ From Projects list, Dashboard, or immediately after Create Project.
 Navigates to Document Upload, Drawing/Takeoff Workspace (if data exists), or a Chat Session.
 
 ## Information Architecture
-Project metadata (name, description, inferred/user-provided/verified type — see `../03_ARCHITECTURE/DATA_MODEL.md`), current workflow stage indicator, processing status (if running), recent document activity, takeoff progress summary, recent AI sessions (last 3–5), team, quick actions.
+Project metadata (name, description, inferred/user-provided/verified type — see `../03_ARCHITECTURE/DATA_MODEL.md`), current workflow stage indicator, processing status (if running), recent document activity, takeoff progress summary, recent investigations (last 3–5), team, quick actions.
 
 What Overview does NOT contain:
 - The full document list (lives in the Documents tab)
 - The full line-item table (lives in the Takeoff tab)
 - The drawing canvas (lives in the Workspace tab)
-- The full session list (links to global AI Sessions, filtered to this project)
+- The full investigation list (links to global Investigation Workshop, filtered to this project)
 
 The Overview must remain scannable. It summarises; it does not duplicate the content of other tabs.
 

@@ -1,21 +1,26 @@
 /**
- * SessionsPage.tsx — Vectoris Brain Engineering Intelligence Workspace.
+ * SessionsPage.tsx — Vectoris Engineering Investigation Workspace.
  *
- * ARCHITECTURAL PRINCIPLES:
- *   - 3-Panel Responsive Layout: Investigation Index | Brain Workspace | Context & Evidence Inspector
- *   - Structured Engineering Inquiry & Synthesis Records (No consumer chat bubbles)
- *   - Multi-Stage Reasoning Pipeline (Layer Isolation → Vector Measurement → Clearance Check → Code Validation)
- *   - Anchored CAD Drawing Evidence Surface with direct spatial router links
- *   - Takeoff Action Proposals with live ledger review
- *   - Pinned Power Command Composer with contextual slash commands
- *   - 100% Honest Data: zero fabricated latency, VRAM, or simulated streaming timers
- *   - Pure SVG Linear/Iconsax geometry — Zero emojis
+ * PHILOSOPHY & NARRATIVE HIERARCHY:
+ *   Question → Investigation → Evidence → Engineering Conclusion → Decision/Action
+ *   - The user is conducting an engineering investigation, not a generic AI chat.
+ *   - Hierarchy leads with the Key Engineering Quantities & Findings, grounded by Evidence.
+ *   - The internal tool trace is collapsible and secondary (not raw debugger noise).
+ *   - The left rail is an Investigation History (surfacing metrics & sources).
+ *   - The right rail is a Live Investigation Inspector (what Vectoris is currently inspecting).
  */
 
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useRouter, Link } from "../router";
 import { AppShell } from "../components/AppShell";
-import type { ChatMessage, ChatSession, Project } from "../data";
+import type {
+  ChatMessage,
+  ChatSession,
+  Project,
+  EvidenceData,
+  ActionProposal,
+  ToolTraceStep,
+} from "../data";
 import {
   useSessions,
   useProjects,
@@ -35,8 +40,8 @@ export default function SessionsPage() {
   const [activeSessionId, setActiveSessionId] = useState<string>("s1");
   const [selectedContextProject, setSelectedContextProject] = useState<string>("general");
   const [inputMessage, setInputMessage] = useState("");
-  const [expandedTraceId, setExpandedTraceId] = useState<string | null>("m2");
-  const [isInspectorOpen, setIsInspectorOpen] = useState(true);
+  const [expandedTraceIds, setExpandedTraceIds] = useState<Record<string, boolean>>({});
+  const [isInspectorOpen, setIsInspectorOpen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -100,8 +105,15 @@ export default function SessionsPage() {
     return projects.find((p) => p.id === activeSession.project_id);
   }, [projects, activeSession.project_id]);
 
+  // Permission role check
+  const roleParam = searchParams.get("role");
+  const stateParam = searchParams.get("state");
+  const member = activeProject?.members.find((m) => m.name === "Hardik Bhaskar");
+  const effectiveRole = roleParam || (stateParam === "permission" ? "Viewer" : (member?.role || "Editor"));
+  const isViewer = effectiveRole.toLowerCase() === "viewer";
+
   // Active evidence in the current session (last message with evidence)
-  const latestEvidence = useMemo(() => {
+  const latestEvidence: EvidenceData | undefined = useMemo(() => {
     for (let i = activeSession.messages.length - 1; i >= 0; i--) {
       if (activeSession.messages[i].evidence) {
         return activeSession.messages[i].evidence;
@@ -110,8 +122,25 @@ export default function SessionsPage() {
     return undefined;
   }, [activeSession.messages]);
 
-  // Engine status
-  const engineStatus = useMemo(() => dataService.getEngineStatus(), []);
+  // Active action proposal in current session
+  const latestProposal: ActionProposal | undefined = useMemo(() => {
+    for (let i = activeSession.messages.length - 1; i >= 0; i--) {
+      if (activeSession.messages[i].action_proposal) {
+        return activeSession.messages[i].action_proposal;
+      }
+    }
+    return undefined;
+  }, [activeSession.messages]);
+
+  // Active referenced sources
+  const latestSources = useMemo(() => {
+    for (let i = activeSession.messages.length - 1; i >= 0; i--) {
+      if (activeSession.messages[i].referenced_sources && activeSession.messages[i].referenced_sources!.length > 0) {
+        return activeSession.messages[i].referenced_sources;
+      }
+    }
+    return undefined;
+  }, [activeSession.messages]);
 
   // Send message
   const handleSendMessage = () => {
@@ -128,7 +157,7 @@ export default function SessionsPage() {
     }, 50);
   };
 
-  // Start new session
+  // Start new investigation
   const handleStartNewSession = () => {
     const isGeneral = selectedContextProject === "general";
     const proj = availableProjects.find((p) => p.id === selectedContextProject);
@@ -144,14 +173,20 @@ export default function SessionsPage() {
   };
 
   // Approve takeoff proposal
-  const handleApproveProposal = (msgId: string, actionId?: string) => {
-    // If proposal has an item code, verify it in dataService
-    if (activeSession.project_id && actionId) {
-      dataService.updateLineItemStatus(actionId, "approved", "Hardik Bhaskar", "Approved via Vectoris Brain investigation");
-    }
+  const handleApproveProposal = (msgId: string) => {
+    if (isViewer) return;
+    dataService.updateProposalStatus(activeSession.id, msgId, "approved", "Hardik Bhaskar");
   };
 
-  // Quick slash chips
+  // Toggle trace expansion
+  const toggleTrace = (msgId: string) => {
+    setExpandedTraceIds((prev) => ({
+      ...prev,
+      [msgId]: !prev[msgId],
+    }));
+  };
+
+  // Quick prompt chips
   const handleInsertPromptChip = (text: string) => {
     setInputMessage((prev) => (prev ? `${prev} ${text}` : text));
     textareaRef.current?.focus();
@@ -161,10 +196,10 @@ export default function SessionsPage() {
     <AppShell activePath="/sessions">
       <div className="ses-page">
 
-        {/* ── PANEL 1: Investigation Index (Left Rail) ─────────── */}
-        <aside className="ses-sidebar" aria-label="Investigation sessions sidebar">
+        {/* ── PANEL 1: Investigation History (Left Rail) ──────── */}
+        <aside className="ses-sidebar" aria-label="Investigation history sidebar">
 
-          {/* Context Scope & New Session Button */}
+          {/* Scope Select & New Investigation Button */}
           <div className="ses-sidebar-header">
             <div className="ses-context-row">
               <label htmlFor="context-select" className="ses-context-label">
@@ -177,7 +212,7 @@ export default function SessionsPage() {
                 value={selectedContextProject}
                 onChange={(e) => setSelectedContextProject(e.target.value)}
               >
-                <option value="general">General Engineering Scope</option>
+                <option value="general">General — No Project</option>
                 {availableProjects.map((p) => (
                   <option key={p.id} value={p.id}>
                     Project: {p.name}
@@ -191,7 +226,7 @@ export default function SessionsPage() {
               className="btn btn--primary btn--sm ses-new-btn"
               onClick={handleStartNewSession}
             >
-              <IconPlus aria-hidden="true" /> New AI Investigation
+              <IconPlus aria-hidden="true" /> New Investigation
             </button>
           </div>
 
@@ -208,8 +243,8 @@ export default function SessionsPage() {
             />
           </div>
 
-          {/* Filter Segmented Tabs */}
-          <div className="ses-filter-tabs" role="tablist" aria-label="Session filter">
+          {/* Filter Tabs */}
+          <div className="ses-filter-tabs" role="tablist" aria-label="Investigation filter">
             <button
               type="button"
               role="tab"
@@ -226,7 +261,7 @@ export default function SessionsPage() {
               className={`ses-filter-tab${filterTab === "project" ? " ses-filter-tab--active" : ""}`}
               onClick={() => setFilterTab("project")}
             >
-              Projects
+              Project Scoped
             </button>
             <button
               type="button"
@@ -239,12 +274,11 @@ export default function SessionsPage() {
             </button>
           </div>
 
-          {/* Session Cards List */}
-          <ul className="ses-list" aria-label="Session history">
+          {/* Investigation History Cards List */}
+          <ul className="ses-list" aria-label="Investigation history">
             {filteredSessions.map((session) => {
               const isActive = session.id === activeSession.id;
               const isProject = session.project_id !== null;
-              const hasTakeoffProposal = session.messages.some((m) => !!m.action_proposal);
 
               return (
                 <li key={session.id}>
@@ -255,30 +289,45 @@ export default function SessionsPage() {
                   >
                     <div className="ses-item__top">
                       {isProject ? (
-                        <span className="ses-status-pill ses-status-pill--active">
-                          <IconFolderSmall aria-hidden="true" />
-                          <span>{session.project_name}</span>
+                        <span className="ses-item__proj-tag">
+                          {session.project_name}
                         </span>
                       ) : (
-                        <span className="ses-status-pill ses-status-pill--general">
-                          <IconCpuSmall aria-hidden="true" />
-                          <span>General</span>
+                        <span className="ses-item__proj-tag ses-item__proj-tag--general">
+                          GENERAL ENGINEERING
                         </span>
                       )}
-
-                      <span className="ses-item__time">{session.updated_at}</span>
+                      <span className="ses-item__time font-mono">{session.updated_at}</span>
                     </div>
 
                     <h4 className="ses-item__title">{session.title}</h4>
-                    <p className="ses-item__preview">{session.last_message_preview}</p>
 
-                    <div className="ses-item__footer-meta">
-                      {hasTakeoffProposal && (
-                        <span className="ses-status-pill ses-status-pill--takeoff">
-                          <IconCheckmarkSmall aria-hidden="true" /> Takeoff Action
+                    {/* Investigation Outcome Pill */}
+                    <div className="ses-item__outcome-row">
+                      {session.investigation_status === "verified" && (
+                        <span className="ses-outcome-pill ses-outcome-pill--verified">
+                          ✓ {session.key_metric || "Verified"}
                         </span>
                       )}
-                      <span>{session.messages.length} records</span>
+                      {session.investigation_status === "calculated" && (
+                        <span className="ses-outcome-pill ses-outcome-pill--calculated">
+                          ✓ {session.key_metric || "Calculated"}
+                        </span>
+                      )}
+                      {session.investigation_status === "review_required" && (
+                        <span className="ses-outcome-pill ses-outcome-pill--warn">
+                          ⚠ {session.key_metric || "Review Required"}
+                        </span>
+                      )}
+                      {!session.investigation_status && (
+                        <span className="ses-outcome-pill ses-outcome-pill--neutral">
+                          {session.messages.length} records
+                        </span>
+                      )}
+
+                      <span className="ses-item__sources-tag font-mono">
+                        {session.primary_sheet || "CAD"} · {session.source_count || session.messages.length} sources
+                      </span>
                     </div>
                   </button>
                 </li>
@@ -286,42 +335,58 @@ export default function SessionsPage() {
             })}
           </ul>
 
-          {/* Honest Telemetry Footer */}
+          {/* Local Engine Status */}
           <div className="ses-engine-footer">
             <div className="ses-engine-status">
               <span className="ses-engine-dot" aria-hidden="true" />
-              <span>Local Desktop Core</span>
+              <span>Local CAD Core</span>
             </div>
-            <div className="ses-engine-metrics pt-mono">
-              <span>{engineStatus.version}</span>
+            <div className="ses-engine-metrics font-mono">
+              <span>Ready · v0.2.1</span>
             </div>
           </div>
         </aside>
 
-        {/* ── PANEL 2: Vectoris Brain Canvas (Center) ──────────── */}
+        {/* ── PANEL 2: Investigation Canvas (Center) ──────────── */}
         <main className="ses-canvas">
 
-          {/* Session Header */}
+          {/* Investigation Header */}
           <header className="ses-canvas-header">
             <div className="ses-header-info">
               <div className="ses-header-breadcrumbs">
                 <span className="ses-header-brain-mark">
                   <IconBrainMark aria-hidden="true" />
-                  <span>Vectoris Brain</span>
+                  <span>VECTORIS INVESTIGATION</span>
                 </span>
                 <span className="ses-header-sep" aria-hidden="true">/</span>
                 <span className="ses-header-scope">
-                  {activeSession.project_name ? activeSession.project_name : "General Engineering Context"}
+                  {activeSession.project_id ? (
+                    <Link to={`/project/${activeSession.project_id}`} className="ses-header-proj-link">
+                      {activeSession.project_name}
+                    </Link>
+                  ) : (
+                    "General Electrical Scope"
+                  )}
                 </span>
+                {isViewer && (
+                  <span className="ses-viewer-badge" title="Viewer role: Read-only access">
+                    <IconShieldSmall aria-hidden="true" /> Viewer Mode
+                  </span>
+                )}
               </div>
               <h2 className="ses-header-title">{activeSession.title}</h2>
             </div>
 
             <div className="ses-header-actions">
-              <div className="ses-model-badge">
-                <span className="ses-model-dot" aria-hidden="true" />
-                <span>Vectoris Brain v1.2</span>
-              </div>
+              {activeSession.project_id && (
+                <Link
+                  to={`/project/${activeSession.project_id}/workspace`}
+                  className="btn btn--secondary btn--xs"
+                  title="Open Project Workspace"
+                >
+                  <IconBlueprint aria-hidden="true" /> Open Workspace
+                </Link>
+              )}
 
               <button
                 type="button"
@@ -331,24 +396,23 @@ export default function SessionsPage() {
                 aria-pressed={isInspectorOpen}
               >
                 <IconInspectorPanel aria-hidden="true" />
-                <span>Inspector</span>
+                <span>Live Inspector</span>
               </button>
             </div>
           </header>
 
-          {/* Records / Messages Stream */}
+          {/* Investigation Flow / Record Stream */}
           <div className="ses-messages-stream" aria-label="Investigation stream">
             {activeSession.messages.length === 0 ? (
-              /* Empty State Hero */
               <div className="ses-empty-stream">
                 <div className="ses-empty-icon-wrap" aria-hidden="true">
                   <IconBrainMarkLarge />
                 </div>
-                <h3 className="ses-empty-title">Vectoris Brain Engineering Workspace</h3>
+                <h3 className="ses-empty-title">Engineering Investigation Workspace</h3>
                 <p className="ses-empty-desc">
                   {activeSession.project_id
                     ? `Ask technical questions, verify CAD drawing layers, measure electrical quantities, or audit takeoffs for ${activeSession.project_name}.`
-                    : "Ask electrical engineering, NEC 2026 code lookup, voltage drop calculations, or cable tray sizing questions."}
+                    : "Ask electrical engineering, NEC 2026 code compliance, feeder sizing, or cable tray load questions."}
                 </p>
 
                 <div className="ses-prompt-cards-grid">
@@ -367,7 +431,7 @@ export default function SessionsPage() {
                         className="ses-prompt-card"
                         onClick={() => handleInsertPromptChip("Calculate voltage drop for 400A RPP subpanel feeder run")}
                       >
-                        <span className="ses-prompt-card-label">Feeder Sizing & Drop</span>
+                        <span className="ses-prompt-card-label">Feeder Sizing &amp; Drop</span>
                         <span className="ses-prompt-card-text">Calculate voltage drop for 400A RPP subpanel feeder run</span>
                       </button>
                     </>
@@ -396,163 +460,187 @@ export default function SessionsPage() {
             ) : (
               activeSession.messages.map((msg) => {
                 const isUser = msg.role === "user";
-                const isTraceExpanded = expandedTraceId === msg.id;
+                const isTraceExpanded = expandedTraceIds[msg.id] ?? false;
 
                 if (isUser) {
-                  /* ── User Engineering Inquiry Record ── */
+                  /* ── 1. USER INQUIRY ── */
                   return (
-                    <div key={msg.id} className="ses-record">
-                      <div className="ses-inquiry-record">
-                        <div className="ses-inquiry-header">
-                          <div className="ses-inquiry-user-chip">
-                            <div className="ses-inquiry-avatar" aria-hidden="true">HB</div>
-                            <span className="ses-inquiry-author">Hardik Bhaskar</span>
-                            <span className="ses-inquiry-tag">Inquiry</span>
-                          </div>
-                          <span className="ses-inquiry-time">{msg.timestamp}</span>
-                        </div>
-                        <p className="ses-inquiry-text">{msg.content}</p>
+                    <div key={msg.id} className="ses-inquiry-box">
+                      <div className="ses-inquiry-box__header">
+                        <span className="ses-inquiry-box__tag">YOU</span>
+                        <span className="ses-inquiry-box__time font-mono">{msg.timestamp}</span>
                       </div>
+                      <p className="ses-inquiry-box__text">{msg.content}</p>
                     </div>
                   );
                 }
 
-                /* ── Vectoris Brain Synthesis Record ── */
+                /* ── 2. VECTORIS INVESTIGATION RESPONSE ── */
                 return (
-                  <div key={msg.id} className="ses-record">
-                    <div className="ses-synthesis-record">
+                  <div key={msg.id} className="ses-response-box">
 
-                      {/* Header */}
-                      <div className="ses-synthesis-header">
-                        <div className="ses-brain-identity">
-                          <div className="ses-brain-avatar" aria-hidden="true">
-                            <IconBrainMark />
-                          </div>
-                          <span className="ses-brain-name">Vectoris Brain</span>
-                          {msg.evidence && (
-                            <span className="ses-provenance-tag">
-                              <IconCheckmarkSmall aria-hidden="true" />
-                              <span>Verified Against Evidence</span>
-                            </span>
-                          )}
-                        </div>
-                        <span className="ses-synthesis-time">{msg.timestamp}</span>
+                    {/* Vectoris Header */}
+                    <div className="ses-response-header">
+                      <div className="ses-response-identity">
+                        <span className="ses-response-name">VECTORIS</span>
+                        <span className="ses-response-grounding">
+                          <IconCheckmarkSmall aria-hidden="true" />
+                          <span>Grounded in project evidence</span>
+                        </span>
                       </div>
+                      <span className="ses-response-time font-mono">{msg.timestamp}</span>
+                    </div>
 
-                      {/* Multi-Stage Reasoning Pipeline */}
-                      {msg.thought_trace && msg.thought_trace.length > 0 && (
-                        <div className="ses-pipeline-box">
-                          <button
-                            type="button"
-                            className="ses-pipeline-toggle"
-                            onClick={() => setExpandedTraceId(isTraceExpanded ? null : msg.id)}
-                            aria-expanded={isTraceExpanded}
-                          >
-                            <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                              <IconPipeline aria-hidden="true" />
-                              <span>Reasoning Pipeline ({msg.thought_trace.length} stages)</span>
-                            </span>
-                            <IconChevronSmall isDown={isTraceExpanded} />
-                          </button>
+                    {/* Key Metric Highlights (Prominent Engineering Takeaways) */}
+                    {msg.metric_highlights && msg.metric_highlights.length > 0 && (
+                      <div className="ses-metrics-hero">
+                        {msg.metric_highlights.map((mh, mi) => (
+                          <div key={mi} className={`ses-metric-card ses-metric-card--${mh.status || "pass"}`}>
+                            <span className="ses-metric-card__val font-mono">{mh.value}</span>
+                            <span className="ses-metric-card__lbl">{mh.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
-                          {isTraceExpanded && (
-                            <ul className="ses-pipeline-steps" aria-label="Reasoning steps">
-                              {msg.thought_trace.map((step, idx) => (
-                                <li key={idx} className="ses-pipeline-step">
-                                  <span className="ses-pipeline-step-badge">{idx + 1}</span>
-                                  <span>{step}</span>
-                                </li>
+                    {/* Synthesis & Technical Findings */}
+                    <div className="ses-response-body">
+                      {msg.content.split("\n\n").map((para, pIdx) => {
+                        if (para.startsWith("- ") || para.startsWith("* ")) {
+                          const items = para.split("\n");
+                          return (
+                            <ul key={pIdx}>
+                              {items.map((it, iIdx) => (
+                                <li key={iIdx}>{it.replace(/^[-*]\s+/, "")}</li>
                               ))}
                             </ul>
-                          )}
+                          );
+                        }
+                        return <p key={pIdx}>{para}</p>;
+                      })}
+                    </div>
+
+                    {/* ── 3. GROUNDED EVIDENCE SURFACE ── */}
+                    {(msg.evidence || (msg.referenced_sources && msg.referenced_sources.length > 0)) && (
+                      <div className="ses-evidence-strip">
+                        <div className="ses-evidence-strip__header">
+                          <span className="ses-evidence-strip__title">Evidence &amp; Grounding</span>
                         </div>
-                      )}
 
-                      {/* Synthesized Engineering Answer */}
-                      <div className="ses-synthesis-body">
-                        {msg.content.split("\n\n").map((para, pIdx) => {
-                          if (para.startsWith("- ") || para.startsWith("* ")) {
-                            const items = para.split("\n");
-                            return (
-                              <ul key={pIdx}>
-                                {items.map((it, iIdx) => (
-                                  <li key={iIdx}>{it.replace(/^[-*]\s+/, "")}</li>
-                                ))}
-                              </ul>
-                            );
-                          }
-                          return <p key={pIdx}>{para}</p>;
-                        })}
-                      </div>
-
-                      {/* Anchored CAD Drawing Evidence Card */}
-                      {msg.evidence && (
-                        <div className="ses-cad-evidence-card">
-                          <div className="ses-cad-evidence-main">
-                            <div className="ses-cad-icon" aria-hidden="true">
-                              <IconBlueprint aria-hidden="true" />
-                            </div>
-                            <div className="ses-cad-details">
-                              <div className="ses-cad-title-row">
-                                <span className="ses-cad-doc-name">{msg.evidence.doc_name}</span>
-                                <span className="ses-cad-sheet-tag">{msg.evidence.sheet}</span>
+                        <div className="ses-evidence-sources-list">
+                          {msg.evidence && (
+                            <div className="ses-evidence-item">
+                              <div className="ses-evidence-item__icon" aria-hidden="true">
+                                <IconBlueprint />
                               </div>
-                              <div className="ses-cad-meta-row">
-                                {msg.evidence.region && <span>{msg.evidence.region}</span>}
+                              <div className="ses-evidence-item__main">
+                                <span className="ses-evidence-item__sheet font-mono">
+                                  {msg.evidence.sheet} · {msg.evidence.region || msg.evidence.doc_name}
+                                </span>
                                 {msg.evidence.coordinates && (
-                                  <span className="ses-cad-coords pt-mono">{msg.evidence.coordinates}</span>
+                                  <span className="ses-evidence-item__sub font-mono">
+                                    Coordinates: {msg.evidence.coordinates}
+                                  </span>
                                 )}
                               </div>
                             </div>
-                          </div>
+                          )}
 
-                          {activeSession.project_id && (
+                          {msg.referenced_sources?.map((src, si) => (
+                            <div key={si} className="ses-evidence-item">
+                              <div className="ses-evidence-item__icon" aria-hidden="true">
+                                <IconLayerSmall />
+                              </div>
+                              <div className="ses-evidence-item__main">
+                                <span className="ses-evidence-item__sheet font-mono">{src.sheet}</span>
+                                <span className="ses-evidence-item__sub">{src.desc}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Direct Actions: Open Drawing & Add/Approve Takeoff */}
+                        <div className="ses-evidence-actions">
+                          {msg.evidence && activeSession.project_id && (
                             <Link
-                              to={`/project/${activeSession.project_id}/workspace?doc=${msg.evidence.doc_id}&sheet=${encodeURIComponent(msg.evidence.sheet)}`}
-                              className="ses-cad-jump-btn"
+                              to={`/project/${activeSession.project_id}/workspace?doc=${msg.evidence.doc_id}&sheet=${encodeURIComponent(
+                                msg.evidence.sheet
+                              )}`}
+                              className="btn btn--secondary btn--sm"
+                              title="Open sheet in Drawing Viewer"
                             >
-                              <IconJumpCAD aria-hidden="true" /> Jump to CAD Region
+                              <IconJumpCAD aria-hidden="true" /> Open Drawing
                             </Link>
                           )}
+
+                          {msg.action_proposal && (
+                            msg.action_proposal.status === "pending" ? (
+                              isViewer ? (
+                                <span className="ses-viewer-lock-tag font-mono">
+                                  Viewer: Read-only
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="btn btn--primary btn--sm"
+                                  onClick={() => handleApproveProposal(msg.id)}
+                                >
+                                  <IconCheckmarkSmall aria-hidden="true" /> Add to Takeoff (+{msg.action_proposal.quantity} {msg.action_proposal.unit || ""})
+                                </button>
+                              )
+                            ) : (
+                              <span className="ses-committed-badge font-mono">
+                                ✓ Added to Takeoff ({msg.action_proposal.item_code})
+                              </span>
+                            )
+                          )}
                         </div>
-                      )}
+                      </div>
+                    )}
 
-                      {/* Takeoff Action Proposal Card */}
-                      {msg.action_proposal && (
-                        <div className="ses-takeoff-proposal-card">
-                          <div className="ses-takeoff-proposal-header">
-                            <div className="ses-takeoff-proposal-badge">
-                              <IconCheckmarkSmall aria-hidden="true" />
-                              <span>Takeoff Action Proposal</span>
-                            </div>
-                            <span className="ses-takeoff-proposal-status">
-                              {msg.action_proposal.status === "approved" ? "Approved into Takeoff Ledger" : "Pending Engineer Review"}
-                            </span>
-                          </div>
+                    {/* ── 4. COLLAPSIBLE INVESTIGATION DETAILS (Secondary) ── */}
+                    {((msg.tool_steps && msg.tool_steps.length > 0) || (msg.thought_trace && msg.thought_trace.length > 0)) && (
+                      <div className="ses-details-expander">
+                        <button
+                          type="button"
+                          className="ses-details-btn"
+                          onClick={() => toggleTrace(msg.id)}
+                          aria-expanded={isTraceExpanded}
+                        >
+                          <IconChevronSmall isDown={isTraceExpanded} />
+                          <span>
+                            Investigation details ({msg.tool_steps ? msg.tool_steps.length : msg.thought_trace?.length} verified steps)
+                          </span>
+                        </button>
 
-                          <h4 className="ses-takeoff-proposal-title">{msg.action_proposal.title}</h4>
-                          <p className="ses-takeoff-proposal-desc">{msg.action_proposal.description}</p>
-
-                          <div className="ses-takeoff-proposal-footer">
-                            <div className="ses-takeoff-proposal-codes">
-                              <span className="ses-takeoff-code">{msg.action_proposal.item_code}</span>
-                              <span className="ses-takeoff-qty">{msg.action_proposal.quantity}</span>
-                            </div>
-
-                            {msg.action_proposal.status === "pending" && (
-                              <button
-                                type="button"
-                                className="ses-takeoff-approve-btn"
-                                onClick={() => handleApproveProposal(msg.id, msg.action_proposal?.id)}
-                              >
-                                <IconCheckmarkSmall aria-hidden="true" /> Approve into Takeoff
-                              </button>
+                        {isTraceExpanded && (
+                          <div className="ses-details-content">
+                            {msg.tool_steps ? (
+                              msg.tool_steps.map((step, idx) => (
+                                <div key={step.id || idx} className="ses-detail-step">
+                                  <div className="ses-detail-step__head font-mono">
+                                    <span className="ses-detail-step__num">{idx + 1}.</span>
+                                    <span className="ses-detail-step__name">{step.name}()</span>
+                                    <span className="ses-detail-step__status">✓ pass</span>
+                                  </div>
+                                  <div className="ses-detail-step__label">{step.label}</div>
+                                  {step.output && (
+                                    <div className="ses-detail-step__out font-mono">{step.output}</div>
+                                  )}
+                                </div>
+                              ))
+                            ) : (
+                              <ul>
+                                {msg.thought_trace?.map((step, idx) => (
+                                  <li key={idx}>{step}</li>
+                                ))}
+                              </ul>
                             )}
                           </div>
-                        </div>
-                      )}
+                        )}
+                      </div>
+                    )}
 
-                    </div>
                   </div>
                 );
               })
@@ -560,11 +648,11 @@ export default function SessionsPage() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* ── Pinned Power Command Composer ──────────────────── */}
+          {/* ── Pinned Investigation Composer ───────────────────── */}
           <div className="ses-composer-wrap">
             <div className="ses-composer">
 
-              {/* Context Tag & Slash Command Chips */}
+              {/* Context Tag & Quick Directive Chips */}
               <div className="ses-composer-context-bar">
                 <span className="ses-composer-context-tag">
                   <IconLayerSmall aria-hidden="true" />
@@ -577,55 +665,43 @@ export default function SessionsPage() {
                   <button
                     type="button"
                     className="ses-quick-chip"
-                    onClick={() => handleInsertPromptChip("/takeoff")}
-                    title="Insert /takeoff command"
+                    onClick={() => handleInsertPromptChip("@E-104 check cable tray routing")}
                   >
-                    /takeoff
+                    @E-104 Tray Routing
                   </button>
                   <button
                     type="button"
                     className="ses-quick-chip"
-                    onClick={() => handleInsertPromptChip("/voltage-drop")}
-                    title="Insert /voltage-drop command"
+                    onClick={() => handleInsertPromptChip("Calculate voltage drop for 480V 3ph feeder")}
                   >
                     /voltage-drop
                   </button>
                   <button
                     type="button"
                     className="ses-quick-chip"
-                    onClick={() => handleInsertPromptChip("/tray-capacity")}
-                    title="Insert /tray-capacity command"
+                    onClick={() => handleInsertPromptChip("Verify tray loading against NEMA 12B standard")}
                   >
                     /tray-capacity
                   </button>
                   <button
                     type="button"
                     className="ses-quick-chip"
-                    onClick={() => handleInsertPromptChip("/clearance")}
-                    title="Insert /clearance command"
+                    onClick={() => handleInsertPromptChip("What are the NEC 2026 GFPE thresholds?")}
                   >
-                    /clearance
-                  </button>
-                  <button
-                    type="button"
-                    className="ses-quick-chip"
-                    onClick={() => handleInsertPromptChip("/nec-table")}
-                    title="Insert /nec-table command"
-                  >
-                    /nec-table
+                    /nec-2026
                   </button>
                 </div>
               </div>
 
-              {/* Multiline Textarea */}
+              {/* Textarea */}
               <textarea
                 ref={textareaRef}
                 className="ses-textarea"
                 rows={2}
                 placeholder={
                   activeSession.project_id
-                    ? `Ask Vectoris Brain about ${activeSession.project_name} drawings, takeoff line items, or feeder specs…`
-                    : "Ask electrical engineering, NEC compliance, or cable tray loading questions…"
+                    ? `Ask Vectoris about ${activeSession.project_name}... (use @ to reference sheets)`
+                    : "Ask Vectoris about electrical sizing, NEC 2026 standards, or tray capacities..."
                 }
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
@@ -641,7 +717,7 @@ export default function SessionsPage() {
               <div className="ses-composer-toolbar">
                 <div className="ses-composer-hints">
                   <span>
-                    Press <kbd className="pt-mono">Enter ↵</kbd> to execute · <kbd className="pt-mono">Shift+Enter</kbd> for line break
+                    Press <kbd className="font-mono">Enter ↵</kbd> to execute · <kbd className="font-mono">Shift+Enter</kbd> for line break
                   </span>
                 </div>
 
@@ -651,7 +727,7 @@ export default function SessionsPage() {
                   onClick={handleSendMessage}
                   disabled={!inputMessage.trim()}
                 >
-                  <IconSend aria-hidden="true" /> Send Inquiry
+                  <IconSend aria-hidden="true" /> Run Investigation
                 </button>
               </div>
 
@@ -660,31 +736,31 @@ export default function SessionsPage() {
 
         </main>
 
-        {/* ── PANEL 3: Context & Evidence Inspector (Right Rail) ─ */}
+        {/* ── PANEL 3: Live Investigation Inspector (Right Rail) ── */}
         {isInspectorOpen && (
-          <aside className="ses-inspector-rail" aria-label="Active Context and Evidence Inspector">
+          <aside className="ses-inspector-rail" aria-label="Live Investigation Inspector">
 
-            {/* Section 1: Active Project Scope */}
+            {/* Section 1: Session Context */}
             <div className="ses-inspector-section">
-              <span className="ses-inspector-label">Active Scope</span>
+              <span className="ses-inspector-label">Session Context</span>
               <div className="ses-inspector-card">
                 <span className="ses-inspector-card-title">
-                  {activeProject ? activeProject.name : "General Engineering"}
+                  {activeProject ? activeProject.name : "General Engineering Context"}
                 </span>
                 <span className="ses-inspector-card-meta">
                   {activeProject
-                    ? `${activeProject.sector} · ${activeProject.discipline || "Electrical"}`
-                    : "Universal Electrical / NEC 2026 Standards"}
+                    ? `${activeProject.discipline || "Electrical"} · ${activeProject.sector.replace("-", " ")}`
+                    : "Universal NEC 2026 Standards"}
                 </span>
               </div>
             </div>
 
-            {/* Section 2: Active Drawing Sheet Anchor */}
+            {/* Section 2: Active Evidence */}
             {latestEvidence && (
               <div className="ses-inspector-section">
-                <span className="ses-inspector-label">Active CAD Sheet Anchor</span>
+                <span className="ses-inspector-label">Active Evidence</span>
                 <div className="ses-inspector-card">
-                  <span className="ses-inspector-card-title">{latestEvidence.sheet}</span>
+                  <span className="ses-inspector-card-title font-mono">{latestEvidence.sheet}</span>
                   <span className="ses-inspector-card-meta">{latestEvidence.doc_name}</span>
                   {latestEvidence.region && (
                     <div className="ses-inspector-metric-row">
@@ -694,49 +770,67 @@ export default function SessionsPage() {
                   )}
                   {latestEvidence.coordinates && (
                     <div className="ses-inspector-metric-row">
-                      <span>Coordinates:</span>
-                      <span className="ses-inspector-metric-val pt-mono">{latestEvidence.coordinates}</span>
+                      <span>Coords:</span>
+                      <span className="ses-inspector-metric-val font-mono">{latestEvidence.coordinates}</span>
                     </div>
                   )}
                 </div>
               </div>
             )}
 
-            {/* Section 3: Takeoff Impact Summary */}
-            {activeProject && (
+            {/* Section 3: Referenced Sources */}
+            {latestSources && latestSources.length > 0 && (
               <div className="ses-inspector-section">
-                <span className="ses-inspector-label">Project Takeoff Summary</span>
+                <span className="ses-inspector-label">Referenced Coordination</span>
+                <div className="ses-inspector-card">
+                  {latestSources.map((src, si) => (
+                    <div key={si} className="ses-inspector-ref-row">
+                      <span className="ses-inspector-ref-sheet font-mono">{src.sheet}</span>
+                      <span className="ses-inspector-ref-desc">{src.desc}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Section 4: Takeoff Impact */}
+            {latestProposal && (
+              <div className="ses-inspector-section">
+                <span className="ses-inspector-label">Takeoff Impact</span>
                 <div className="ses-inspector-card">
                   <div className="ses-inspector-metric-row">
-                    <span>Indexed Sheets:</span>
-                    <span className="ses-inspector-metric-val">{activeProject.sheets}</span>
+                    <span>Item Code:</span>
+                    <span className="ses-inspector-metric-val font-mono">{latestProposal.item_code}</span>
                   </div>
                   <div className="ses-inspector-metric-row">
-                    <span>Project Status:</span>
-                    <span className="ses-inspector-metric-val">{activeProject.status}</span>
+                    <span>Quantity:</span>
+                    <span className="ses-inspector-metric-val font-mono">
+                      +{latestProposal.quantity} {latestProposal.unit || ""}
+                    </span>
+                  </div>
+                  <div className="ses-inspector-metric-row">
+                    <span>Status:</span>
+                    <span className="ses-inspector-metric-val">
+                      {latestProposal.status === "approved" ? "✓ Committed" : "Pending Approval"}
+                    </span>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Section 4: Workstation Engine Provenance */}
-            <div className="ses-inspector-section">
-              <span className="ses-inspector-label">Engine & Model Provenance</span>
-              <div className="ses-inspector-card">
-                <div className="ses-inspector-metric-row">
-                  <span>Inference Core:</span>
-                  <span className="ses-inspector-metric-val">Vectoris Brain v1.2</span>
-                </div>
-                <div className="ses-inspector-metric-row">
-                  <span>Engine Mode:</span>
-                  <span className="ses-inspector-metric-val">Local Desktop Core</span>
-                </div>
-                <div className="ses-inspector-metric-row">
-                  <span>Version:</span>
-                  <span className="ses-inspector-metric-val pt-mono">{engineStatus.version}</span>
-                </div>
+            {/* Section 5: Open in Workspace CTA */}
+            {activeProject && latestEvidence && (
+              <div className="ses-inspector-action">
+                <Link
+                  to={`/project/${activeProject.id}/workspace?doc=${latestEvidence.doc_id}&sheet=${encodeURIComponent(
+                    latestEvidence.sheet
+                  )}`}
+                  className="btn btn--secondary btn--sm ses-inspector-full-btn"
+                >
+                  <IconJumpCAD aria-hidden="true" /> Open in Workspace →
+                </Link>
               </div>
-            </div>
+            )}
 
           </aside>
         )}
@@ -746,116 +840,63 @@ export default function SessionsPage() {
   );
 }
 
-// ── 100% Vector Geometric Icons (Iconsax / Linear Style) ──────────────────────
+// ── SVG Icons ─────────────────────────────────────────────────────────────────
 
-function IconBrainMark({ className }: { className?: string }) {
+function IconPlus() {
   return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className={className} aria-hidden="true">
-      <path d="M8 2l1.8 4.2H14l-3.4 2.6 1.3 4.2L8 10.6l-3.9 2.4 1.3-4.2L2 6.2h4.2L8 2z" fill="currentColor" />
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+      <path d="M6 2v8M2 6h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
     </svg>
   );
 }
 
-function IconBrainMarkLarge({ className }: { className?: string }) {
+function IconSearch(props: { className?: string }) {
   return (
-    <svg width="32" height="32" viewBox="0 0 32 32" fill="none" className={className} aria-hidden="true">
-      <circle cx="16" cy="16" r="13" stroke="currentColor" strokeWidth="1.5" opacity="0.3" strokeDasharray="3 3" />
-      <path d="M16 8v16M8 16h16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      <circle cx="16" cy="16" r="4" fill="currentColor" />
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" {...props}>
+      <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/>
+      <path d="M9.5 9.5L12.5 12.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
     </svg>
   );
 }
 
-function IconPlus({ className }: { className?: string }) {
+function IconLayerSmall() {
   return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className={className} aria-hidden="true">
-      <path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+      <path d="M6 1.5l4.5 2.25L6 6 1.5 3.75 6 1.5z" stroke="currentColor" strokeWidth="1.2"/>
+      <path d="M1.5 6l4.5 2.25L10.5 6" stroke="currentColor" strokeWidth="1.2"/>
+      <path d="M1.5 8.25l4.5 2.25 4.5-2.25" stroke="currentColor" strokeWidth="1.2"/>
     </svg>
   );
 }
 
-function IconSearch({ className }: { className?: string }) {
+function IconCheckmarkSmall() {
   return (
-    <svg width="13" height="13" viewBox="0 0 14 14" fill="none" className={className} aria-hidden="true">
-      <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3" />
-      <path d="M9.5 9.5L12.5 12.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+      <path d="M2 5l2 2 4-4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   );
 }
 
-function IconSend({ className }: { className?: string }) {
+function IconShieldSmall() {
   return (
-    <svg width="13" height="13" viewBox="0 0 14 14" fill="none" className={className} aria-hidden="true">
-      <path d="M12.5 1.5L6 8M12.5 1.5L8.5 12.5 6 8 1.5 5.5l11-4z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true" style={{ marginRight: 4 }}>
+      <path d="M6 1.5l4 1.5v3c0 2.2-1.8 3.5-4 4.5-2.2-1-4-2.3-4-4.5v-3l4-1.5z" stroke="currentColor" strokeWidth="1.2"/>
     </svg>
   );
 }
 
-function IconLayerSmall({ className }: { className?: string }) {
+function IconBrainMark() {
   return (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className={className} aria-hidden="true">
-      <path d="M6 1.5L1.5 4 6 6.5 10.5 4 6 1.5zM1.5 6.5L6 9l4.5-2.5M1.5 9L6 11.5 10.5 9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M5 3a2 2 0 00-2 2v.5a2 2 0 000 4V10a2 2 0 002 2h1V3H5zM11 3a2 2 0 012 2v.5a2 2 0 010 4V10a2 2 0 01-2 2h-1V3h1z" stroke="currentColor" strokeWidth="1.3"/>
     </svg>
   );
 }
 
-function IconFolderSmall({ className }: { className?: string }) {
+function IconBrainMarkLarge() {
   return (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className={className} aria-hidden="true">
-      <path d="M1.5 3.5A1 1 0 012.5 2.5h2l1 1h4A1 1 0 0110.5 4.5v5a1 1 0 01-1 1h-7a1 1 0 01-1-1v-6z" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function IconCpuSmall({ className }: { className?: string }) {
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className={className} aria-hidden="true">
-      <rect x="2.5" y="2.5" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.1" />
-      <path d="M4.5 4.5h3v3h-3zM4.5 1v1.5M7.5 1v1.5M4.5 9.5V11M7.5 9.5V11M1 4.5h1.5M1 7.5h1.5M9.5 4.5H11M9.5 7.5H11" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function IconCheckmarkSmall({ className }: { className?: string }) {
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className={className} aria-hidden="true">
-      <path d="M2.5 6l2.5 2.5 4.5-5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function IconPipeline({ className }: { className?: string }) {
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className={className} aria-hidden="true">
-      <circle cx="3" cy="6" r="1.5" stroke="currentColor" strokeWidth="1.1" />
-      <circle cx="9" cy="6" r="1.5" stroke="currentColor" strokeWidth="1.1" />
-      <path d="M4.5 6h3" stroke="currentColor" strokeWidth="1.1" strokeDasharray="1 1" />
-    </svg>
-  );
-}
-
-function IconBlueprint({ className }: { className?: string }) {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className={className} aria-hidden="true">
-      <rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.2" />
-      <path d="M5 2v12M2 7h12M8 7v7" stroke="currentColor" strokeWidth="1.1" />
-    </svg>
-  );
-}
-
-function IconJumpCAD({ className }: { className?: string }) {
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className={className} aria-hidden="true">
-      <path d="M7 2h3v3M10 2L5 7M2 4v6h6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function IconInspectorPanel({ className }: { className?: string }) {
-  return (
-    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" className={className} aria-hidden="true">
-      <rect x="1.5" y="1.5" width="10" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.1" />
-      <path d="M8.5 1.5v10" stroke="currentColor" strokeWidth="1.1" />
+    <svg width="40" height="40" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+      <path d="M16 10a7 7 0 00-7 7v1.5a7 7 0 000 13V33a7 7 0 007 7h3V10h-3zM32 10a7 7 0 017 7v1.5a7 7 0 010 13V33a7 7 0 01-7 7h-3V10h3z" stroke="var(--color-racing-red)" strokeWidth="2.5"/>
     </svg>
   );
 }
@@ -865,12 +906,46 @@ function IconChevronSmall({ isDown }: { isDown: boolean }) {
     <svg
       width="10"
       height="10"
-      viewBox="0 0 10 10"
+      viewBox="0 0 12 12"
       fill="none"
-      style={{ transform: isDown ? "rotate(180deg)" : "none", transition: "transform 150ms ease" }}
       aria-hidden="true"
+      style={{ transform: isDown ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 120ms ease" }}
     >
-      <path d="M2.5 3.5L5 6l2.5-2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M4.5 2.5l4 3.5-4 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+function IconBlueprint() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <rect x="2" y="2" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="1.4"/>
+      <path d="M2 6h16M6 6v12M10 10h4M10 14h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+function IconJumpCAD() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <path d="M3 11L11 3M11 3H5M11 3v6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+function IconInspectorPanel() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <rect x="1.5" y="1.5" width="11" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
+      <path d="M9 1.5v11" stroke="currentColor" strokeWidth="1.3"/>
+    </svg>
+  );
+}
+
+function IconSend() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <path d="M12.5 1.5L6 8M12.5 1.5l-3.5 11-3-4.5-4.5-3 11-3.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
     </svg>
   );
 }

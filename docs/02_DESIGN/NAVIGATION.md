@@ -19,7 +19,7 @@ The global sidebar is persistent across all authenticated pages.
 ──────────────────────────
 Dashboard
 Projects
-AI Sessions
+Investigation Workshop
 ──────────────────────────
 Settings
 ──────────────────────────
@@ -32,7 +32,7 @@ Settings
 |---|---|---|---|
 | Dashboard | Dashboard | `/dashboard` | Org-wide pulse. Active state: exact path match. |
 | Projects | Projects | `/projects` | Project library. Active state: `/projects` and `/project/*`. |
-| AI Sessions | AI Sessions | `/sessions` | Global sessions surface (general + project-attached). Active: `/sessions/*`. |
+| Investigation Workshop | Investigation Workshop | `/sessions` | Global engineering investigations surface (general + project-attached). Active: `/sessions/*`. |
 | Settings | Settings | `/settings` | Org/user settings. Active: `/settings/*`. |
 
 ### What does NOT belong in the global sidebar
@@ -108,24 +108,24 @@ The Workspace breadcrumb may include the active sheet as the third level when a 
 
 ---
 
-## 4. AI Sessions Navigation
+## 4. Investigation Workshop Navigation
 
-AI Sessions is a global nav item, not a project-exclusive page.
+Investigation Workshop is a global nav item, not a project-exclusive page.
 
 ```
-AI Sessions
-├── [All]  [Project Sessions]  [General]      ← filter tabs
+Investigation Workshop
+├── [All]  [Project Scoped]  [General]      ← filter tabs
 │
-├── [Project Label] Session Title       timestamp
-├── [Project Label] Session Title       timestamp
-├── General conversation                timestamp
+├── [Project Label] Investigation Title       timestamp
+├── [Project Label] Investigation Title       timestamp
+├── General investigation                     timestamp
 └── ...
 ```
 
-- Sessions with `project_id` display the project name as a label prefix.
-- Sessions with `project_id = NULL` display as "General" with no project prefix.
-- Clicking "New session" from within a project pre-fills the project context selector.
-- The same session list appears in the AI Sessions global page and (filtered) in the Project Overview's session panel.
+- Investigations with `project_id` display the project name as a label prefix.
+- Investigations with `project_id = NULL` display as "General" with no project prefix.
+- Clicking "New Investigation" from within a project pre-fills the project context selector.
+- The same investigation list appears in the Investigation Workshop global page and (filtered) in the Project Overview's investigation panel.
 
 ---
 

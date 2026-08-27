@@ -10,7 +10,7 @@
  * CANONICAL GLOBAL NAV (source: docs/02_DESIGN/NAVIGATION.md §1 — LOCKED):
  * - Dashboard     /dashboard
  * - Projects      /projects   (also active for all /project/* sub-routes)
- * - AI Sessions   /sessions
+ * - Investigation Workshop   /sessions
  * - Settings      /settings
  *
  * FUNCTIONAL CHROME (Phase 6):
@@ -34,10 +34,10 @@ import { updateService, type UpdateState } from "../services/updateService";
 
 // ── Canonical global nav — LOCKED (docs/02_DESIGN/NAVIGATION.md §1) ──────────
 const NAV_ITEMS = [
-  { label: "Dashboard",   path: "/dashboard", icon: <IconDashboard /> },
-  { label: "Projects",    path: "/projects",  icon: <IconProjects /> },
-  { label: "AI Sessions", path: "/sessions",  icon: <IconSessions /> },
-  { label: "Settings",    path: "/settings",  icon: <IconSettings /> },
+  { label: "Dashboard",              path: "/dashboard", icon: <IconDashboard /> },
+  { label: "Projects",               path: "/projects",  icon: <IconProjects /> },
+  { label: "Investigation Workshop", path: "/sessions",  icon: <IconSessions /> },
+  { label: "Settings",               path: "/settings",  icon: <IconSettings /> },
 ] as const;
 
 // ── Types ────────────────────────────────────────────────────────────────────

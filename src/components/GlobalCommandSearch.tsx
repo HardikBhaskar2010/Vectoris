@@ -2,7 +2,7 @@
  * GlobalCommandSearch.tsx — Lightweight, accessible command and search palette.
  *
  * Real Data:
- * - Queries dataService for Projects, Documents, and AI Sessions.
+ * - Queries dataService for Projects, Documents, and Investigations.
  * - Keyboard navigation (ArrowUp, ArrowDown, Enter, Escape).
  * - Global shortcut (⌘K / Ctrl+K).
  */
@@ -97,7 +97,7 @@ export function GlobalCommandSearch({ isOpen, onClose }: GlobalCommandSearchProp
       }
     }
 
-    // 3. AI Sessions
+    // 3. Investigation Workshop
     for (const s of sessions) {
       if (
         !q ||
@@ -107,9 +107,9 @@ export function GlobalCommandSearch({ isOpen, onClose }: GlobalCommandSearchProp
         items.push({
           id: `sess-${s.id}`,
           category: "session",
-          categoryLabel: "AI Sessions",
+          categoryLabel: "Investigation Workshop",
           title: s.title,
-          subtitle: `${s.project_name || "General Session"} · ${s.message_count} messages`,
+          subtitle: `${s.project_name || "General Scope"} · ${s.message_count} records`,
           href: `/sessions`,
         });
       }
@@ -180,7 +180,7 @@ export function GlobalCommandSearch({ isOpen, onClose }: GlobalCommandSearchProp
             ref={inputRef}
             type="search"
             className="cmd-palette__input"
-            placeholder="Search projects, blueprints, documents, AI sessions…"
+            placeholder="Search projects, blueprints, documents, investigations…"
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);

@@ -16,10 +16,10 @@ This document serves as the single source of truth for third-party libraries use
 |---|---|---|---|
 | **ReactBits** | Custom interactive components, visual effects, premium interactions | Global | **LOCKED** |
 | **Bklit UI** | Dashboard components, data tables, structural cards | Dashboard, Projects | **LOCKED** |
-| **assistant-ui** | AI Agent chat foundation, message rendering, tool surfaces | AI Session, Takeoff Review | **LOCKED** |
+| **assistant-ui** | AI Agent foundation, message rendering, tool surfaces | Investigation Workshop, Takeoff Review | **LOCKED** |
 | **Skiper UI** | Premium motion components, animated theme controls, Dynamic Island | Global, Settings | **LOCKED** (selective) |
 | **Driver.js** | Product onboarding, guided tours, contextual walkthroughs | Onboarding Flow | **LOCKED** |
-| **Thinking Orbs** | AI activity visualization, agent processing states | AI Session, Global | **LOCKED** (selective) |
+| **Thinking Orbs** | AI activity visualization, agent processing states | Investigation Workshop, Global | **LOCKED** (selective) |
 
 *(Note: Tailark is explicitly excluded and REJECTED from the Vectoris ecosystem).*
 

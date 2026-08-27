@@ -16,11 +16,11 @@ flowchart TD
     Onboarding --> Dashboard
     Auth --> Dashboard
     Dashboard --> Projects
-    Dashboard --> Sessions[AI Sessions]
+    Dashboard --> Sessions[Investigation Workshop]
     Projects --> CreateProject[Create Project]
     CreateProject --> ProjectOverview[Project Overview]
     Projects --> ProjectOverview
-    Sessions --> SessionDetail[AI Session]
+    Sessions --> SessionDetail[Investigation Workshop Detail]
     ProjectOverview --> Sessions
     ProjectOverview --> DocumentUpload[Document Upload]
     DocumentUpload --> Processing
@@ -33,7 +33,7 @@ flowchart TD
     ProjectOverview --> Settings
 ```
 
-> **Note:** AI Sessions is a **global** nav item — not only accessible from Project Overview. Sessions have `project_id` nullable: a NULL `project_id` is a general conversation; a non-null `project_id` is a project-attached session. Both use the same UI. See `../02_DESIGN/NAVIGATION.md` for canonical global sidebar structure.
+> **Note:** Investigation Workshop is a **global** nav item — not only accessible from Project Overview. Investigations have `project_id` nullable: a NULL `project_id` is a general investigation; a non-null `project_id` is a project-attached investigation. Both use the same UI. See `../02_DESIGN/NAVIGATION.md` for canonical global sidebar structure.
 
 ## 2. Contextual Surfaces (Not Standalone Pages)
 
@@ -50,9 +50,9 @@ Per founder decision, the following are modal/drawer/popover/command-surface UI,
 | Dashboard | Post-auth or Post-onboarding | → Projects, → Create Project, → Settings |
 | Projects | From Dashboard | → Create Project, → Project Overview |
 | Create Project | From Projects/Dashboard | → Project Overview on success |
-| Project Overview | From Projects, or post-creation | → Document Upload, → Sessions (open existing or start new), → Takeoff Review (if takeoff exists), → Settings |
+| Project Overview | From Projects, or post-creation | → Document Upload, → Investigation Workshop (open existing or start new), → Takeoff Review (if takeoff exists), → Settings |
 | Settings | From Dashboard or Project Overview | → Return to previous |
-| Sessions | From global sidebar (AI Sessions), from Project Overview, from Drawing Workspace | → Session Detail; → return to origin |
+| Investigation Workshop | From global sidebar, from Project Overview, from Drawing Workspace | → Investigation Detail; → return to origin |
 | Document Upload | From Project Overview | → Processing |
 | Processing | Post-upload | → Drawing Viewer (auto or on completion) |
 | Drawing / Takeoff Workspace | Post-processing, or returning to existing project | → Takeoff Review |

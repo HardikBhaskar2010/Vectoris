@@ -25,7 +25,7 @@ flowchart TD
     G --> H[Export & Downstream Handoff]
 ```
 
-The MVP is **drawing-first** and executes within the native Project container. This does not mean Vectoris is merely a standalone takeoff tool — the architecture is organized around the Project container, hosting Drawings, Documents, AI Sessions, and Collaboration. See `MVP_BOUNDARY.md` for the explicit in/out list.
+The MVP is **drawing-first** and executes within the native Project container. This does not mean Vectoris is merely a standalone takeoff tool — the architecture is organized around the Project container, hosting Drawings, Documents, Investigation Workshop, and Collaboration. See `MVP_BOUNDARY.md` for the explicit in/out list.
 
 ### 2.1 MVP Functional Requirements
 

@@ -1,12 +1,12 @@
-# AI Session
+# Investigation Workshop (formerly AI Session)
 
 ## Status
 RECOMMENDED
 
 ## Purpose
-The global conversational workspace for interacting with the Vectoris Agent. Sessions may be general (no project context) or project-attached (scoped to a specific project). Both are first-class session types in the same unified interface.
+The global engineering investigation workspace for interacting with Vectoris Intelligence. Investigations may be general (no project context) or project-attached (scoped to a specific project). Both are first-class investigation types in the same unified interface.
 
-There is ONE AI Session system. There is ONE AI Session UI. Project context is a metadata field on the session entity — not a separate system or page.
+There is ONE Investigation Workshop system. There is ONE Investigation Workshop UI. Project context is a metadata field on the investigation session entity — not a separate system or page.
 
 ## Design Reference
 

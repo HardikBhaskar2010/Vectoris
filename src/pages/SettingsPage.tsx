@@ -860,7 +860,7 @@ export default function SettingsPage() {
                         <td><strong>Command & Quick Search</strong></td>
                         <td><kbd className="settings-kbd">⌘K</kbd> / <kbd className="settings-kbd">Ctrl+K</kbd></td>
                         <td>Global</td>
-                        <td>Open universal search for projects, documents, and AI sessions</td>
+                        <td>Open universal search for projects, documents, and investigations</td>
                       </tr>
                       <tr>
                         <td><strong>Dismiss / Close</strong></td>

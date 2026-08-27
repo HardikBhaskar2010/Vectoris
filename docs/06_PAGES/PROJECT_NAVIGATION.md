@@ -18,7 +18,7 @@ A project may contain:
 - Takeoff items (candidate → verified)
 - Correction events (audit ledger)
 - Exports (point-in-time snapshots)
-- AI Sessions (project-attached conversations)
+- Investigation Workshop (project-attached investigations)
 - Team members (roles and permissions)
 - [FUTURE] Estimate (from verified takeoff)
 - [FUTURE] Bid / Proposal (from estimate)
@@ -55,15 +55,15 @@ Summarises:
 - Processing status (if a pipeline is running)
 - Recent document activity
 - Takeoff progress (items detected / approved / pending)
-- Recent AI sessions (last 3–5, with title, preview, timestamp)
+- Recent investigations (last 3–5, with title, finding preview, timestamp)
 - Team members
-- Quick actions (Upload, Open Workspace, New Session)
+- Quick actions (Upload, Open Workspace, New Investigation)
 
 Does NOT contain:
 - The full document list (→ Documents tab)
 - The full line-item table (→ Takeoff tab)
 - The drawing canvas (→ Workspace tab)
-- The full session list (→ global AI Sessions, or View all sessions link)
+- The full investigation list (→ global Investigation Workshop, or View all investigations link)
 
 ### Documents
 Full list of all uploaded files in this project.
@@ -173,21 +173,21 @@ From verified takeoff only                     ▼
 
 ---
 
-## 5. AI Sessions Within a Project
+## 5. Investigation Workshop Within a Project
 
-When viewing a project, the Overview tab surfaces project-attached sessions:
+When viewing a project, the Overview tab surfaces project-attached investigations:
 ```
-AI Sessions
-├── [Recent session 1]     2h ago
-├── [Recent session 2]    12h ago
-└── View all sessions →
+Investigation Workshop
+├── [Recent investigation 1]     2h ago
+├── [Recent investigation 2]    12h ago
+└── View all investigations →
 ```
 
-"View all sessions" navigates to the global AI Sessions page, pre-filtered to this project.
+"View all investigations" navigates to the global Investigation Workshop page, pre-filtered to this project.
 
-"New session" opens the new-session composer with this project pre-selected in the context picker.
+"New Investigation" opens the investigation composer with this project pre-selected in the context picker.
 
-Clicking any session — from the project or from the global sessions page — opens the same AI Session interface. There is no separate project-specific chat UI.
+Clicking any investigation — from the project or from the global workshop page — opens the same Investigation Workshop interface. There is no separate project-specific chat UI.
 
 ---
 

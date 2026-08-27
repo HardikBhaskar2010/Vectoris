@@ -40,7 +40,7 @@ See the current state of active work across projects, quickly return to an activ
 Successful authentication, or navigating "home" (clicking the logo/wordmark or Dashboard nav item from anywhere in the app).
 
 ## Exit Conditions
-→ Projects page, → Create Project, → specific Project Overview, → Takeoff Workspace (for pinned/active project), → AI Sessions.
+→ Projects page, → Create Project, → specific Project Overview, → Takeoff Workspace (for pinned/active project), → Investigation Workshop.
 
 ---
 
@@ -49,7 +49,7 @@ Successful authentication, or navigating "home" (clicking the logo/wordmark or D
 **Persistent Left Sidebar:**
 - Vectoris wordmark + logo mark
 - Organization / Workspace Switcher (shows org name, member count, switch control)
-- Navigation: Dashboard, Projects, [Drawing Viewer / Takeoff Workspace], AI Sessions, [Documents?], BOQ Reports, Settings
+- Navigation: Dashboard, Projects, Investigation Workshop, Settings
 - Bottom: Local engine status card (status + storage/indexing summary)
 
 > Note: The sidebar navigation structure in the design (especially "Drawing Viewer" vs. "Takeoff Workspace" as separate nav items, and "Documents" as a top-level item) does not fully match the current `APP_FLOW.md`. The founder must confirm the canonical nav structure. Until confirmed, the sidebar is documented as a design reference, not a locked navigation specification.
@@ -113,7 +113,7 @@ Two-panel: fixed left sidebar + scrollable main content. Fixed top header. See d
 ---
 
 ## AI Behavior
-The Dashboard's AI feed is a **read-only activity stream** — it shows what the Vectoris Agent has recently done across the org's active projects (analysis summaries, detections, proposed actions awaiting review). It is not an interactive chat surface. The interactive AI Session lives at `AI_SESSION.md`.
+The Dashboard's AI feed is a **read-only activity stream** — it shows what the Vectoris Agent has recently done across the org's active projects (analysis summaries, detections, proposed actions awaiting review). It is not an interactive chat surface. The interactive investigation interface lives in the Investigation Workshop at `AI_SESSION.md`.
 
 No AI input or action proposals are initiated from the Dashboard itself.
 

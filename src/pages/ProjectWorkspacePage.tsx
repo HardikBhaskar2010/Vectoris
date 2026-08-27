@@ -225,7 +225,7 @@ export default function ProjectWorkspacePage() {
       activeTab="workspace"
       headerActions={
         <Link to={`/sessions?project=${projectId}`} className="btn btn--secondary btn--sm">
-          <IconSession /> AI Session
+          <IconSession /> Investigation Workshop
         </Link>
       }
     >
