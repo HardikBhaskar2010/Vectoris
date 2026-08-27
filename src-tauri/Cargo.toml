@@ -1,6 +1,6 @@
 [package]
 name = "vectoris"
-version = "0.2.1"
+version = "0.2.2"
 description = "Vectoris — AI-Native Project Management & Project Intelligence Workspace"
 authors = ["you"]
 license = ""

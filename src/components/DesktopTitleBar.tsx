@@ -295,8 +295,8 @@ export function DesktopTitleBar({ title, isAuthenticated = false }: DesktopTitle
           <span className="desktop-titlebar__name">Vectoris</span>
         </div>
 
-        <span className="desktop-titlebar__version" aria-label="Version 0.2.1 local workstation">
-          v0.2.1
+        <span className="desktop-titlebar__version" aria-label="Version 0.2.2 local workstation">
+          v0.2.2
         </span>
 
         {title ? (

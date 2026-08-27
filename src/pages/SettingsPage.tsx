@@ -1558,7 +1558,7 @@ export default function SettingsPage() {
                 <div className="settings-grid-3col">
                   <div className="settings-stat-card">
                     <span className="settings-stat-card__label">Application Version</span>
-                    <strong className="settings-stat-card__val">v0.2.1</strong>
+                    <strong className="settings-stat-card__val">v0.2.2</strong>
                     <span className="settings-stat-card__sub">Engineering Workstation Release</span>
                   </div>
                   <div className="settings-stat-card">

@@ -342,7 +342,7 @@ export default function SessionsPage() {
               <span>Local CAD Core</span>
             </div>
             <div className="ses-engine-metrics font-mono">
-              <span>Ready · v0.2.1</span>
+              <span>Ready · v0.2.2</span>
             </div>
           </div>
         </aside>

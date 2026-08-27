@@ -64,7 +64,7 @@ export class EngineService {
       is_tauri: isTauri,
       platform: typeof navigator !== "undefined" ? navigator.platform : "web",
       arch: "x86_64",
-      app_version: "0.2.1",
+      app_version: "0.2.2",
       core_connected: false,
     };
   }
@@ -89,7 +89,7 @@ export class EngineService {
     return {
       os: typeof navigator !== "undefined" ? navigator.platform : "web",
       arch: "x86_64",
-      app_version: "0.2.1",
+      app_version: "0.2.2",
       is_desktop: isTauri,
     };
   }

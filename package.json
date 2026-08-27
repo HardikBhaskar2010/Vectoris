@@ -1,6 +1,6 @@
 {
   "name": "vectoris-frontend",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "AI-native Project Management & Project Intelligence workspace for electrical and MEP engineering, unifying drawing takeoff, document synthesis, and collaborative estimation.",
   "private": true,
   "type": "module",
@@ -9,9 +9,9 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "tauri": "node scripts/tauri.js",
-    "tauri:dev": "node scripts/tauri.js dev --target x86_64-pc-windows-gnu",
-    "tauri:build": "node scripts/tauri.js build --target x86_64-pc-windows-gnu"
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev --target x86_64-pc-windows-gnu",
+    "tauri:build": "tauri build --target x86_64-pc-windows-gnu"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.4",
