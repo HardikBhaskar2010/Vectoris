@@ -2,15 +2,19 @@
  * fileDialogService.ts — Native & web file selection service for engineering documents.
  *
  * Implements real file selection supporting PDF, DWG, DXF, BIM, TIFF, and Excel files.
- * Works seamlessly in both Tauri desktop mode (triggering the native OS file picker, staging
- * files locally into %APPDATA%/Vectoris/projects/{id}/documents/{id}/, and capturing real OS paths)
- * and web preview environments (graceful fallback).
+ * Provides a unified DocumentSource -> Uint8Array boundary decoupling the downstream
+ * document perception pipeline from filesystem / browser storage mechanics.
  */
 
 import { invoke } from "@tauri-apps/api/core";
 import { open as tauriOpenDialog } from "@tauri-apps/plugin-dialog";
 import type { DocumentFormat } from "../data/types";
 import { generateId } from "./idService";
+
+export type DocumentSource =
+  | { type: "browser_file"; file: File; filename: string }
+  | { type: "staged_doc"; projectId: string; documentId: string; filename: string }
+  | { type: "bytes"; data: Uint8Array | ArrayBuffer; filename: string };
 
 export interface SelectedFileMetadata {
   id?: string;
@@ -20,7 +24,7 @@ export interface SelectedFileMetadata {
   uploaded_by: string;
   file_path?: string;
   storage_reference?: string;
-  raw_file?: File;
+  source: DocumentSource;
 }
 
 export interface FileSelectionResult {
@@ -106,12 +110,43 @@ export function parseFileMetadata(file: File & { path?: string }): {
       uploaded_by: "Project User",
       file_path: nativePath,
       storage_reference: nativePath ? `projects/local/documents/${file.name}` : undefined,
-      raw_file: file,
+      source: {
+        type: "browser_file",
+        file,
+        filename: file.name,
+      },
     },
   };
 }
 
 export class FileDialogService {
+  /**
+   * Resolves a DocumentSource into a raw Uint8Array.
+   */
+  public async readDocumentBytes(source: DocumentSource): Promise<Uint8Array> {
+    if (source.type === "bytes") {
+      return source.data instanceof Uint8Array ? source.data : new Uint8Array(source.data);
+    }
+
+    if (source.type === "browser_file") {
+      const buffer = await source.file.arrayBuffer();
+      return new Uint8Array(buffer);
+    }
+
+    if (source.type === "staged_doc") {
+      if (isTauriEnvironment()) {
+        const raw = await invoke<number[]>("read_project_document_bytes", {
+          projectId: source.projectId,
+          documentId: source.documentId,
+        });
+        return new Uint8Array(raw);
+      }
+      throw new Error(`Cannot read staged document [${source.documentId}] outside native Tauri desktop runtime`);
+    }
+
+    throw new Error("Unsupported DocumentSource type");
+  }
+
   /**
    * Opens native OS dialog in Tauri, or standard HTML file picker in browser fallback.
    */
@@ -190,6 +225,12 @@ export class FileDialogService {
           uploaded_by: "Project User",
           file_path: info.staged_path,
           storage_reference: info.local_reference,
+          source: {
+            type: "staged_doc",
+            projectId,
+            documentId: info.document_id,
+            filename: info.filename,
+          },
         });
       } catch (err) {
         const filename = filePath.split(/[/\\]/).pop() || filePath;

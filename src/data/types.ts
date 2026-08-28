@@ -219,7 +219,7 @@ export interface Sheet {
   project_id: string;
   sheet_id: string;
   name: string;
-  type: "floor_plan" | "schedule" | "single_line" | "legend" | "notes";
+  type: "floor_plan" | "schedule" | "single_line" | "legend" | "notes" | "raster_scan";
   detection_count: number;
   document_name: string;
   is_empty: boolean;

@@ -211,6 +211,62 @@ fn stage_project_document(
     })
 }
 
+#[tauri::command]
+fn read_project_document_bytes(
+    app_handle: tauri::AppHandle,
+    project_id: String,
+    document_id: String,
+) -> Result<Vec<u8>, String> {
+    // Sanitize inputs to prevent directory traversal
+    if project_id.contains("..") || project_id.contains('/') || project_id.contains('\\') {
+        return Err("Invalid project ID format".to_string());
+    }
+    if document_id.contains("..") || document_id.contains('/') || document_id.contains('\\') {
+        return Err("Invalid document ID format".to_string());
+    }
+
+    let app_data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to resolve app data directory: {}", e))?;
+
+    let doc_dir = app_data_dir
+        .join("projects")
+        .join(&project_id)
+        .join("documents")
+        .join(&document_id);
+
+    if !doc_dir.exists() || !doc_dir.is_dir() {
+        return Err(format!(
+            "Document directory not found for project {} and document {}",
+            project_id, document_id
+        ));
+    }
+
+    let entries = std::fs::read_dir(&doc_dir)
+        .map_err(|e| format!("Failed to read document directory: {}", e))?;
+
+    let first_file = entries
+        .filter_map(|entry| entry.ok())
+        .map(|e| e.path())
+        .find(|p| p.is_file())
+        .ok_or_else(|| "No document file found in staging directory".to_string())?;
+
+    // Canonicalize paths to verify containment within Vectoris managed storage
+    let canonical_file = first_file
+        .canonicalize()
+        .map_err(|e| format!("Failed to canonicalize document path: {}", e))?;
+    let canonical_data_dir = app_data_dir
+        .canonicalize()
+        .unwrap_or(app_data_dir);
+
+    if !canonical_file.starts_with(&canonical_data_dir) {
+        return Err("Access denied: path is outside managed Vectoris storage directory".to_string());
+    }
+
+    std::fs::read(&canonical_file).map_err(|e| format!("Failed to read document bytes: {}", e))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -235,6 +291,7 @@ pub fn run() {
             get_platform_info,
             inspect_document_file,
             stage_project_document,
+            read_project_document_bytes,
         ])
         .setup(|_app| Ok(()))
         .run(tauri::generate_context!())

@@ -175,65 +175,7 @@ export class DrawingPerceptionEngine {
       }
     }
 
-    // 2. If no explicit regex patterns matched, apply domain heuristics based on sheet category
-    if (results.length === 0) {
-      if (classification.category === "Lighting & Fixtures") {
-        results.push({
-          itemCode: "LT-01",
-          name: "Recessed 2x4 LED Troffer Luminaire (40W, 4000K)",
-          description: "General area illumination troffer luminaire detected on floor plan.",
-          specification: "40W LED · 4000K · 0-10V Dimming · IP20",
-          category: "Lighting & Fixtures",
-          quantity: 24,
-          unit: "NOS",
-          confidence: 0.85,
-        });
-        results.push({
-          itemCode: "LT-EM",
-          name: "Emergency LED Exit Luminaire with 90min Battery Backup",
-          description: "Egress path emergency luminaire unit.",
-          specification: "3W LED · 90-min NiCad Battery Backup",
-          category: "Lighting & Fixtures",
-          quantity: 4,
-          unit: "NOS",
-          confidence: 0.88,
-        });
-      } else if (classification.category === "Cable Tray & Containment") {
-        results.push({
-          itemCode: "CT-600",
-          name: "Overhead Ladder Cable Tray 600mm Width",
-          description: "Hot dip galvanized ladder tray for main power feeders.",
-          specification: "600mm W x 100mm H · 2.0mm GI Sheet",
-          category: "Cable Tray & Containment",
-          quantity: 45,
-          unit: "MTR",
-          confidence: 0.87,
-        });
-      } else if (classification.category === "Power Distribution") {
-        results.push({
-          itemCode: "SWG-01",
-          name: "Main LT Switchgear Panel (800A Incomer, 415V 3P 35kA)",
-          description: "Main low tension distribution switchgear with multifunction metering.",
-          specification: "800A 4P 35kA · 630A Cu Busbar · IP54",
-          category: "Power Distribution",
-          quantity: 1,
-          unit: "NOS",
-          confidence: 0.92,
-        });
-      } else if (classification.category === "Equipment & Mechanical Power") {
-        results.push({
-          itemCode: "PAC-01",
-          name: "Precision Air Conditioning Indoor Unit (PAC 50kW)",
-          description: "Downflow precision air conditioning unit with EC fans.",
-          specification: "50kW Sensible Cooling · R-410A · 415V 3P",
-          category: "Equipment & Mechanical Power",
-          quantity: 2,
-          unit: "NOS",
-          confidence: 0.89,
-        });
-      }
-    }
-
+    // Do not fabricate fake line items if no tags or quantities were detected in the drawing text
     return results;
   }
 }

@@ -341,10 +341,11 @@ function DocumentRow({ doc, projectId }: { doc: ProjectDocument; projectId: stri
             type="button"
             className="btn btn--ghost btn--xs pd-retry-btn"
             onClick={() => {
-              // Reset to queued state
               doc.upload_status = "queued";
               doc.error_message = undefined;
-              dataService.addDocuments(projectId, []);
+              dataService.processDocumentAsync(projectId, doc.id).catch((err) =>
+                console.warn("Retry document processing failed:", err)
+              );
             }}
           >
             Retry

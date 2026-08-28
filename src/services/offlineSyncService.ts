@@ -2,11 +2,16 @@
  * offlineSyncService.ts — Local-First Mutation Queue & Synchronization Engine.
  *
  * Guarantees zero silent mutation drops by persisting offline actions to localStorage
- * and replaying them sequentially when connectivity resumes.
+ * and replaying them sequentially via registered domain executors when connectivity resumes.
+ *
+ * IDEMPOTENCY INVARIANT:
+ *   Every queued mutation carries a stable UUID mutation_id to prevent duplicate remote writes
+ *   upon network replay or retry.
  */
 
 export interface QueuedMutation {
   id: string;
+  mutation_id: string; // Stable UUID for remote idempotency
   type: "line_item_status" | "manual_line_item" | "project_plan_draft" | "proposal_status" | "project_type";
   payload: Record<string, unknown>;
   timestamp: string;
@@ -15,12 +20,15 @@ export interface QueuedMutation {
   lastError?: string;
 }
 
+export type MutationExecutor = (mutation: QueuedMutation) => Promise<boolean>;
+
 const STORAGE_KEY = "vectoris.offline_mutation_queue";
 
 class OfflineSyncService {
   private queue: QueuedMutation[] = [];
   private isReplaying = false;
   private listeners: Array<(pendingCount: number) => void> = [];
+  private executors = new Map<string, MutationExecutor>();
 
   constructor() {
     this.loadQueue();
@@ -28,9 +36,18 @@ class OfflineSyncService {
     if (typeof window !== "undefined") {
       window.addEventListener("online", () => {
         console.log("🌐 Network reconnected — initiating offline mutation queue replay.");
-        this.replayPendingMutations();
+        this.replayPendingMutations().catch((err) =>
+          console.warn("Automatic offline replay failed:", err)
+        );
       });
     }
+  }
+
+  /**
+   * Registers a domain-specific executor for a mutation type.
+   */
+  public registerExecutor(type: QueuedMutation["type"], executor: MutationExecutor): void {
+    this.executors.set(type, executor);
   }
 
   private loadQueue(): void {
@@ -81,11 +98,16 @@ class OfflineSyncService {
   }
 
   /**
-   * Enqueues a failed or offline mutation for guaranteed future replay.
+   * Enqueues a failed or offline mutation with a stable UUID for guaranteed future replay.
    */
   public enqueue(type: QueuedMutation["type"], payload: Record<string, unknown>): QueuedMutation {
+    const mutationId = typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `mut_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
     const item: QueuedMutation = {
-      id: `mut_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      id: mutationId,
+      mutation_id: mutationId,
       type,
       payload,
       timestamp: new Date().toISOString(),
@@ -95,12 +117,12 @@ class OfflineSyncService {
 
     this.queue.push(item);
     this.saveQueue();
-    console.log(`📥 Enqueued offline mutation [${type}]:`, payload);
+    console.log(`📥 Enqueued offline mutation [${type}] id=${mutationId}:`, payload);
     return item;
   }
 
   /**
-   * Replays pending mutations sequentially against remote Supabase backends.
+   * Replays pending mutations sequentially against registered remote Supabase executors.
    */
   public async replayPendingMutations(
     customHandler?: (mutation: QueuedMutation) => Promise<boolean>
@@ -127,8 +149,12 @@ class OfflineSyncService {
           if (customHandler) {
             success = await customHandler(item);
           } else {
-            // Default success acknowledgment for local testing
-            success = true;
+            const executor = this.executors.get(item.type);
+            if (executor) {
+              success = await executor(item);
+            } else {
+              throw new Error(`No mutation executor registered for type [${item.type}]`);
+            }
           }
 
           if (success) {
@@ -136,6 +162,7 @@ class OfflineSyncService {
             console.log(`✅ Successfully replayed mutation [${item.type}] id=${item.id}`);
           } else {
             item.status = "failed";
+            item.lastError = "Executor returned false without throwing";
             remaining.push(item);
             failed += 1;
           }

@@ -49,6 +49,7 @@ import { authService } from "./authService";
 import { isSupabaseConfigured } from "./supabaseClient";
 import { documentProcessingService } from "./documentProcessingService";
 import { offlineSyncService } from "./offlineSyncService";
+import { fileDialogService, type DocumentSource, type SelectedFileMetadata } from "./fileDialogService";
 
 const STORAGE_KEY_PREFIX = "vectoris.store.v1.";
 
@@ -109,6 +110,75 @@ class DataService {
     }
 
     this.initAuthSync();
+    this.initOfflineSync();
+  }
+
+  private initOfflineSync(): void {
+    offlineSyncService.registerExecutor("line_item_status", async (mut) => {
+      const { lineItemId, status, reason } = mut.payload as {
+        lineItemId: string;
+        status: LineItemStatus;
+        reason?: string;
+      };
+      if (isSupabaseConfigured() && lineItemId) {
+        if (status === "approved") {
+          const item = this.lineItems.find((i) => i.id === lineItemId);
+          await takeoffService.approveLineItem({
+            lineItemId,
+            humanValue: item ? String(item.quantity) : "1",
+            correctionType: "manual_override",
+            reason,
+          });
+        } else if (status === "rejected") {
+          await takeoffService.rejectLineItem({
+            lineItemId,
+            correctionType: "false_positive",
+            reason: reason || "Rejected in takeoff review",
+          });
+        }
+      }
+      return true;
+    });
+
+    offlineSyncService.registerExecutor("manual_line_item", async (mut) => {
+      const { action, projectId, documents, lineItem } = mut.payload as any;
+      if (action === "create_documents" && documents && projectId) {
+        if (isSupabaseConfigured() && !projectId.startsWith("p-")) {
+          await documentService.createDocuments(projectId, documents);
+        }
+        return true;
+      }
+      if (lineItem && projectId) {
+        if (isSupabaseConfigured() && !projectId.startsWith("p-")) {
+          await takeoffService.createManualLineItem({
+            projectId,
+            name: lineItem.name,
+            itemCode: lineItem.item_code,
+            category: lineItem.category,
+            quantity: lineItem.quantity || 1,
+            unit: lineItem.unit || "NOS",
+          });
+        }
+        return true;
+      }
+      return true;
+    });
+
+    offlineSyncService.registerExecutor("project_type", async (mut) => {
+      const { projectId, displayType, provenance } = mut.payload as any;
+      if (isSupabaseConfigured() && !projectId.startsWith("p-")) {
+        await projectService.updateProjectType({ projectId, displayType, provenance });
+      }
+      return true;
+    });
+
+    offlineSyncService.registerExecutor("project_plan_draft", async (mut) => {
+      const { projectId, documentIds, claims, lineage } = mut.payload as any;
+      if (isSupabaseConfigured() && !projectId.startsWith("p-")) {
+        await projectPlanService.createDraft({ projectId, documentIds, claims, lineage });
+      }
+      return true;
+    });
   }
 
   private initAuthSync(): void {
@@ -439,6 +509,8 @@ class DataService {
       uploaded_by?: string;
       file_path?: string;
       storage_reference?: string;
+      source?: DocumentSource;
+      raw_bytes?: Uint8Array;
     }>
   ): ProjectDocument[] {
     const newDocs: ProjectDocument[] = files.map((f) => {
@@ -471,8 +543,21 @@ class DataService {
     this.notify();
 
     // Trigger real local-first document extraction, classification, and perception pipeline
-    for (const doc of newDocs) {
-      this.processDocumentAsync(projectId, doc.id).catch((err) =>
+    for (let i = 0; i < newDocs.length; i++) {
+      const doc = newDocs[i];
+      const origFile = files[i];
+
+      (async () => {
+        let bytes: Uint8Array | undefined = origFile.raw_bytes;
+        if (!bytes && origFile.source) {
+          try {
+            bytes = await fileDialogService.readDocumentBytes(origFile.source);
+          } catch (readErr) {
+            console.warn(`Could not read source bytes for ${doc.filename}:`, readErr);
+          }
+        }
+        await this.processDocumentAsync(projectId, doc.id, bytes);
+      })().catch((err) =>
         console.warn("Document processing pipeline failed:", err)
       );
     }
@@ -525,16 +610,38 @@ class DataService {
   public async processDocumentAsync(
     projectId: string,
     documentId: string,
-    fileData?: ArrayBuffer | Uint8Array | string
+    fileData?: ArrayBuffer | Uint8Array
   ): Promise<void> {
     const doc = this.documents.find((d) => d.id === documentId);
     if (!doc) return;
+
+    let bytes = fileData;
+    if (!bytes && doc.file_path) {
+      try {
+        bytes = await fileDialogService.readDocumentBytes({
+          type: "staged_doc",
+          projectId,
+          documentId: doc.id,
+          filename: doc.filename,
+        });
+      } catch (readErr) {
+        console.warn(`Could not read staged bytes for document [${doc.filename}]:`, readErr);
+      }
+    }
+
+    if (!bytes || (bytes instanceof Uint8Array ? bytes.length : bytes.byteLength) === 0) {
+      doc.upload_status = "error";
+      saveToStorage("documents", this.documents);
+      this.notify();
+      console.warn(`Document processing aborted: 0 bytes available for [${doc.filename}]. Zero fabricated records created.`);
+      return;
+    }
 
     try {
       const result = await documentProcessingService.processDocument(
         projectId,
         doc,
-        fileData,
+        bytes,
         (stage) => {
           doc.upload_status = stage;
           saveToStorage("documents", this.documents);
@@ -571,11 +678,14 @@ class DataService {
       const projLineItems = this.getLineItems(projectId);
 
       this.takeoffSummaries[projectId] = {
-        ...currentTakeoff,
+        id: currentTakeoff?.id || generateId("tos"),
+        project_id: projectId,
         status: "complete",
         sheets_processed: projSheets.length,
         sheets_total: projSheets.length,
-        line_items_proposed: projLineItems.length,
+        line_items_proposed: projLineItems.filter((i) => i.status === "proposed").length,
+        line_items_approved: projLineItems.filter((i) => i.status === "approved").length,
+        started_at: currentTakeoff?.started_at || "Just now",
         completed_at: "Just now",
         model_version: "v2.4-perception",
       };

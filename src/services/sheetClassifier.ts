@@ -21,7 +21,8 @@ export type SheetDrawingType =
   | "single_line"
   | "schedule"
   | "notes"
-  | "legend";
+  | "legend"
+  | "raster_scan";
 
 export interface ClassificationResult {
   sheetId: string;
@@ -42,6 +43,20 @@ export class SheetClassifier {
     const sheetNum = (page.titleBlock?.sheetNumber || `E-${page.pageNumber}`).toUpperCase();
     const sheetTitle = page.titleBlock?.sheetTitle || `Drawing Sheet ${page.pageNumber}`;
     const signals: string[] = [];
+
+    // 0. Raster / Scanned PDF check (No extractable text vectors)
+    if (page.lines.length === 0 || page.rawText.trim().length === 0) {
+      signals.push("Text extraction unavailable — visual perception / OCR required");
+      return {
+        sheetId: sheetNum,
+        sheetTitle: `Scanned / Raster Sheet ${page.pageNumber}`,
+        category: "Unknown / Needs Review",
+        discipline: "General",
+        drawingType: "raster_scan",
+        confidence: 0.0,
+        signals,
+      };
+    }
 
     // 1. Single Line Diagram / Main Power Distribution
     if (
@@ -89,59 +104,61 @@ export class SheetClassifier {
       };
     }
 
-    // 3. Cable Tray, Conduit & Containment
+    // 3. Cable Tray & Containment
     if (
       text.includes("cable tray") ||
-      text.includes("cable ladder") ||
+      text.includes("ladder tray") ||
+      text.includes("perforated tray") ||
+      text.includes("containment") ||
       text.includes("trunking") ||
-      text.includes("raceway") ||
       text.includes("conduit") ||
       sheetNum.startsWith("CT")
     ) {
-      signals.push("Detected Cable Tray / Containment routing markers");
+      signals.push("Detected Cable Tray & Containment routing patterns");
       return {
         sheetId: sheetNum,
         sheetTitle,
         category: "Cable Tray & Containment",
         discipline: "Electrical",
-        drawingType: "floor_plan",
-        confidence: 0.9,
+        drawingType: text.includes("schedule") ? "schedule" : "floor_plan",
+        confidence: 0.93,
         signals,
       };
     }
 
-    // 4. Precision Air Conditioning & Equipment Power
+    // 4. Equipment & Mechanical Power (HVAC, PAC, Chillers)
     if (
       text.includes("pac unit") ||
       text.includes("precision air") ||
+      text.includes("condenser") ||
       text.includes("chiller") ||
       text.includes("refrigerant") ||
-      text.includes("hvac power") ||
-      text.includes("motor control") ||
-      sheetNum.startsWith("M") ||
-      sheetNum.startsWith("EM")
+      text.includes("hvac") ||
+      sheetNum.startsWith("M-") ||
+      sheetNum.startsWith("MECH")
     ) {
-      signals.push("Detected Mechanical Equipment & Precision Cooling power markers");
+      signals.push("Detected Mechanical Equipment & Precision Cooling tags");
       return {
         sheetId: sheetNum,
         sheetTitle,
         category: "Equipment & Mechanical Power",
         discipline: "Mechanical",
         drawingType: text.includes("schedule") ? "schedule" : "floor_plan",
-        confidence: 0.88,
+        confidence: 0.94,
         signals,
       };
     }
 
-    // 5. Panel Schedules & Load Tables
+    // 5. Panel & Demand Schedules
     if (
       text.includes("panel schedule") ||
-      text.includes("demand schedule") ||
-      text.includes("load calculation") ||
+      text.includes("load schedule") ||
+      text.includes("demand calculation") ||
       text.includes("schedule of quantities") ||
-      text.includes("circuit schedule")
+      text.includes("circuit directory") ||
+      sheetNum.startsWith("SCH")
     ) {
-      signals.push("Detected Panel Schedule / Tabular engineering load schedule");
+      signals.push("Detected Structured Engineering Panel / Load Schedule table");
       return {
         sheetId: sheetNum,
         sheetTitle,

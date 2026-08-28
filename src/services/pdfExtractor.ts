@@ -1,7 +1,7 @@
 /**
  * pdfExtractor.ts — Local-first PDF & Drawing Page Extractor.
  *
- * Extracts page counts, sheet dimensions, text content streams,
+ * Extracts page counts, sheet dimensions, decompressed text content streams (FlateDecode),
  * and title block metadata from engineering drawing packages.
  */
 
@@ -30,138 +30,366 @@ export interface ExtractedDocumentPackage {
   extractedAt: string;
 }
 
+/**
+ * Decompresses zlib / deflate compressed stream bytes using standard Web API DecompressionStream.
+ */
+async function decompressFlate(compressedBytes: Uint8Array): Promise<Uint8Array | null> {
+  if (typeof DecompressionStream === "undefined" || compressedBytes.length === 0) {
+    return null;
+  }
+
+  // Attempt 1: Standard zlib / deflate
+  try {
+    const ds = new DecompressionStream("deflate");
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(compressedBytes);
+        controller.close();
+      },
+    });
+    const decompressedStream = stream.pipeThrough(ds);
+    const response = new Response(decompressedStream);
+    const buffer = await response.arrayBuffer();
+    return new Uint8Array(buffer);
+  } catch {
+    // Attempt 2: Raw deflate (omitting 2-byte zlib header)
+    try {
+      const dsRaw = new DecompressionStream("deflate-raw");
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(compressedBytes);
+          controller.close();
+        },
+      });
+      const decompressedStream = stream.pipeThrough(dsRaw);
+      const response = new Response(decompressedStream);
+      const buffer = await response.arrayBuffer();
+      return new Uint8Array(buffer);
+    } catch {
+      return null;
+    }
+  }
+}
+
+/**
+ * Byte-level search for stream ... endstream markers to guarantee exact byte slice extraction.
+ */
+function findStreamInBytes(
+  bytes: Uint8Array,
+  startSearchPos: number
+): { streamStart: number; streamEnd: number; nextSearchPos: number } | null {
+  const streamPattern = [115, 116, 114, 101, 97, 109]; // "stream"
+  const endstreamPattern = [101, 110, 100, 115, 116, 114, 101, 97, 109]; // "endstream"
+
+  let sPos = -1;
+  for (let i = startSearchPos; i <= bytes.length - 6; i++) {
+    let match = true;
+    for (let j = 0; j < 6; j++) {
+      if (bytes[i + j] !== streamPattern[j]) {
+        match = false;
+        break;
+      }
+    }
+    if (match) {
+      sPos = i;
+      break;
+    }
+  }
+  if (sPos === -1) return null;
+
+  let streamStart = sPos + 6;
+  if (bytes[streamStart] === 13 && bytes[streamStart + 1] === 10) {
+    streamStart += 2; // \r\n
+  } else if (bytes[streamStart] === 10) {
+    streamStart += 1; // \n
+  } else if (bytes[streamStart] === 13) {
+    streamStart += 1; // \r
+  }
+
+  let ePos = -1;
+  for (let i = streamStart; i <= bytes.length - 9; i++) {
+    let match = true;
+    for (let j = 0; j < 9; j++) {
+      if (bytes[i + j] !== endstreamPattern[j]) {
+        match = false;
+        break;
+      }
+    }
+    if (match) {
+      ePos = i;
+      break;
+    }
+  }
+  if (ePos === -1) return null;
+
+  let streamEnd = ePos;
+  while (
+    streamEnd > streamStart &&
+    (bytes[streamEnd - 1] === 10 || bytes[streamEnd - 1] === 13 || bytes[streamEnd - 1] === 32)
+  ) {
+    streamEnd--;
+  }
+
+  return {
+    streamStart,
+    streamEnd,
+    nextSearchPos: ePos + 9,
+  };
+}
+
+/**
+ * Extracts visible string operators (Tj / TJ / ') from PDF stream text.
+ */
+function extractTextFromStream(streamText: string): string[] {
+  const lines: string[] = [];
+
+  // 1. Literal strings in parentheses: (text) Tj or (text) '
+  const parenRegex = /\(([^)]*)\)\s*(?:T[jJ]|'|")/g;
+  let match: RegExpExecArray | null;
+  while ((match = parenRegex.exec(streamText)) !== null) {
+    const clean = match[1]
+      .replace(/\\([()\\])/g, "$1")
+      .replace(/\\n/g, "\n")
+      .replace(/\\r/g, "")
+      .trim();
+    if (clean.length > 0) lines.push(clean);
+  }
+
+  // 2. Array of strings: [(text) 120 (more text)] TJ
+  const bracketRegex = /\[([^\]]*)\]\s*TJ/gi;
+  while ((match = bracketRegex.exec(streamText)) !== null) {
+    const inner = match[1];
+    const itemRegex = /\(([^)]*)\)/g;
+    let itemMatch: RegExpExecArray | null;
+    const parts: string[] = [];
+    while ((itemMatch = itemRegex.exec(inner)) !== null) {
+      parts.push(itemMatch[1].replace(/\\([()\\])/g, "$1"));
+    }
+    const combined = parts.join("").trim();
+    if (combined.length > 0) lines.push(combined);
+  }
+
+  // 3. If stream contains BT ... ET text blocks without standard Tj, parse lines
+  if (lines.length === 0 && (streamText.includes("BT") || streamText.includes("ET"))) {
+    const rawLines = streamText.split(/[\r\n]+/);
+    for (const l of rawLines) {
+      const clean = l.replace(/[^a-zA-Z0-9\s.,_\-/#:()]/g, " ").trim();
+      if (
+        clean.length > 3 &&
+        !clean.startsWith("stream") &&
+        !clean.startsWith("endstream") &&
+        !clean.startsWith("endobj")
+      ) {
+        lines.push(clean);
+      }
+    }
+  }
+
+  return lines;
+}
+
 export class PdfExtractor {
   /**
-   * Parses an ArrayBuffer or binary string of a PDF or text drawing stream into structured pages.
+   * Parses an ArrayBuffer or binary Uint8Array of a PDF drawing into structured pages.
    */
   public async extractDocument(
     filename: string,
-    data: ArrayBuffer | Uint8Array | string
+    data: Uint8Array | ArrayBuffer | string
   ): Promise<ExtractedDocumentPackage> {
-    let textContent = "";
-    let sizeBytes = 0;
+    let bytes: Uint8Array;
 
     if (typeof data === "string") {
-      textContent = data;
-      sizeBytes = data.length;
+      const encoder = new TextEncoder();
+      bytes = encoder.encode(data);
+    } else if (data instanceof Uint8Array) {
+      bytes = data;
     } else {
-      sizeBytes = data.byteLength;
-      const decoder = new TextDecoder("utf-8", { fatal: false });
-      textContent = decoder.decode(data);
+      bytes = new Uint8Array(data);
     }
 
-    const pages = this.parsePagesFromStream(textContent);
+    if (bytes.length === 0) {
+      throw new Error(`Cannot extract empty 0-byte document: ${filename}`);
+    }
+
+    const pages = await this.parsePdfPages(bytes);
 
     return {
       filename,
       pageCount: Math.max(1, pages.length),
-      fileSizeBytes: sizeBytes,
-      pages: pages.length > 0 ? pages : [this.createFallbackPage(1, textContent)],
+      fileSizeBytes: bytes.length,
+      pages: pages.length > 0 ? pages : [this.createEmptyPage(1, 2592, 1728)],
       extractedAt: new Date().toISOString(),
     };
   }
 
   /**
-   * Parses page objects, text chunks, and media boxes from raw PDF / text content.
+   * Scans raw PDF binary for page delimiters, decompresses Flate streams, and extracts text.
    */
-  private parsePagesFromStream(content: string): ExtractedPage[] {
-    const pages: ExtractedPage[] = [];
+  private async parsePdfPages(bytes: Uint8Array): Promise<ExtractedPage[]> {
+    const latin1Decoder = new TextDecoder("latin1");
+    const rawPdf = latin1Decoder.decode(bytes);
 
-    // Check for standard PDF page delimiters /Page
-    const pageSplits = content.split(/\/Type\s*\/Page\b/i);
+    // Identify page objects or page splits
+    const pageChunks = this.splitIntoPages(rawPdf, bytes);
+    const extractedPages: ExtractedPage[] = [];
 
-    if (pageSplits.length > 1) {
-      for (let i = 1; i < pageSplits.length; i++) {
-        const chunk = pageSplits[i];
-        const pageText = this.extractTextFromPdfChunk(chunk);
-        const dimensions = this.extractDimensionsFromPdfChunk(chunk);
-        const lines = pageText
-          .split(/[\r\n]+/)
-          .map((l) => l.trim())
-          .filter((l) => l.length > 0);
-        const titleBlock = this.extractTitleBlock(lines, i);
+    for (let i = 0; i < pageChunks.length; i++) {
+      const chunk = pageChunks[i];
+      const pageNum = i + 1;
 
-        pages.push({
-          pageNumber: i,
-          width: dimensions.width,
-          height: dimensions.height,
-          aspectRatio: dimensions.width / (dimensions.height || 1),
-          format: dimensions.format,
-          rawText: pageText,
-          lines,
-          titleBlock,
-        });
-      }
-    } else {
-      // Fallback: Partition text by Form Feed or Page Break markers
-      const textPages = content.split(/[\f]|\bPage\s+\d+\b/i);
-      for (let i = 0; i < textPages.length; i++) {
-        const pageText = textPages[i].trim();
-        if (!pageText && textPages.length > 1) continue;
+      // Extract and decompress text from this page's streams
+      const pageText = await this.extractPageText(chunk.byteStart, chunk.byteEnd, bytes);
+      const dimensions = this.extractDimensions(chunk.rawText);
 
-        const lines = pageText
-          .split(/[\r\n]+/)
-          .map((l) => l.trim())
-          .filter((l) => l.length > 0);
-        const titleBlock = this.extractTitleBlock(lines, i + 1);
+      const lines = pageText
+        .split(/[\r\n]+/)
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0);
 
-        pages.push({
-          pageNumber: i + 1,
-          width: 3300,
-          height: 2550,
-          aspectRatio: 3300 / 2550,
-          format: "ARCH_D",
-          rawText: pageText,
-          lines,
-          titleBlock,
-        });
-      }
+      const titleBlock = this.extractTitleBlock(lines, pageNum);
+
+      extractedPages.push({
+        pageNumber: pageNum,
+        width: dimensions.width,
+        height: dimensions.height,
+        aspectRatio: dimensions.width / (dimensions.height || 1),
+        format: dimensions.format,
+        rawText: pageText,
+        lines,
+        titleBlock,
+      });
     }
+
+    return extractedPages;
+  }
+
+  /**
+   * Partitions the raw PDF into individual page chunks.
+   */
+  private splitIntoPages(
+    rawPdf: string,
+    bytes: Uint8Array
+  ): Array<{ rawText: string; byteStart: number; byteEnd: number }> {
+    const pages: Array<{ rawText: string; byteStart: number; byteEnd: number }> = [];
+
+    // Find /Type /Page occurrences (not /Pages)
+    const pageRegex = /\/Type\s*\/Page\b(?!\s*s)/gi;
+    const matches: number[] = [];
+    let match: RegExpExecArray | null;
+
+    while ((match = pageRegex.exec(rawPdf)) !== null) {
+      matches.push(match.index);
+    }
+
+    if (matches.length > 0) {
+      for (let i = 0; i < matches.length; i++) {
+        const start = matches[i];
+        const end = i + 1 < matches.length ? matches[i + 1] : rawPdf.length;
+        pages.push({
+          rawText: rawPdf.substring(start, end),
+          byteStart: start,
+          byteEnd: end,
+        });
+      }
+      return pages;
+    }
+
+    // Fallback: check for form feed page breaks
+    const formFeedSplits = rawPdf.split(/\f|\bPage\s+\d+\b/i);
+    if (formFeedSplits.length > 1) {
+      let cur = 0;
+      for (const seg of formFeedSplits) {
+        const segLen = seg.length;
+        if (seg.trim().length > 0) {
+          pages.push({
+            rawText: seg,
+            byteStart: cur,
+            byteEnd: cur + segLen,
+          });
+        }
+        cur += segLen + 1;
+      }
+      return pages;
+    }
+
+    // Entire document is a single page
+    pages.push({
+      rawText: rawPdf,
+      byteStart: 0,
+      byteEnd: bytes.length,
+    });
 
     return pages;
   }
 
   /**
-   * Extracts visible strings from PDF stream syntax.
+   * Extracts text from uncompressed and FlateDecode streams in a page chunk using byte-level parsing.
    */
-  private extractTextFromPdfChunk(chunk: string): string {
-    const extracted: string[] = [];
+  private async extractPageText(
+    byteStart: number,
+    byteEnd: number,
+    fullBytes: Uint8Array
+  ): Promise<string> {
+    const extractedLines: string[] = [];
+    const latin1Decoder = new TextDecoder("latin1");
 
-    // Extract text in parentheses (Tj / TJ operators)
-    const parenRegex = /\(([^)]+)\)\s*T[jJ]/g;
-    let match: RegExpExecArray | null;
-    while ((match = parenRegex.exec(chunk)) !== null) {
-      extracted.push(match[1]);
-    }
-
-    // Extract text in brackets [(...)...] TJ
-    const bracketRegex = /\[([^\]]+)\]\s*TJ/gi;
-    while ((match = bracketRegex.exec(chunk)) !== null) {
-      const inner = match[1];
-      const innerMatch = inner.match(/\(([^)]+)\)/g);
-      if (innerMatch) {
-        extracted.push(innerMatch.map((s) => s.replace(/[()]/g, "")).join(" "));
+    let curSearch = byteStart;
+    while (curSearch < byteEnd) {
+      const streamInfo = findStreamInBytes(fullBytes, curSearch);
+      if (!streamInfo || streamInfo.streamStart >= byteEnd) {
+        break;
       }
-    }
 
-    // If stream did not yield standard Tj, harvest plain alphanumeric lines
-    if (extracted.length === 0) {
-      const rawLines = chunk.split(/[\r\n]+/);
-      for (const line of rawLines) {
-        const clean = line.replace(/[^a-zA-Z0-9\s.,_\-/#:()]/g, " ").trim();
-        if (clean.length > 3 && !clean.startsWith("endobj") && !clean.startsWith("stream")) {
-          extracted.push(clean);
+      // Inspect dictionary prefix before the stream
+      const dictStart = Math.max(byteStart, streamInfo.streamStart - 300);
+      const dictPrefix = latin1Decoder.decode(fullBytes.subarray(dictStart, streamInfo.streamStart));
+      const isFlate = /\/Filter\s*(\/FlateDecode|\[\s*\/FlateDecode\s*\])/i.test(dictPrefix);
+
+      // Check for explicit /Length in dictionary
+      let endPos = streamInfo.streamEnd;
+      const lengthMatch = dictPrefix.match(/\/Length\s+(\d+)/i);
+      if (lengthMatch) {
+        const explicitLen = parseInt(lengthMatch[1], 10);
+        if (explicitLen > 0 && streamInfo.streamStart + explicitLen <= fullBytes.length) {
+          endPos = streamInfo.streamStart + explicitLen;
         }
       }
+
+      const streamBytes = fullBytes.subarray(streamInfo.streamStart, endPos);
+
+      if (isFlate) {
+        const decompressed = await decompressFlate(streamBytes);
+        if (decompressed) {
+          const utf8Decoder = new TextDecoder("utf-8", { fatal: false });
+          const decompressedStr = utf8Decoder.decode(decompressed);
+          const lines = extractTextFromStream(decompressedStr);
+          extractedLines.push(...lines);
+        }
+      } else {
+        const plainStr = latin1Decoder.decode(streamBytes);
+        const lines = extractTextFromStream(plainStr);
+        extractedLines.push(...lines);
+      }
+
+      curSearch = streamInfo.nextSearchPos;
     }
 
-    return extracted.join("\n");
+    // Also extract text operators outside stream blocks if any
+    const chunkText = latin1Decoder.decode(fullBytes.subarray(byteStart, byteEnd));
+    const directLines = extractTextFromStream(chunkText);
+    for (const dl of directLines) {
+      if (!extractedLines.includes(dl)) {
+        extractedLines.push(dl);
+      }
+    }
+
+    return extractedLines.join("\n");
   }
 
   /**
-   * Extracts MediaBox dimensions from PDF chunk.
+   * Extracts MediaBox dimensions from page text.
    */
-  private extractDimensionsFromPdfChunk(chunk: string): {
+  private extractDimensions(chunk: string): {
     width: number;
     height: number;
     format: ExtractedPage["format"];
@@ -176,14 +404,11 @@ export class PdfExtractor {
         format: this.classifyDimensions(w, h),
       };
     }
-    // Default standard architectural sheet (24x36 inches at 72 dpi = 1728 x 2592 pt)
     return { width: 2592, height: 1728, format: "ARCH_D" };
   }
 
   private classifyDimensions(w: number, h: number): ExtractedPage["format"] {
     const maxDim = Math.max(w, h);
-    const minDim = Math.min(w, h);
-
     if (maxDim > 3000) return "ARCH_E";
     if (maxDim >= 2400) return "ARCH_D";
     if (maxDim >= 2000) return "ISO_A0";
@@ -193,7 +418,7 @@ export class PdfExtractor {
   }
 
   /**
-   * Detects title block metadata from page lines.
+   * Detects title block metadata from extracted text lines.
    */
   public extractTitleBlock(lines: string[], pageNum: number): ExtractedPage["titleBlock"] {
     let sheetNumber = `E-${String(100 + pageNum).padStart(3, "0")}`;
@@ -202,13 +427,11 @@ export class PdfExtractor {
     let revision = "Rev 0";
     let discipline = "Electrical";
 
-    // Common drawing sheet ID patterns (e.g. E-001, E-101, SLD-01, EP-102, EL-101, E-201A)
     const sheetIdRegex = /\b([A-Z]{1,3}[-–_.]?\d{2,4}[A-Z]?)\b/i;
     const scaleRegex = /\b(SCALE|SCALE\s*:)\s*([1-9][0-9]*:[1-9][0-9]*|[1-9]\/[0-9]+"=\s*[1-9]'?-?0"?|NTS)\b/i;
     const revRegex = /\b(REV|REVISION|REV\s*:)\s*([0-9A-Z]+)\b/i;
 
     for (const line of lines) {
-      // Look for explicit sheet number tags
       if (/DRAWING\s*(NO|NUMBER)|SHEET\s*(NO|NUMBER)/i.test(line)) {
         const match = line.match(sheetIdRegex);
         if (match) sheetNumber = match[1].toUpperCase();
@@ -219,21 +442,18 @@ export class PdfExtractor {
         }
       }
 
-      // Scale
       const scaleMatch = line.match(scaleRegex);
       if (scaleMatch) scale = scaleMatch[2];
 
-      // Revision
       const revMatch = line.match(revRegex);
       if (revMatch) revision = `Rev ${revMatch[2]}`;
 
-      // Sheet title heuristics
       const titlePrefixMatch = line.match(/^(TITLE|SHEET TITLE|DRAWING TITLE|SHEET NAME)\s*[:.-]\s*(.+)/i);
       if (titlePrefixMatch && titlePrefixMatch[2].trim().length > 2) {
         sheetTitle = titlePrefixMatch[2].trim();
       } else if (
         sheetTitle.startsWith("Electrical Drawing Sheet") &&
-        /(SINGLE\s*LINE\s*DIAGRAM|POWER\s*DISTRIBUTION\s*LAYOUT|LIGHTING\s*LAYOUT|CABLE\s*TRAY\s*PLAN|PANEL\s*SCHEDULE|EQUIPMENT\s*LAYOUT)/i.test(
+        /(SINGLE\s*LINE\s*DIAGRAM|POWER\s*DISTRIBUTION|LIGHTING\s*LAYOUT|CABLE\s*TRAY\s*PLAN|PANEL\s*SCHEDULE|EQUIPMENT\s*LAYOUT)/i.test(
           line
         ) &&
         line.length < 60
@@ -241,10 +461,6 @@ export class PdfExtractor {
         sheetTitle = line.trim();
       }
     }
-
-    if (/LIGHTING/i.test(sheetTitle)) discipline = "Lighting";
-    else if (/POWER|FEEDER|SWITCHGEAR|SLD/i.test(sheetTitle)) discipline = "Power Distribution";
-    else if (/CABLE\s*TRAY|CONDUIT/i.test(sheetTitle)) discipline = "Containment";
 
     return {
       sheetNumber,
@@ -255,21 +471,22 @@ export class PdfExtractor {
     };
   }
 
-  private createFallbackPage(pageNum: number, text: string): ExtractedPage {
-    const lines = text
-      .split(/[\r\n]+/)
-      .map((l) => l.trim())
-      .filter((l) => l.length > 0);
-
+  private createEmptyPage(pageNum: number, width: number, height: number): ExtractedPage {
     return {
       pageNumber: pageNum,
-      width: 2592,
-      height: 1728,
-      aspectRatio: 2592 / 1728,
+      width,
+      height,
+      aspectRatio: width / (height || 1),
       format: "ARCH_D",
-      rawText: text,
-      lines,
-      titleBlock: this.extractTitleBlock(lines, pageNum),
+      rawText: "",
+      lines: [],
+      titleBlock: {
+        sheetNumber: `E-${String(100 + pageNum).padStart(3, "0")}`,
+        sheetTitle: `Drawing Sheet ${pageNum}`,
+        scale: "1:100",
+        revision: "Rev 0",
+        discipline: "Electrical",
+      },
     };
   }
 }
