@@ -1,0 +1,127 @@
+%PDF-1.4
+1 0 obj
+<<
+  /Type /Catalog
+  /Pages 2 0 R
+>>
+endobj
+2 0 obj
+<<
+  /Type /Pages
+  /Kids [3 0 R 4 0 R 5 0 R]
+  /Count 3
+>>
+endobj
+3 0 obj
+<<
+  /Type /Page
+  /Parent 2 0 R
+  /MediaBox [0 0 2592 1728]
+  /Contents 6 0 R
+>>
+endobj
+6 0 obj
+<< /Length 450 >>
+stream
+BT
+/F1 12 Tf
+72 1600 Td
+(DRAWING NUMBER: E-101) Tj
+0 -20 Td
+(TITLE: MAIN LT SWITCHGEAR & POWER DISTRIBUTION SINGLE LINE DIAGRAM) Tj
+0 -20 Td
+(SCALE: 1:100) Tj
+0 -20 Td
+(REV: 1) Tj
+0 -40 Td
+(SWG-01: MAIN LT SWITCHGEAR PANEL 800A 4P 35kA 1 NOS) Tj
+0 -20 Td
+(TR-01: STEP-DOWN TRANSFORMER 500kVA 11kV/415V 1 NOS) Tj
+0 -20 Td
+(MCCB-400A: FEEDER BREAKER TO SERVER ROOM B 1 NOS) Tj
+0 -20 Td
+(MCCB-250A: FEEDER BREAKER TO CHILLER PLANT 2 NOS) Tj
+0 -20 Td
+(LP-01: LIGHTING PANELBOARD 100A 3P 24-WAY 1 NOS) Tj
+ET
+endstream
+endobj
+4 0 obj
+<<
+  /Type /Page
+  /Parent 2 0 R
+  /MediaBox [0 0 2592 1728]
+  /Contents 7 0 R
+>>
+endobj
+7 0 obj
+<< /Length 400 >>
+stream
+BT
+/F1 12 Tf
+72 1600 Td
+(DRAWING NUMBER: EL-102) Tj
+0 -20 Td
+(TITLE: SERVER ROOM B & OFFICE LIGHTING LAYOUT) Tj
+0 -20 Td
+(SCALE: 1:50) Tj
+0 -20 Td
+(REV: 0) Tj
+0 -40 Td
+(LT-01: RECESSED 2x4 LED TROFFER 40W 4000K 32 NOS) Tj
+0 -20 Td
+(LT-EM: EMERGENCY EXIT SIGN WITH 90MIN BATTERY 6 NOS) Tj
+0 -20 Td
+(LT-DL: 6-INCH RECESSED LED DOWNLIGHT 18W 14 NOS) Tj
+ET
+endstream
+endobj
+5 0 obj
+<<
+  /Type /Page
+  /Parent 2 0 R
+  /MediaBox [0 0 2592 1728]
+  /Contents 8 0 R
+>>
+endobj
+8 0 obj
+<< /Length 380 >>
+stream
+BT
+/F1 12 Tf
+72 1600 Td
+(DRAWING NUMBER: CT-201) Tj
+0 -20 Td
+(TITLE: OVERHEAD CABLE TRAY & CONTAINMENT ROUTING PLAN) Tj
+0 -20 Td
+(SCALE: 1:100) Tj
+0 -20 Td
+(REV: 1) Tj
+0 -40 Td
+(CT-600: OVERHEAD LADDER CABLE TRAY 600MM 85 MTR) Tj
+0 -20 Td
+(CT-300: PERFORATED CABLE TRAY 300MM 45 MTR) Tj
+0 -20 Td
+(COND-2: 2-INCH RIGID STEEL CONDUIT ROUTE 120 MTR) Tj
+ET
+endstream
+endobj
+xref
+0 9
+0000000000 65535 f 
+0000000010 00000 n 
+0000000060 00000 n 
+0000000130 00000 n 
+0000000220 00000 n 
+0000000310 00000 n 
+0000000400 00000 n 
+0000000900 00000 n 
+0000001350 00000 n 
+trailer
+<<
+  /Size 9
+  /Root 1 0 R
+>>
+startxref
+1780
+%%EOF

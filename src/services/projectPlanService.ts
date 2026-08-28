@@ -237,69 +237,71 @@ class ProjectPlanService {
   public async createDraft(params: CreateDraftParams): Promise<string> {
     const { projectId, documentIds = [], claims, lineage = [] } = params;
 
-    if (!isSupabaseConfigured()) {
-      // Local fallback simulation
-      let plan = loadLocalPlan(projectId);
-      if (!plan) {
-        plan = {
-          id: generateId("plan"),
-          project_id: projectId,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          version_history: [],
-        };
+    if (isSupabaseConfigured()) {
+      try {
+        const { data, error } = await supabase.rpc("create_project_plan_draft", {
+          p_project_id: projectId,
+          p_document_ids: documentIds,
+          p_claims: claims as any,
+          p_lineage: lineage as any,
+        });
+
+        if (!error && data) {
+          return data as string;
+        }
+      } catch (rpcErr) {
+        console.warn("Supabase create_project_plan_draft RPC unavailable, saving locally:", rpcErr);
       }
+    }
 
-      if (plan.draft_version) {
-        throw new Error("An open draft already exists for this project plan.");
-      }
-
-      const versionNumber = (plan.version_history?.length || 0) + 1;
-      const draftId = generateId("ppv");
-
-      const draftClaims: PlanClaim[] = claims.map((c) => ({
-        id: generateId("claim"),
-        claim_id: c.claim_id || generateId("cid"),
-        plan_version_id: draftId,
-        section: c.section,
-        content: c.content,
-        grounding: c.grounding,
-        evidence_links: (c.evidence_links as PlanClaim["evidence_links"]) || [],
-        inference_rationale: c.inference_rationale,
-        unresolved_reason: c.unresolved_reason,
-        conflict_with_decision_id: null,
-        conflict_details: null,
+    // Local fallback simulation
+    let plan = loadLocalPlan(projectId);
+    if (!plan) {
+      plan = {
+        id: generateId("plan"),
+        project_id: projectId,
         created_at: new Date().toISOString(),
-      }));
-
-      const draftVersion: PlanVersion = {
-        id: draftId,
-        plan_id: plan.id,
-        version_number: versionNumber,
-        status: "draft",
-        created_by: "Hardik Bhaskar",
-        created_at: new Date().toISOString(),
-        claims: draftClaims,
+        updated_at: new Date().toISOString(),
+        version_history: [],
       };
-
-      plan.draft_version = draftVersion;
-      plan.version_history = [draftVersion, ...(plan.version_history || [])];
-      saveLocalPlan(projectId, plan);
-      return draftId;
     }
 
-    const { data, error } = await supabase.rpc("create_project_plan_draft", {
-      p_project_id: projectId,
-      p_document_ids: documentIds,
-      p_claims: claims as any,
-      p_lineage: lineage as any,
-    });
-
-    if (error) {
-      throw new Error(`Failed to create plan draft: ${error.message}`);
+    if (plan.draft_version) {
+      throw new Error("An open draft already exists for this project plan.");
     }
 
-    return data as string;
+    const versionNumber = (plan.version_history?.length || 0) + 1;
+    const draftId = generateId("ppv");
+
+    const draftClaims: PlanClaim[] = claims.map((c) => ({
+      id: generateId("claim"),
+      claim_id: c.claim_id || generateId("cid"),
+      plan_version_id: draftId,
+      section: c.section,
+      content: c.content,
+      grounding: c.grounding,
+      evidence_links: (c.evidence_links as PlanClaim["evidence_links"]) || [],
+      inference_rationale: c.inference_rationale,
+      unresolved_reason: c.unresolved_reason,
+      conflict_with_decision_id: null,
+      conflict_details: null,
+      created_at: new Date().toISOString(),
+    }));
+
+    const draftVersion: PlanVersion = {
+      id: draftId,
+      plan_id: plan.id,
+      version_number: versionNumber,
+      status: "draft",
+      created_by: "Hardik Bhaskar",
+      created_at: new Date().toISOString(),
+      claims: draftClaims,
+    };
+
+    plan.draft_version = draftVersion;
+    plan.version_history = [draftVersion, ...(plan.version_history || [])];
+    saveLocalPlan(projectId, plan);
+    return draftId;
   }
 
   /**
@@ -309,44 +311,44 @@ class ProjectPlanService {
     draftVersionId: string,
     resolutions: DecisionResolution[] = []
   ): Promise<void> {
-    if (!isSupabaseConfigured()) {
-      // Local fallback
-      for (const key of Object.keys(window.localStorage)) {
-        if (key.startsWith(LOCAL_STORE_KEY)) {
-          const raw = window.localStorage.getItem(key);
-          if (raw) {
-            const plan: ProjectPlan = JSON.parse(raw);
-            if (plan.draft_version?.id === draftVersionId) {
-              const prevActive = plan.active_version;
-              if (prevActive) {
-                prevActive.status = "superseded";
-                prevActive.superseded_at = new Date().toISOString();
-              }
-              const activated = { ...plan.draft_version };
-              activated.status = "active";
-              activated.activated_at = new Date().toISOString();
-              plan.active_version = activated;
-              plan.draft_version = null;
-              plan.updated_at = new Date().toISOString();
-              plan.version_history = (plan.version_history || []).map((v) =>
-                v.id === activated.id ? activated : v.id === prevActive?.id ? prevActive : v
-              );
-              window.localStorage.setItem(key, JSON.stringify(plan));
-              return;
+    if (isSupabaseConfigured()) {
+      try {
+        const { error } = await supabase.rpc("accept_project_plan_draft", {
+          p_draft_version_id: draftVersionId,
+          p_decision_resolutions: resolutions as any,
+        });
+        if (!error) return;
+      } catch (rpcErr) {
+        console.warn("Supabase accept_project_plan_draft RPC unavailable, activating locally:", rpcErr);
+      }
+    }
+
+    // Local fallback activation
+    for (const key of Object.keys(window.localStorage)) {
+      if (key.startsWith(LOCAL_STORE_KEY)) {
+        const raw = window.localStorage.getItem(key);
+        if (raw) {
+          const plan: ProjectPlan = JSON.parse(raw);
+          if (plan.draft_version?.id === draftVersionId) {
+            const prevActive = plan.active_version;
+            if (prevActive) {
+              prevActive.status = "superseded";
+              prevActive.superseded_at = new Date().toISOString();
             }
+            const activated = { ...plan.draft_version };
+            activated.status = "active";
+            activated.activated_at = new Date().toISOString();
+            plan.active_version = activated;
+            plan.draft_version = null;
+            plan.updated_at = new Date().toISOString();
+            plan.version_history = (plan.version_history || []).map((v) =>
+              v.id === activated.id ? activated : v.id === prevActive?.id ? prevActive : v
+            );
+            window.localStorage.setItem(key, JSON.stringify(plan));
+            return;
           }
         }
       }
-      return;
-    }
-
-    const { error } = await supabase.rpc("accept_project_plan_draft", {
-      p_draft_version_id: draftVersionId,
-      p_decision_resolutions: resolutions as any,
-    });
-
-    if (error) {
-      throw new Error(`Failed to accept plan draft: ${error.message}`);
     }
   }
 

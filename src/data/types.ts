@@ -223,6 +223,9 @@ export interface Sheet {
   detection_count: number;
   document_name: string;
   is_empty: boolean;
+  scale?: string;
+  discipline?: string;
+  revision?: string;
 }
 
 export interface LayerDef {

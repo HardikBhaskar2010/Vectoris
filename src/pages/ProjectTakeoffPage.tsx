@@ -68,7 +68,11 @@ export default function ProjectTakeoffPage() {
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
       // Category filter
-      if (selectedCategory !== "All" && item.category !== selectedCategory) return false;
+      if (selectedCategory !== "All") {
+        const itemCat = (item.category || "").toLowerCase();
+        const selCat = selectedCategory.toLowerCase();
+        if (!itemCat.includes(selCat) && !selCat.includes(itemCat)) return false;
+      }
       // Status tab filter
       if (selectedStatusTab !== "all" && item.status !== selectedStatusTab) return false;
       // Search filter

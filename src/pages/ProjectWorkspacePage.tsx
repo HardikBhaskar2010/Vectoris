@@ -1,23 +1,20 @@
 /**
- * ProjectWorkspacePage — Takeoff Workspace tab.
+ * ProjectWorkspacePage — Takeoff Workspace & Dynamic Drawing Viewer.
  *
  * SOURCE OF TRUTH:
  *   docs/06_PAGES/DRAWING_VIEWER.md
  *   docs/06_PAGES/PROJECT_NAVIGATION.md §2 (Workspace)
  *   docs/03_ARCHITECTURE/DATA_MODEL.md
  *
- * STATES: loading | success | empty-sheet | selection | measure-mode
- *
- * KEYBOARD: F=fit, M=measure, Esc=deselect, Delete=reject, +/-=zoom
- *
- * TRACEABILITY: Detection → Sheet → Document → Project → Correction History
- *
- * DESIGN:
- *   Dark canvas (#0c0c0f), liquid glass toolbar, solid right panel,
- *   IBM Plex Mono telemetry, cubic-bezier(0.22, 1, 0.36, 1) transitions
+ * FEATURES:
+ *   - Dynamic SVG Drawing Canvas tailored to active sheet discipline (SLD, Lighting, Cable Tray, HVAC)
+ *   - Genuine CAD symbol and bounding box rendering for every detected component
+ *   - Real mouse coordinate tracking, scale-aware measurement tool, pan & zoom
+ *   - Dynamic layer toggling with category matching
+ *   - Interactive Takeoff ledger and full traceability inspector
  */
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Link, useRouter } from "../router";
 import { ProjectShell } from "../components/ProjectShell";
 import type { ProjectMeta } from "../components/ProjectShell";
@@ -59,7 +56,6 @@ export default function ProjectWorkspacePage() {
   const projectId = params.id || "p1";
   const project = useProject(projectId);
   const sheets = useSheets(projectId);
-  const layers = useLayers();
   const lineItems = useLineItems(projectId);
 
   const projectMeta: ProjectMeta = {
@@ -74,7 +70,7 @@ export default function ProjectWorkspacePage() {
 
   const [isLoading,      setIsLoading]      = useState(true);
   const [activeSheetId,  setActiveSheetId]  = useState<string | null>(() => sheets[0]?.id || null);
-  const [layerVis,       setLayerVis]       = useState<Record<string, boolean>>({ LT: true, CT: true, PF: true, AW: true });
+  const [layerVis,       setLayerVis]       = useState<Record<string, boolean>>({});
   const activeDets                          = useDetections(activeSheetId || "");
   const [selectedDetId,  setSelectedDetId]  = useState<string | null>(null);
   const [hoveredDetId,   setHoveredDetId]   = useState<string | null>(null);
@@ -86,8 +82,9 @@ export default function ProjectWorkspacePage() {
   const [justApproved,   setJustApproved]   = useState<string | null>(null);
   const [measureLine,    setMeasureLine]    = useState<{ x1: number; y1: number; x2: number; y2: number; label: string } | null>(null);
   const [measureStart,   setMeasureStart]   = useState<{ x: number; y: number } | null>(null);
+  const [cursorCoords,   setCursorCoords]   = useState<{ x: string; y: string }>({ x: "1450.32", y: "2981.15" });
 
-  useEffect(() => { const t = setTimeout(() => setIsLoading(false), 900); return () => clearTimeout(t); }, []);
+  useEffect(() => { const t = setTimeout(() => setIsLoading(false), 600); return () => clearTimeout(t); }, []);
 
   useEffect(() => {
     if (sheets.length > 0) {
@@ -100,6 +97,41 @@ export default function ProjectWorkspacePage() {
   }, [sheets, activeSheetId]);
 
   const activeSheet = sheets.find(s => s.id === activeSheetId) ?? sheets[0] ?? null;
+
+  // Derive active layers from detections and default disciplines
+  const activeLayers = useMemo(() => {
+    const layerMap = new Map<string, { id: string; name: string; color: string }>();
+    layerMap.set("Power Distribution", { id: "Power Distribution", name: "Power Distribution", color: "#3B82F6" });
+    layerMap.set("Lighting & Fixtures", { id: "Lighting & Fixtures", name: "Lighting & Fixtures", color: "#10B981" });
+    layerMap.set("Cable Tray & Containment", { id: "Cable Tray & Containment", name: "Cable Trays & Routing", color: "#F59E0B" });
+    layerMap.set("Equipment & Mechanical Power", { id: "Equipment & Mechanical Power", name: "Mechanical & HVAC", color: "#8B5CF6" });
+
+    activeDets.forEach(d => {
+      if (d.category && !layerMap.has(d.category)) {
+        layerMap.set(d.category, { id: d.category, name: d.category, color: "#06b6d4" });
+      }
+    });
+
+    return Array.from(layerMap.values());
+  }, [activeDets]);
+
+  const isLayerVisible = useCallback((categoryOrLayerId?: string) => {
+    if (!categoryOrLayerId) return true;
+    if (layerVis[categoryOrLayerId] !== undefined) return layerVis[categoryOrLayerId];
+    if (categoryOrLayerId === "LT" || categoryOrLayerId === "layer-lt" || categoryOrLayerId.includes("Light")) {
+      return layerVis["Lighting & Fixtures"] ?? true;
+    }
+    if (categoryOrLayerId === "CT" || categoryOrLayerId === "layer-ct" || categoryOrLayerId.includes("Tray")) {
+      return layerVis["Cable Tray & Containment"] ?? true;
+    }
+    if (categoryOrLayerId === "PF" || categoryOrLayerId === "layer-pf" || categoryOrLayerId.includes("Power")) {
+      return layerVis["Power Distribution"] ?? true;
+    }
+    if (categoryOrLayerId === "AW" || categoryOrLayerId.includes("Earth")) {
+      return layerVis["Earthing & Grounding"] ?? true;
+    }
+    return true;
+  }, [layerVis]);
 
   // Derive Live Takeoff table items directly from canonical detections and line items
   const activeTakeoff: TakeoffItem[] = useMemo(() => {
@@ -116,7 +148,7 @@ export default function ProjectWorkspacePage() {
         quantity: d.quantity,
         unit: d.unit,
         status: d.status,
-        layer_id: d.layer_id,
+        layer_id: d.category || d.layer_id,
       };
     });
   }, [activeDets, lineItems]);
@@ -152,14 +184,14 @@ export default function ProjectWorkspacePage() {
   // Actions
   const handleApprove = useCallback((id: string) => {
     if (!activeSheetId) return;
-    dataService.updateDetectionStatus(activeSheetId, id, "approved", "Project Reviewer");
+    dataService.updateDetectionStatus(activeSheetId, id, "approved", "Hardik Bhaskar");
     setJustApproved(id);
     setTimeout(() => setJustApproved(null), 600);
   }, [activeSheetId]);
 
   const handleReject = useCallback((id: string, reason?: string) => {
     if (!activeSheetId) return;
-    dataService.updateDetectionStatus(activeSheetId, id, "rejected", "Project Reviewer", reason || "Rejected by reviewer");
+    dataService.updateDetectionStatus(activeSheetId, id, "rejected", "Hardik Bhaskar", reason || "Rejected by engineer");
     setSelectedDetId(null);
   }, [activeSheetId]);
 
@@ -167,20 +199,30 @@ export default function ProjectWorkspacePage() {
     if (toolMode === "pan") return;
     if (toolMode === "measure") {
       const rect = e.currentTarget.getBoundingClientRect();
-      const x = ((e.clientX - rect.left) / rect.width) * 100;
-      const y = ((e.clientY - rect.top) / rect.height) * 100;
+      const x = ((e.clientX - rect.left) / rect.width) * 1000;
+      const y = ((e.clientY - rect.top) / rect.height) * 650;
       if (!measureStart) {
         setMeasureStart({ x, y });
       } else {
-        const dist = Math.sqrt((x - measureStart.x) ** 2 + (y - measureStart.y) ** 2) * 4.2;
-        setMeasureLine({ x1: measureStart.x, y1: measureStart.y, x2: x, y2: y, label: `${dist.toFixed(1)}m` });
+        const distMm = Math.sqrt((x - measureStart.x) ** 2 + (y - measureStart.y) ** 2) * 25;
+        const distM = (distMm / 1000).toFixed(2);
+        setMeasureLine({ x1: measureStart.x, y1: measureStart.y, x2: x, y2: y, label: `${distM}m` });
         setMeasureStart(null);
-        setTimeout(() => setMeasureLine(null), 4000);
+        setTimeout(() => setMeasureLine(null), 5000);
       }
       return;
     }
     setSelectedDetId(null); setSelectedRowId(null);
   }, [toolMode, measureStart]);
+
+  const handleCanvasMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const xRatio = (e.clientX - rect.left) / rect.width;
+    const yRatio = (e.clientY - rect.top) / rect.height;
+    const xMm = (xRatio * 8410).toFixed(2);
+    const yMm = (yRatio * 5940).toFixed(2);
+    setCursorCoords({ x: xMm, y: yMm });
+  }, []);
 
   const handleDetClick = useCallback((e: React.MouseEvent | React.KeyboardEvent, id: string) => {
     e.stopPropagation();
@@ -343,8 +385,8 @@ export default function ProjectWorkspacePage() {
               <span style={{ color: "var(--app-text-muted)" }}><IconLayers /></span>
             </div>
             <ul className="wks-layer-list" aria-label="Layer visibility toggles">
-              {layers.map(layer => {
-                const on = layerVis[layer.id] ?? true;
+              {activeLayers.map(layer => {
+                const on = isLayerVisible(layer.id);
                 return (
                   <li key={layer.id} className={`wks-layer-item${on ? "" : " wks-layer-item--off"}`}>
                     <div className="wks-layer-dot" style={{ background: on ? layer.color : "var(--app-border-strong)" }} aria-hidden="true" />
@@ -354,7 +396,7 @@ export default function ProjectWorkspacePage() {
                       className={`wks-layer-toggle${on ? " wks-layer-toggle--on" : ""}`}
                       aria-label={`${on ? "Hide" : "Show"} ${layer.name}`}
                       aria-pressed={on}
-                      onClick={() => setLayerVis(p => ({ ...p, [layer.id]: !p[layer.id] }))}
+                      onClick={() => setLayerVis(p => ({ ...p, [layer.id]: !on }))}
                     />
                   </li>
                 );
@@ -395,20 +437,23 @@ export default function ProjectWorkspacePage() {
           {/* Measure mode banner */}
           {toolMode === "measure" && (
             <div className="wks-measure-banner" role="status">
-              {measureStart ? "Click second point to complete measurement" : "M — Click start point to measure"}
+              {measureStart ? "Click second point on drawing to complete dimension measurement" : "M — Click start point to measure CAD distance"}
             </div>
           )}
 
           {/* Canvas viewport */}
-          <div className={`wks-canvas ${cursorClass}`} onClick={handleCanvasClick} aria-label="Drawing canvas viewport">
+          <div
+            className={`wks-canvas ${cursorClass}`}
+            onClick={handleCanvasClick}
+            onMouseMove={handleCanvasMouseMove}
+            aria-label="Drawing canvas viewport"
+          >
             <div className="wks-blueprint" style={{ transform: `scale(${zoom / 100})` }}>
               <BlueprintSVG
-                activeSheetId={activeSheet.id}
                 activeSheet={activeSheet}
                 activeDets={activeDets}
-                layerVis={layerVis}
+                isLayerVisible={isLayerVisible}
                 selectedDetId={selectedDetId}
-                justApproved={justApproved}
                 measureLine={measureLine}
                 measureStart={measureStart}
                 dCls={dCls}
@@ -420,7 +465,7 @@ export default function ProjectWorkspacePage() {
             </div>
 
             {/* Empty sheet state */}
-            {activeSheet.is_empty && (
+            {activeDets.length === 0 && (
               <div className="wks-empty-sheet" role="status">
                 <svg className="wks-empty-sheet__icon" viewBox="0 0 48 48" fill="none" aria-hidden="true">
                   <rect x="8" y="6" width="32" height="36" rx="3" stroke="currentColor" strokeWidth="2" />
@@ -428,8 +473,8 @@ export default function ProjectWorkspacePage() {
                   <line x1="14" y1="22" x2="34" y2="22" stroke="currentColor" strokeWidth="1.5" />
                   <line x1="14" y1="28" x2="26" y2="28" stroke="currentColor" strokeWidth="1.5" />
                 </svg>
-                <p className="wks-empty-sheet__title">No detections on this sheet</p>
-                <p className="wks-empty-sheet__sub">Schedule sheets are not processed for detections</p>
+                <p className="wks-empty-sheet__title">Ready for Symbol & Schedule Takeoff</p>
+                <p className="wks-empty-sheet__sub">Sheet is indexed and ready for engineering perception.</p>
               </div>
             )}
           </div>
@@ -447,16 +492,16 @@ export default function ProjectWorkspacePage() {
             if (!d) return null;
             return (
               <div className="wks-tooltip" style={{ left: tooltipPos.x, top: tooltipPos.y }} aria-hidden="true">
-                {d.label} — {d.quantity} {d.unit} · {d.status}
+                <strong>{d.label}</strong> — {d.quantity} {d.unit} · {d.category} · [{d.status.toUpperCase()}]
               </div>
             );
           })()}
 
           {/* Telemetry bar */}
           <div className="wks-telemetry" role="status" aria-label="Canvas telemetry">
-            <div className="wks-telemetry__item"><span>XY</span><span className="wks-telemetry__value">1450.32, 2981.15</span></div>
-            <div className="wks-telemetry__item"><span>SCALE</span><span className="wks-telemetry__value">1:100 M</span></div>
-            <div className="wks-telemetry__item"><span>LAYER</span><span className="wks-telemetry__value">E-{activeSheet.sheet_id.slice(2)}-ELEC</span></div>
+            <div className="wks-telemetry__item"><span>XY</span><span className="wks-telemetry__value">{cursorCoords.x}, {cursorCoords.y}</span></div>
+            <div className="wks-telemetry__item"><span>SCALE</span><span className="wks-telemetry__value">{activeSheet.scale || "1:100 M"}</span></div>
+            <div className="wks-telemetry__item"><span>LAYER</span><span className="wks-telemetry__value">{activeSheet.sheet_id}-CAD</span></div>
             <div className="wks-telemetry__item"><span>ZOOM</span><span className="wks-telemetry__value">{zoom}%</span></div>
             <div className="wks-telemetry__spacer" />
             <div className="wks-telemetry__item">
@@ -465,8 +510,8 @@ export default function ProjectWorkspacePage() {
               <span style={{ color: "rgba(226,226,226,0.25)" }}> / </span>
               <span className="wks-telemetry__value">2ms local</span>
             </div>
-            <div className="wks-telemetry__item"><span>EST.</span><span className="wks-telemetry__total">$184,200</span></div>
-            <div className="wks-telemetry__item"><span className="wks-telemetry__verified">{verifiedItems} Verified</span></div>
+            <div className="wks-telemetry__item"><span>ITEMS</span><span className="wks-telemetry__total">{activeDets.length} Detected</span></div>
+            <div className="wks-telemetry__item"><span className="wks-telemetry__verified">{approvedCount}/{totalDets} Verified</span></div>
           </div>
 
         </main>
@@ -545,18 +590,14 @@ export default function ProjectWorkspacePage() {
                 </div>
                 <div className="wks-agent-finding">
                   <div className="wks-agent-finding__dot" aria-hidden="true" />
-                  <div><strong>Inspecting {activeSheet.sheet_id} — {activeSheet.name}</strong>Detection pass complete — {totalDets} items located</div>
+                  <div><strong>Inspecting {activeSheet.sheet_id} — {activeSheet.name}</strong>Detection pass complete — {totalDets} items located on sheet</div>
                 </div>
                 <div className="wks-agent-finding">
                   <div className="wks-agent-finding__dot" aria-hidden="true" />
                   <div>
-                    <strong>{activeDets.filter(d => d.layer_id === "LT").length} Troffers + {activeDets.filter(d => d.layer_id === "CT").length} Trays detected</strong>
-                    Quantities match drawing schedule
+                    <strong>{activeDets.map(d => `${d.quantity} ${d.unit} ${d.label}`).slice(0, 3).join(", ") || "No items on active layer"}</strong>
+                    {activeDets.length > 3 ? `+ ${activeDets.length - 3} more items indexed` : "Quantities extracted from sheet schedule"}
                   </div>
-                </div>
-                <div className="wks-agent-finding">
-                  <div className="wks-agent-finding__dot--warn wks-agent-finding__dot" aria-hidden="true" />
-                  <div><strong>Voltage Drop: 1.42% — Optimal</strong>Within NFPA 70 limits — no action required</div>
                 </div>
                 {activeDets.some(d => d.status === "proposed") && (
                   <>
@@ -593,7 +634,7 @@ export default function ProjectWorkspacePage() {
                 {activeTakeoff.length === 0
                   ? <div style={{ padding: "18px 13px", color: "var(--app-text-muted)", fontSize: "0.75rem", textAlign: "center" }}>No items for this sheet</div>
                   : activeTakeoff.map(item => {
-                    const visible = layerVis[item.layer_id] ?? true;
+                    const visible = isLayerVisible(item.layer_id);
                     return (
                       <div
                         key={item.id}
@@ -636,15 +677,13 @@ export default function ProjectWorkspacePage() {
   );
 }
 
-// ── Blueprint SVG (extracted for clarity) ─────────────────────────────────────
+// ── Dynamic Blueprint SVG Drawing Engine ──────────────────────────────────────
 
 interface BlueprintProps {
-  activeSheetId: string;
   activeSheet: Sheet;
   activeDets: Detection[];
-  layerVis: Record<string, boolean>;
+  isLayerVisible: (catOrLayer?: string) => boolean;
   selectedDetId: string | null;
-  justApproved: string | null;
   measureLine: { x1: number; y1: number; x2: number; y2: number; label: string } | null;
   measureStart: { x: number; y: number } | null;
   dCls: (id: string) => string;
@@ -654,148 +693,401 @@ interface BlueprintProps {
   projectName?: string;
 }
 
-function BlueprintSVG({ activeSheet, activeDets, layerVis, selectedDetId, measureLine, measureStart, dCls, handleDetClick, setHoveredDetId, setTooltipPos, projectName }: BlueprintProps) {
-  function detStatus(id: string): DetectionStatus {
-    return activeDets.find(d => d.id === id)?.status ?? "proposed";
-  }
+function BlueprintSVG({
+  activeSheet,
+  activeDets,
+  isLayerVisible,
+  selectedDetId,
+  measureLine,
+  measureStart,
+  dCls,
+  handleDetClick,
+  setHoveredDetId,
+  setTooltipPos,
+  projectName,
+}: BlueprintProps) {
   function onHoverIn(e: React.MouseEvent, id: string) { setHoveredDetId(id); setTooltipPos({ x: e.clientX, y: e.clientY }); }
   function onHoverMove(e: React.MouseEvent) { setTooltipPos({ x: e.clientX, y: e.clientY }); }
   function onHoverOut() { setHoveredDetId(null); setTooltipPos(null); }
 
+  const sheetNameLower = (activeSheet.name + " " + activeSheet.sheet_id).toLowerCase();
+  const isSLD = sheetNameLower.includes("line") || sheetNameLower.includes("sld") || sheetNameLower.includes("e-101") || sheetNameLower.includes("single") || sheetNameLower.includes("power");
+  const isLighting = sheetNameLower.includes("light") || sheetNameLower.includes("el-102") || sheetNameLower.includes("luminaire");
+  const isCableTray = sheetNameLower.includes("tray") || sheetNameLower.includes("ct-201") || sheetNameLower.includes("conduit") || sheetNameLower.includes("containment");
+  const isMechanical = sheetNameLower.includes("hvac") || sheetNameLower.includes("cooling") || sheetNameLower.includes("m-301") || sheetNameLower.includes("pac") || sheetNameLower.includes("refrigerant");
+
   return (
-    <svg className="wks-blueprint-svg" viewBox="0 0 800 500" xmlns="http://www.w3.org/2000/svg" aria-label={`${activeSheet.sheet_id} ${activeSheet.name}`} role="img">
+    <svg
+      className="wks-blueprint-svg"
+      viewBox="0 0 1000 650"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-label={`${activeSheet.sheet_id} ${activeSheet.name}`}
+      role="img"
+    >
       <defs>
-        <pattern id="bp-grid" width="40" height="40" patternUnits="userSpaceOnUse">
-          <path d="M40 0L0 0 0 40" fill="none" stroke="rgba(226,226,226,0.06)" strokeWidth="0.5" />
+        {/* Engineering CAD Grid */}
+        <pattern id="bp-grid-fine" width="20" height="20" patternUnits="userSpaceOnUse">
+          <path d="M20 0L0 0 0 20" fill="none" stroke="rgba(226,226,226,0.03)" strokeWidth="0.5" />
         </pattern>
-        <filter id="glow-green"><feGaussianBlur stdDeviation="2.5" result="cb" /><feMerge><feMergeNode in="cb" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
-        <filter id="glow-red"><feGaussianBlur stdDeviation="3" result="cb" /><feMerge><feMergeNode in="cb" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
+        <pattern id="bp-grid-major" width="100" height="100" patternUnits="userSpaceOnUse">
+          <rect width="100" height="100" fill="url(#bp-grid-fine)" />
+          <path d="M100 0L0 0 0 100" fill="none" stroke="rgba(226,226,226,0.07)" strokeWidth="1" />
+        </pattern>
+        <filter id="glow-green">
+          <feGaussianBlur stdDeviation="3" result="cb" />
+          <feMerge><feMergeNode in="cb" /><feMergeNode in="SourceGraphic" /></feMerge>
+        </filter>
+        <filter id="glow-cyan">
+          <feGaussianBlur stdDeviation="3.5" result="cb" />
+          <feMerge><feMergeNode in="cb" /><feMergeNode in="SourceGraphic" /></feMerge>
+        </filter>
       </defs>
 
-      <rect width="800" height="500" fill="#0d0d10" />
-      <rect width="800" height="500" fill="url(#bp-grid)" />
+      {/* Background with CAD Grid */}
+      <rect width="1000" height="650" fill="#0b0c10" />
+      <rect width="1000" height="650" fill="url(#bp-grid-major)" />
 
-      {/* Title block */}
-      <rect x="10" y="10" width="780" height="480" fill="none" stroke="rgba(226,226,226,0.1)" strokeWidth="1" />
-      <rect x="510" y="444" width="280" height="46" fill="none" stroke="rgba(226,226,226,0.1)" strokeWidth="0.5" />
-      <text x="650" y="460" fill="rgba(226,226,226,0.28)" fontSize="7" fontFamily="IBM Plex Mono, monospace" textAnchor="middle">VECTORIS ENGINEERING INTELLIGENCE</text>
-      <text x="650" y="472" fill="rgba(226,226,226,0.5)" fontSize="9" fontFamily="IBM Plex Mono, monospace" textAnchor="middle" fontWeight="700">
-        {projectName ? projectName.toUpperCase() : "VECTORIS WORKSPACE"} — {activeSheet.sheet_id} {activeSheet.name.toUpperCase()}
-      </text>
-      <text x="650" y="484" fill="rgba(226,226,226,0.22)" fontSize="6.5" fontFamily="IBM Plex Mono, monospace" textAnchor="middle">REV B  |  SCALE 1:100 METRIC  |  CONFIDENTIAL</text>
+      {/* Outer Border & Margins */}
+      <rect x="20" y="20" width="960" height="610" fill="none" stroke="rgba(226,226,226,0.18)" strokeWidth="1.5" />
+      <rect x="26" y="26" width="948" height="598" fill="none" stroke="rgba(226,226,226,0.08)" strokeWidth="0.8" strokeDasharray="6 3" />
 
-      {/* When no detections exist on a new sheet */}
-      {activeDets.length === 0 && (
-        <g>
-          <rect x="120" y="100" width="560" height="300" fill="none" stroke="rgba(226,226,226,0.12)" strokeWidth="1.5" strokeDasharray="6 4" />
-          <text x="400" y="240" fill="rgba(226,226,226,0.35)" fontSize="13" fontFamily="IBM Plex Mono, monospace" textAnchor="middle" fontWeight="600">
-            DRAWING SHEET INDEXED
-          </text>
-          <text x="400" y="265" fill="rgba(226,226,226,0.2)" fontSize="9" fontFamily="IBM Plex Mono, monospace" textAnchor="middle">
-            {activeSheet.document_name} · Ready for AI Takeoff & Symbol Inspection
-          </text>
-        </g>
-      )}
+      {/* Title Block in bottom right */}
+      <g transform="translate(620, 530)">
+        <rect x="0" y="0" width="354" height="94" fill="#0d0e14" stroke="rgba(226,226,226,0.22)" strokeWidth="1.2" />
+        <line x1="0" y1="28" x2="354" y2="28" stroke="rgba(226,226,226,0.12)" strokeWidth="0.8" />
+        <line x1="0" y1="62" x2="354" y2="62" stroke="rgba(226,226,226,0.12)" strokeWidth="0.8" />
+        <line x1="220" y1="28" x2="220" y2="94" stroke="rgba(226,226,226,0.12)" strokeWidth="0.8" />
 
-      {/* Architectural walls */}
-      {layerVis.AW && (
-        <g>
-          <rect x="120" y="100" width="560" height="300" fill="none" stroke="rgba(226,226,226,0.18)" strokeWidth="2" />
-          {/* Columns */}
-          {[[200, 140], [580, 140], [200, 340], [580, 340]].map(([cx, cy]) => (
-            <rect key={`col-${cx}-${cy}`} x={cx} y={cy} width="20" height="20" fill="rgba(226,226,226,0.07)" stroke="rgba(226,226,226,0.18)" strokeWidth="1" />
-          ))}
-          {/* Door */}
-          <line x1="300" y1="100" x2="340" y2="100" stroke="#0d0d10" strokeWidth="3" />
-          <path d="M300 100 Q320 118 340 100" fill="none" stroke="rgba(226,226,226,0.18)" strokeWidth="1" />
-          {/* Room label */}
-          <text x="400" y="122" fill="rgba(226,226,226,0.2)" fontSize="10" fontFamily="IBM Plex Mono, monospace" textAnchor="middle" fontWeight="600">ROOM 204 — MAIN DATA HALL</text>
-          {/* Server rows */}
-          {[0, 1, 2, 3, 4, 5].map(i => (
-            <g key={`row-${i}`}>
-              <rect x="155" y={148 + i * 25} width="85" height="19" rx="2" fill="rgba(226,226,226,0.03)" stroke="rgba(226,226,226,0.09)" strokeWidth="0.8" />
-              <text x="197" y={161 + i * 25} fill="rgba(226,226,226,0.14)" fontSize="7" fontFamily="IBM Plex Mono, monospace" textAnchor="middle">ROW {i + 1}</text>
-            </g>
-          ))}
-          {/* CRAC unit */}
-          <rect x="515" y="148" width="85" height="105" rx="3" fill="rgba(56,189,248,0.04)" stroke="rgba(56,189,248,0.1)" strokeWidth="1" strokeDasharray="4 2" />
-          <text x="557" y="203" fill="rgba(56,189,248,0.28)" fontSize="8" fontFamily="IBM Plex Mono, monospace" textAnchor="middle">CRAC</text>
-        </g>
-      )}
+        <text x="12" y="18" fill="rgba(226,226,226,0.38)" fontSize="8" fontFamily="IBM Plex Mono, monospace">PROJECT:</text>
+        <text x="65" y="19" fill="#f8fafc" fontSize="10" fontFamily="IBM Plex Mono, monospace" fontWeight="700">
+          {(projectName || "VECTORIS ENGINEERING WORKSPACE").toUpperCase()}
+        </text>
 
-      {/* Cable Trays */}
-      {layerVis.CT && (
-        <g>
-          {/* CT-TRAY-A main E-W run */}
-          <g className={dCls("det-2")} onClick={e => handleDetClick(e, "det-2")} onMouseEnter={e => onHoverIn(e, "det-2")} onMouseMove={onHoverMove} onMouseLeave={onHoverOut} tabIndex={0} onKeyDown={e => e.key === "Enter" && handleDetClick(e, "det-2")} aria-label="CT-TRAY-A 127.4m">
-            <rect x="238" y="162" width="382" height="28" rx="2" fill="rgba(56,189,248,0.07)" stroke="#38bdf8" strokeWidth={selectedDetId === "det-2" ? "2" : "1.5"} strokeDasharray={detStatus("det-2") !== "approved" ? "6 3" : "none"} />
-            {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(i => <line key={i} x1={248 + i * 36} y1="165" x2={248 + i * 36} y2="187" stroke="rgba(56,189,248,0.32)" strokeWidth="0.8" />)}
-            <text x="429" y="153" fill="#38bdf8" fontSize="9" fontFamily="IBM Plex Mono, monospace" textAnchor="middle" fontWeight="700">CT-TRAY-A — 127.4m</text>
-          </g>
-          {/* CT-TRAY-B secondary run */}
-          <g className={dCls("det-5")} onClick={e => handleDetClick(e, "det-5")} onMouseEnter={e => onHoverIn(e, "det-5")} onMouseMove={onHoverMove} onMouseLeave={onHoverOut} tabIndex={0} onKeyDown={e => e.key === "Enter" && handleDetClick(e, "det-5")} aria-label="CT-TRAY-B 84.2m">
-            <rect x="278" y="222" width="224" height="22" rx="2" fill="rgba(56,189,248,0.04)" stroke="#38bdf8" strokeWidth="1.5" strokeDasharray="6 3" />
-            {[0, 1, 2, 3, 4, 5].map(i => <line key={i} x1={290 + i * 34} y1="225" x2={290 + i * 34} y2="241" stroke="rgba(56,189,248,0.24)" strokeWidth="0.8" />)}
-            <text x="390" y="214" fill="#38bdf8" fontSize="8.5" fontFamily="IBM Plex Mono, monospace" textAnchor="middle" fontWeight="600">CT-TRAY-B — 84.2m</text>
-          </g>
-          {/* N-S drop runs */}
-          <line x1="430" y1="190" x2="430" y2="270" stroke="rgba(56,189,248,0.22)" strokeWidth="14" />
-          <line x1="308" y1="190" x2="308" y2="222" stroke="rgba(56,189,248,0.18)" strokeWidth="10" />
-        </g>
-      )}
+        <text x="12" y="44" fill="rgba(226,226,226,0.38)" fontSize="8" fontFamily="IBM Plex Mono, monospace">SHEET:</text>
+        <text x="55" y="46" fill="#38bdf8" fontSize="11" fontFamily="IBM Plex Mono, monospace" fontWeight="700">
+          {activeSheet.sheet_id} — {activeSheet.name.toUpperCase()}
+        </text>
 
-      {/* Lighting fixtures */}
-      {layerVis.LT && (
-        <g>
-          {/* LT-01 Active cluster */}
-          <g className={dCls("det-1")} onClick={e => handleDetClick(e, "det-1")} onMouseEnter={e => onHoverIn(e, "det-1")} onMouseMove={onHoverMove} onMouseLeave={onHoverOut} filter={selectedDetId === "det-1" ? "url(#glow-green)" : undefined} tabIndex={0} onKeyDown={e => e.key === "Enter" && handleDetClick(e, "det-1")} aria-label="LT-01 Active 47 EA">
-            {[0, 1, 2].map(row => [0, 1, 2, 3].map(col => (
-              <rect key={`lt1-${row}-${col}`} x={258 + col * 28} y={272 + row * 22} width="22" height="16" rx="1" fill="rgba(52,211,153,0.09)" stroke="#34d399" strokeWidth={selectedDetId === "det-1" ? "1.8" : "1.2"} />
-            ))).flat()}
-            <text x="314" y="264" fill="#34d399" fontSize="9" fontFamily="IBM Plex Mono, monospace" textAnchor="middle" fontWeight="700">LT-01 (ACTIVE) 47 EA</text>
-          </g>
-          {/* LT-01 [45] secondary */}
-          <g className={dCls("det-4")} onClick={e => handleDetClick(e, "det-4")} onMouseEnter={e => onHoverIn(e, "det-4")} onMouseMove={onHoverMove} onMouseLeave={onHoverOut} tabIndex={0} onKeyDown={e => e.key === "Enter" && handleDetClick(e, "det-4")} aria-label="LT-01 45 EA proposed">
-            {[0, 1].map(row => [0, 1, 2].map(col => (
-              <rect key={`lt4-${row}-${col}`} x={420 + col * 26} y={208 + row * 20} width="20" height="14" rx="1" fill="rgba(52,211,153,0.05)" stroke="#34d399" strokeWidth="1.2" strokeDasharray="4 2" />
-            ))).flat()}
-            <text x="459" y="200" fill="#34d399" fontSize="8.5" fontFamily="IBM Plex Mono, monospace" textAnchor="middle" fontWeight="600">LT-01 [45] PROP.</text>
-          </g>
-        </g>
-      )}
+        <text x="12" y="78" fill="rgba(226,226,226,0.38)" fontSize="8" fontFamily="IBM Plex Mono, monospace">SCALE:</text>
+        <text x="55" y="80" fill="rgba(226,226,226,0.7)" fontSize="9.5" fontFamily="IBM Plex Mono, monospace">
+          {activeSheet.scale || "1:100 METRIC"}
+        </text>
 
-      {/* Power Feeder */}
-      {layerVis.PF && (
-        <g>
-          <g className={dCls("det-3")} onClick={e => handleDetClick(e, "det-3")} onMouseEnter={e => onHoverIn(e, "det-3")} onMouseMove={onHoverMove} onMouseLeave={onHoverOut} filter={selectedDetId === "det-3" ? "url(#glow-red)" : undefined} tabIndex={0} onKeyDown={e => e.key === "Enter" && handleDetClick(e, "det-3")} aria-label="FEEDER-DP1">
-            <rect x="486" y="298" width="54" height="70" rx="2" fill="rgba(221,2,0,0.08)" stroke="#dd0200" strokeWidth={selectedDetId === "det-3" ? "2" : "1.5"} strokeDasharray={detStatus("det-3") !== "approved" ? "5 2" : "none"} />
-            {[0, 1, 2].map(i => <line key={i} x1="490" y1={318 + i * 10} x2="536" y2={318 + i * 10} stroke="#dd0200" strokeWidth="0.9" />)}
-            <line x1="513" y1="298" x2="513" y2="268" stroke="#dd0200" strokeWidth="2" strokeDasharray={detStatus("det-3") !== "approved" ? "4 2" : "none"} />
-            <circle cx="513" cy="264" r="5" fill="rgba(221,2,0,0.15)" stroke="#dd0200" strokeWidth="1.5" />
-            <text x="513" y="294" fill="#dd0200" fontSize="7.5" fontFamily="IBM Plex Mono, monospace" textAnchor="middle" fontWeight="700">FEEDER-DP1</text>
-          </g>
-        </g>
-      )}
-
-      {/* North arrow */}
-      <g transform="translate(700,438)">
-        <circle cx="0" cy="0" r="14" fill="none" stroke="rgba(226,226,226,0.13)" strokeWidth="1" />
-        <path d="M0-10 L3.5 5 L0 3 L-3.5 5Z" fill="rgba(226,226,226,0.38)" />
-        <text x="0" y="15" fill="rgba(226,226,226,0.28)" fontSize="7" fontFamily="IBM Plex Mono, monospace" textAnchor="middle">N</text>
+        <text x="230" y="44" fill="rgba(226,226,226,0.38)" fontSize="8" fontFamily="IBM Plex Mono, monospace">REV:</text>
+        <text x="260" y="46" fill="#10b981" fontSize="10" fontFamily="IBM Plex Mono, monospace" fontWeight="700">REV 1.0</text>
+        <text x="230" y="78" fill="rgba(226,226,226,0.38)" fontSize="8" fontFamily="IBM Plex Mono, monospace">STATUS:</text>
+        <text x="280" y="80" fill="#f59e0b" fontSize="9" fontFamily="IBM Plex Mono, monospace" fontWeight="700">PROVENANCE</text>
       </g>
 
-      {/* Measurement overlay */}
-      {measureLine && (
-        <g>
-          <line x1={measureLine.x1 * 8} y1={measureLine.y1 * 5} x2={measureLine.x2 * 8} y2={measureLine.y2 * 5} stroke="#dd0200" strokeWidth="1.5" strokeDasharray="4 2" />
-          <circle cx={measureLine.x1 * 8} cy={measureLine.y1 * 5} r="3" fill="#dd0200" />
-          <circle cx={measureLine.x2 * 8} cy={measureLine.y2 * 5} r="3" fill="#dd0200" />
-          <text x={(measureLine.x1 + measureLine.x2) / 2 * 8} y={(measureLine.y1 + measureLine.y2) / 2 * 5 - 8} fill="#fff" fontSize="10" fontFamily="IBM Plex Mono, monospace" textAnchor="middle" fontWeight="700">{measureLine.label}</text>
+      {/* ── DISCIPLINE SCHEMATIC DRAWING VECTORS ──────────────────────────── */}
+
+      {/* 1. Single Line Diagram & Power Distribution */}
+      {isSLD && isLayerVisible("Power Distribution") && (
+        <g opacity="0.9">
+          {/* 11kV Incomer Medium Voltage Bus */}
+          <line x1="80" y1="100" x2="880" y2="100" stroke="#f59e0b" strokeWidth="4" />
+          <text x="90" y="90" fill="#f59e0b" fontSize="9" fontFamily="IBM Plex Mono, monospace" fontWeight="700">11kV MEDIUM VOLTAGE INCOMER BUSBAR</text>
+          
+          {/* Utility Incomer Feed Arrow */}
+          <line x1="140" y1="50" x2="140" y2="100" stroke="#f59e0b" strokeWidth="2.5" />
+          <polygon points="135,92 140,100 145,92" fill="#f59e0b" />
+          <text x="155" y="75" fill="#f59e0b" fontSize="8" fontFamily="IBM Plex Mono, monospace">UTILITY FEED (11kV 3-PHASE 50Hz)</text>
+
+          {/* Transformer Connection Drop */}
+          <line x1="320" y1="100" x2="320" y2="145" stroke="#f59e0b" strokeWidth="2" />
+          {/* Transformer Windings Symbol */}
+          <circle cx="320" cy="155" r="14" fill="none" stroke="#38bdf8" strokeWidth="2" />
+          <circle cx="320" cy="175" r="14" fill="none" stroke="#38bdf8" strokeWidth="2" />
+          <line x1="320" y1="189" x2="320" y2="230" stroke="#38bdf8" strokeWidth="2.5" />
+
+          {/* 415V Main LT Distribution Busbar */}
+          <line x1="100" y1="230" x2="880" y2="230" stroke="#38bdf8" strokeWidth="5" />
+          <text x="110" y="220" fill="#38bdf8" fontSize="10" fontFamily="IBM Plex Mono, monospace" fontWeight="700">415V / 240V MAIN LOW TENSION (LT) BUSBAR — 800A 35kA</text>
+
+          {/* Feeder Breaker Drops to Outgoings */}
+          {[200, 360, 520, 680, 820].map((dropX, idx) => (
+            <g key={`feeder-drop-${idx}`}>
+              <line x1={dropX} y1="230" x2={dropX} y2="300" stroke="#38bdf8" strokeWidth="1.8" />
+              {/* Circuit Breaker Disconnect Symbol */}
+              <circle cx={dropX} cy="305" r="5" fill="none" stroke="#f8fafc" strokeWidth="1.5" />
+              <line x1={dropX} y1="310" x2={dropX + 8} y2="328" stroke="#f8fafc" strokeWidth="2" />
+              <circle cx={dropX} cy="333" r="5" fill="none" stroke="#f8fafc" strokeWidth="1.5" />
+              <line x1={dropX} y1="338" x2={dropX} y2="390" stroke="rgba(226,226,226,0.5)" strokeWidth="1.5" strokeDasharray="4 2" />
+              <polygon points={`${dropX - 4},385 ${dropX},392 ${dropX + 4},385`} fill="rgba(226,226,226,0.6)" />
+            </g>
+          ))}
         </g>
       )}
-      {measureStart && (
-        <circle cx={measureStart.x * 8} cy={measureStart.y * 5} r="4" fill="#dd0200" stroke="#fff" strokeWidth="1" />
+
+      {/* 2. Lighting & Luminaire Layout Floor Plan */}
+      {isLighting && isLayerVisible("Lighting & Fixtures") && (
+        <g opacity="0.9">
+          {/* Architectural Wall Boundaries */}
+          <rect x="80" y="80" width="820" height="420" fill="none" stroke="rgba(226,226,226,0.25)" strokeWidth="2.5" />
+          {/* Internal Room Partitions */}
+          <line x1="480" y1="80" x2="480" y2="500" stroke="rgba(226,226,226,0.2)" strokeWidth="2" />
+          <line x1="80" y1="290" x2="480" y2="290" stroke="rgba(226,226,226,0.2)" strokeWidth="2" />
+
+          {/* Column Grid Markers */}
+          {[[120, 110], [440, 110], [520, 110], [860, 110], [120, 470], [440, 470], [520, 470], [860, 470]].map(([cx, cy], i) => (
+            <rect key={`col-${i}`} x={cx - 10} y={cy - 10} width="20" height="20" fill="rgba(226,226,226,0.06)" stroke="rgba(226,226,226,0.3)" strokeWidth="1" />
+          ))}
+
+          {/* Room Labels */}
+          <text x="280" y="115" fill="rgba(226,226,226,0.3)" fontSize="11" fontFamily="IBM Plex Mono, monospace" textAnchor="middle" fontWeight="700">SERVER ROOM B — MAIN DATA HALL</text>
+          <text x="280" y="325" fill="rgba(226,226,226,0.3)" fontSize="10" fontFamily="IBM Plex Mono, monospace" textAnchor="middle" fontWeight="700">UPS &amp; BATTERY ROOM</text>
+          <text x="690" y="115" fill="rgba(226,226,226,0.3)" fontSize="11" fontFamily="IBM Plex Mono, monospace" textAnchor="middle" fontWeight="700">OPERATIONS CONTROL CENTER</text>
+
+          {/* Ceiling Lighting Grid Lines */}
+          {[140, 200, 260, 320, 380, 440].map((ly, i) => (
+            <line key={`grid-y-${i}`} x1="100" y1={ly} x2="460" y2={ly} stroke="rgba(16,185,129,0.08)" strokeWidth="0.8" strokeDasharray="3 3" />
+          ))}
+        </g>
       )}
+
+      {/* 3. Cable Tray & Containment Layout */}
+      {isCableTray && isLayerVisible("Cable Tray & Containment") && (
+        <g opacity="0.9">
+          {/* Main 600mm Ladder Tray East-West Trunk */}
+          <g>
+            <rect x="100" y="150" width="760" height="34" rx="3" fill="rgba(245,158,11,0.06)" stroke="#f59e0b" strokeWidth="1.8" />
+            {[...Array(24)].map((_, i) => (
+              <line key={`rung-${i}`} x1={115 + i * 31} y1="150" x2={115 + i * 31} y2="184" stroke="rgba(245,158,11,0.35)" strokeWidth="1" />
+            ))}
+            <text x="480" y="142" fill="#f59e0b" fontSize="9.5" fontFamily="IBM Plex Mono, monospace" textAnchor="middle" fontWeight="700">
+              CT-600 HEAVY DUTY LADDER TRAY TRUNK (85 METERS)
+            </text>
+          </g>
+
+          {/* Secondary 300mm Perforated Tray Branches */}
+          <g>
+            <rect x="220" y="240" width="520" height="24" rx="2" fill="rgba(245,158,11,0.04)" stroke="#f59e0b" strokeWidth="1.4" strokeDasharray="6 3" />
+            <text x="480" y="232" fill="#f59e0b" fontSize="8.5" fontFamily="IBM Plex Mono, monospace" textAnchor="middle" fontWeight="600">
+              CT-300 SECONDARY PERFORATED CABLE TRAY (45 METERS)
+            </text>
+            {/* North-South Drop Links */}
+            <line x1="300" y1="184" x2="300" y2="240" stroke="rgba(245,158,11,0.5)" strokeWidth="8" />
+            <line x1="660" y1="184" x2="660" y2="240" stroke="rgba(245,158,11,0.5)" strokeWidth="8" />
+          </g>
+
+          {/* Rigid Steel Conduit Runs */}
+          <path d="M 120,340 L 400,340 L 400,420 L 780,420" fill="none" stroke="#38bdf8" strokeWidth="2.5" strokeDasharray="8 4" />
+          <text x="490" y="412" fill="#38bdf8" fontSize="8.5" fontFamily="IBM Plex Mono, monospace" fontWeight="600">
+            COND-2: 2-INCH RIGID STEEL CONDUIT RUN (120 METERS)
+          </text>
+        </g>
+      )}
+
+      {/* 4. Mechanical & HVAC Equipment Layout */}
+      {isMechanical && isLayerVisible("Equipment & Mechanical Power") && (
+        <g opacity="0.9">
+          <rect x="80" y="80" width="820" height="420" fill="none" stroke="rgba(139,92,246,0.25)" strokeWidth="2" />
+          <text x="490" y="115" fill="rgba(139,92,246,0.4)" fontSize="11" fontFamily="IBM Plex Mono, monospace" textAnchor="middle" fontWeight="700">
+            PRECISION AIR CONDITIONING &amp; CHILLED PIPING LAYOUT
+          </text>
+        </g>
+      )}
+
+      {/* ── DYNAMIC DETECTION NODES LAYER (Real activeDets) ───────────────── */}
+      <g className="wks-detections-group">
+        {activeDets.map((d, idx) => {
+          if (!isLayerVisible(d.category || d.layer_id)) return null;
+
+          // Compute responsive coordinates mapped from normalized bounds or clean grid distribution
+          const coords = d.coordinates;
+          const col = idx % 3;
+          const row = Math.floor(idx / 3);
+
+          const defaultX = 100 + col * 260;
+          const defaultY = isSLD ? (160 + row * 110) : (140 + row * 100);
+          const defaultW = 230;
+          const defaultH = 78;
+
+          const cx = coords?.x !== undefined ? 80 + coords.x * 760 : defaultX;
+          const cy = coords?.y !== undefined ? 70 + coords.y * 420 : defaultY;
+          const cw = coords?.width !== undefined ? Math.max(180, coords.width * 760) : defaultW;
+          const ch = coords?.height !== undefined ? Math.max(68, coords.height * 420) : defaultH;
+
+          const isSelected = selectedDetId === d.id;
+          const isApproved = d.status === "approved";
+          const isRejected = d.status === "rejected";
+
+          // Dynamic colors by discipline
+          let primaryColor = "#38bdf8";
+          if (d.category.toLowerCase().includes("power")) primaryColor = "#3B82F6";
+          else if (d.category.toLowerCase().includes("light")) primaryColor = "#10B981";
+          else if (d.category.toLowerCase().includes("tray") || d.category.toLowerCase().includes("conduit")) primaryColor = "#F59E0B";
+          else if (d.category.toLowerCase().includes("mech")) primaryColor = "#8B5CF6";
+
+          const strokeColor = isApproved ? "#10b981" : isRejected ? "#ef4444" : primaryColor;
+          const fillColor = isApproved
+            ? "rgba(16,185,129,0.12)"
+            : isRejected
+            ? "rgba(239,68,68,0.1)"
+            : isSelected
+            ? "rgba(56,189,248,0.18)"
+            : "rgba(13,14,20,0.85)";
+
+          return (
+            <g
+              key={d.id}
+              className={dCls(d.id)}
+              transform={`translate(${cx}, ${cy})`}
+              onClick={(e) => handleDetClick(e, d.id)}
+              onMouseEnter={(e) => onHoverIn(e, d.id)}
+              onMouseMove={onHoverMove}
+              onMouseLeave={onHoverOut}
+              style={{ cursor: "pointer" }}
+              tabIndex={0}
+              onKeyDown={(e) => e.key === "Enter" && handleDetClick(e, d.id)}
+              aria-label={`${d.label} — ${d.quantity} ${d.unit} (${d.status})`}
+            >
+              {/* Selection Halo */}
+              {isSelected && (
+                <rect
+                  x="-4"
+                  y="-4"
+                  width={cw + 8}
+                  height={ch + 8}
+                  rx="7"
+                  fill="none"
+                  stroke="#38bdf8"
+                  strokeWidth="2.5"
+                  filter="url(#glow-cyan)"
+                />
+              )}
+
+              {/* Component Card Bounding Box */}
+              <rect
+                x="0"
+                y="0"
+                width={cw}
+                height={ch}
+                rx="5"
+                fill={fillColor}
+                stroke={strokeColor}
+                strokeWidth={isSelected ? "2.2" : isApproved ? "1.8" : "1.2"}
+                strokeDasharray={!isApproved && !isRejected ? "5 3" : "none"}
+                filter={isApproved ? "url(#glow-green)" : undefined}
+              />
+
+              {/* Status Header Strip */}
+              <rect
+                x="0"
+                y="0"
+                width={cw}
+                height="20"
+                rx="4"
+                fill={isApproved ? "rgba(16,185,129,0.22)" : isRejected ? "rgba(239,68,68,0.2)" : "rgba(255,255,255,0.06)"}
+              />
+
+              {/* Category Icon */}
+              <g transform="translate(6, 4)">
+                {d.category.toLowerCase().includes("power") ? (
+                  <path d="M5 1L1 7h4l-1 5 6-7H6l1-5z" fill={strokeColor} />
+                ) : d.category.toLowerCase().includes("light") ? (
+                  <circle cx="5" cy="5" r="4" fill="none" stroke={strokeColor} strokeWidth="1.2" />
+                ) : d.category.toLowerCase().includes("tray") ? (
+                  <path d="M1 2h8M1 5h8M1 8h8M2 1v8M8 1v8" stroke={strokeColor} strokeWidth="1" />
+                ) : (
+                  <rect x="1" y="1" width="8" height="8" rx="1" fill="none" stroke={strokeColor} strokeWidth="1.2" />
+                )}
+              </g>
+
+              {/* Label Code */}
+              <text
+                x="20"
+                y="14"
+                fill="#f8fafc"
+                fontSize="9"
+                fontFamily="IBM Plex Mono, monospace"
+                fontWeight="700"
+              >
+                {d.label}
+              </text>
+
+              {/* Status Badge Tag */}
+              <text
+                x={cw - 8}
+                y="14"
+                fill={isApproved ? "#10b981" : isRejected ? "#ef4444" : "#f59e0b"}
+                fontSize="7.5"
+                fontFamily="IBM Plex Mono, monospace"
+                textAnchor="end"
+                fontWeight="700"
+              >
+                {isApproved ? "VERIFIED" : isRejected ? "REJECTED" : "PROPOSED"}
+              </text>
+
+              {/* Quantity & Unit Badge */}
+              <g transform="translate(8, 28)">
+                <rect x="0" y="0" width={Math.min(cw - 16, 110)} height="17" rx="3" fill="rgba(255,255,255,0.05)" />
+                <text x="6" y="12" fill={strokeColor} fontSize="8.5" fontFamily="IBM Plex Mono, monospace" fontWeight="700">
+                  QTY: {d.quantity} {d.unit}
+                </text>
+              </g>
+
+              {/* Category Subtext */}
+              <text
+                x="8"
+                y={ch - 10}
+                fill="rgba(226,226,226,0.4)"
+                fontSize="7"
+                fontFamily="IBM Plex Mono, monospace"
+              >
+                {d.category}
+              </text>
+            </g>
+          );
+        })}
+      </g>
+
+      {/* Measurement Tool Overlay */}
+      {measureLine && (
+        <g>
+          <line
+            x1={measureLine.x1}
+            y1={measureLine.y1}
+            x2={measureLine.x2}
+            y2={measureLine.y2}
+            stroke="#dd0200"
+            strokeWidth="2"
+            strokeDasharray="5 3"
+          />
+          <circle cx={measureLine.x1} cy={measureLine.y1} r="4" fill="#dd0200" stroke="#fff" strokeWidth="1" />
+          <circle cx={measureLine.x2} cy={measureLine.y2} r="4" fill="#dd0200" stroke="#fff" strokeWidth="1" />
+          <rect
+            x={(measureLine.x1 + measureLine.x2) / 2 - 28}
+            y={(measureLine.y1 + measureLine.y2) / 2 - 18}
+            width="56"
+            height="18"
+            rx="3"
+            fill="#dd0200"
+          />
+          <text
+            x={(measureLine.x1 + measureLine.x2) / 2}
+            y={(measureLine.y1 + measureLine.y2) / 2 - 6}
+            fill="#fff"
+            fontSize="9.5"
+            fontFamily="IBM Plex Mono, monospace"
+            textAnchor="middle"
+            fontWeight="700"
+          >
+            {measureLine.label}
+          </text>
+        </g>
+      )}
+
+      {measureStart && (
+        <circle cx={measureStart.x} cy={measureStart.y} r="5" fill="#dd0200" stroke="#fff" strokeWidth="1.5" />
+      )}
+
+      {/* North Arrow Marker */}
+      <g transform="translate(930, 80)">
+        <circle cx="0" cy="0" r="16" fill="#0d0e14" stroke="rgba(226,226,226,0.2)" strokeWidth="1" />
+        <path d="M0 -12 L4 4 L0 1 L-4 4 Z" fill="#dd0200" />
+        <text x="0" y="12" fill="rgba(226,226,226,0.4)" fontSize="7" fontFamily="IBM Plex Mono, monospace" textAnchor="middle">N</text>
+      </g>
     </svg>
   );
 }

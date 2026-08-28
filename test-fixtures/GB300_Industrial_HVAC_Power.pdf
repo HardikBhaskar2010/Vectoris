@@ -1,0 +1,91 @@
+%PDF-1.4
+1 0 obj
+<<
+  /Type /Catalog
+  /Pages 2 0 R
+>>
+endobj
+2 0 obj
+<<
+  /Type /Pages
+  /Kids [3 0 R 4 0 R]
+  /Count 2
+>>
+endobj
+3 0 obj
+<<
+  /Type /Page
+  /Parent 2 0 R
+  /MediaBox [0 0 2592 1728]
+  /Contents 5 0 R
+>>
+endobj
+5 0 obj
+<< /Length 380 >>
+stream
+BT
+/F1 12 Tf
+72 1600 Td
+(DRAWING NUMBER: M-301) Tj
+0 -20 Td
+(TITLE: PRECISION AIR CONDITIONING & MECHANICAL EQUIPMENT POWER PLAN) Tj
+0 -20 Td
+(SCALE: 1:100) Tj
+0 -20 Td
+(REV: 0) Tj
+0 -40 Td
+(PAC-01: PRECISION AIR CONDITIONING INDOOR UNIT 50KW 4 NOS) Tj
+0 -20 Td
+(PAC-CU: CONDENSER OUTDOOR UNIT FOR PAC-01 4 NOS) Tj
+0 -20 Td
+(DB-PAC: DEDICATED DISTRIBUTION BOARD FOR PAC UNITS 200A 1 NOS) Tj
+ET
+endstream
+endobj
+4 0 obj
+<<
+  /Type /Page
+  /Parent 2 0 R
+  /MediaBox [0 0 2592 1728]
+  /Contents 6 0 R
+>>
+endobj
+6 0 obj
+<< /Length 360 >>
+stream
+BT
+/F1 12 Tf
+72 1600 Td
+(DRAWING NUMBER: SCH-401) Tj
+0 -20 Td
+(TITLE: PANEL SCHEDULE OF LOADS AND CIRCUIT DIRECTORY) Tj
+0 -20 Td
+(SCALE: NTS) Tj
+0 -20 Td
+(REV: 2) Tj
+0 -40 Td
+(MCCB-100A: BRANCH CIRCUIT BREAKER 100A 3P 8 NOS) Tj
+0 -20 Td
+(MCCB-63A: BRANCH CIRCUIT BREAKER 63A 3P 12 NOS) Tj
+0 -20 Td
+(MCCB-32A: SINGLE PHASE BREAKER 32A 1P 24 NOS) Tj
+ET
+endstream
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000010 00000 n 
+0000000060 00000 n 
+0000000120 00000 n 
+0000000210 00000 n 
+0000000300 00000 n 
+0000000730 00000 n 
+trailer
+<<
+  /Size 7
+  /Root 1 0 R
+>>
+startxref
+1140
+%%EOF

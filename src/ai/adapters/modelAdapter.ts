@@ -100,13 +100,47 @@ export class VectorisDeterministicEngineAdapter implements ModelAdapter {
         },
       });
     }
-
-    if (hasProject && (q.includes("takeoff") || q.includes("count") || q.includes("quantity") || q.includes("boq") || q.includes("item"))) {
+       if (hasProject && (q.includes("takeoff") || q.includes("count") || q.includes("quantity") || q.includes("boq") || q.includes("item"))) {
       plan.push("5. Searching active project takeoff ledger for line items and verification states.");
       toolCalls.push({
         name: "search_line_items",
         args: {
           query: q.includes("light") ? "Lighting" : q.includes("cable") ? "Cable" : "",
+        },
+      });
+    }
+
+    if (hasProject && (q.includes("propose") || q.includes("add") || q.includes("create item") || q.includes("new item"))) {
+      plan.push("6. Formulating proposed line item addition for human confirmation review.");
+      const qtyMatch = q.match(/(\d+)\s*(x|nos|ea|units?)/i);
+      const qty = qtyMatch ? parseInt(qtyMatch[1], 10) : 1;
+      const sheetMatch = q.match(/e-?\d+/i);
+      const sheetNum = sheetMatch ? sheetMatch[0].toUpperCase() : "E-104";
+
+      toolCalls.push({
+        name: "create_line_item",
+        args: {
+          itemCode: "PROP-01",
+          name: q.includes("switch")
+            ? "400A Heavy Duty Disconnect Switch"
+            : q.includes("breaker")
+            ? "20A 1P Circuit Breaker"
+            : "Proposed Equipment Item",
+          category: q.includes("light") ? "Lighting & Fixtures" : "Power Distribution",
+          quantity: qty,
+          unit: "NOS",
+          sourceSheet: sheetNum,
+          description: `User-requested addition from engineering session on ${sheetNum}.`,
+        },
+      });
+    }
+
+    if (hasProject && (q.includes("document") || q.includes("file") || q.includes("package") || q.includes("spec"))) {
+      plan.push("7. Searching project document repository for drawing packages and specifications.");
+      toolCalls.push({
+        name: "search_documents",
+        args: {
+          query: q.includes("draw") ? "Drawing" : q.includes("spec") ? "Spec" : "",
         },
       });
     }
@@ -158,15 +192,13 @@ export class VectorisDeterministicEngineAdapter implements ModelAdapter {
         synthesizedMarkdown += `- **Apparent Power:** ${data.apparent_power_kva} kVA (${data.phase}, ${data.system_voltage_v}V)\n`;
         synthesizedMarkdown += `- **Full Load Current (FLA):** ${data.full_load_amperes} A\n`;
         synthesizedMarkdown += `- **Continuous Load Rating (125% NEC):** ${data.continuous_load_amperes_125pct} A\n`;
-        synthesizedMarkdown += `- **Recommended Minimum Breaker:** ${data.recommended_minimum_breaker_amperes} A\n\n`;
+        synthesizedMarkdown += `- **Standard Recommended Overcurrent Device:** ${data.standard_breaker_amperes} A\n\n`;
       } else if (tr.tool === "verify_feeder_sizing") {
-        synthesizedMarkdown += `#### 📐 Feeder & Conduit Verification\n`;
-        synthesizedMarkdown += `- **Breaker Rating:** ${data.breaker_rating_amperes} A\n`;
-        synthesizedMarkdown += `- **Recommended Conductor:** **${data.recommended_conductor_size}** (${data.code_standard_reference})\n`;
-        synthesizedMarkdown += `- **Conduit Trade Size:** ${data.recommended_conduit_trade_size}\n\n`;
+        synthesizedMarkdown += `#### 🔌 Conductor & Feeder Sizing\n`;
+        synthesizedMarkdown += `- **Conductor Specification:** ${data.recommended_conductor_size} ${data.conductor_material} (${data.insulation_type})\n`;
+        synthesizedMarkdown += `- **Conductor Ampacity:** ${data.allowable_ampacity_amperes} A at 75°C terminal rating\n`;
+        synthesizedMarkdown += `- **Status:** ${data.status} · *Standard: ${data.standard_reference}*\n\n`;
       } else if (tr.tool === "inspect_drawing_region") {
-        synthesizedMarkdown += `#### 📄 Drawing Inspection (Sheet ${data.sheet_id})\n`;
-        synthesizedMarkdown += `- **Sheet Title:** ${data.sheet_name}\n`;
         synthesizedMarkdown += `- **Detections Found:** ${data.total_detections_found} components matching query\n`;
         if (Array.isArray(data.detections) && data.detections.length > 0) {
           data.detections.slice(0, 3).forEach((d: any) => {
@@ -220,7 +252,56 @@ export class GroqCloudModelAdapter implements ModelAdapter {
     context: AgentContext,
     tools: ToolDefinition[]
   ): Promise<{ plan: string[]; toolCalls: ModelToolCall[] }> {
-    // Fall back to deterministic planner for stability and security
+    if (!this.apiKey) {
+      const fallback = new VectorisDeterministicEngineAdapter();
+      return fallback.generatePlanAndTools(inquiry, context, tools);
+    }
+
+    try {
+      const toolSummaries = tools
+        .map((t) => `- ${t.name}: ${t.description} (params: ${JSON.stringify(t.parameters)})`)
+        .join("\n");
+
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: this.modelId,
+          messages: [
+            {
+              role: "system",
+              content: `${context.systemPrompt}\n\nAvailable Tools:\n${toolSummaries}\n\nRespond ONLY with a JSON object: {"plan": ["step 1", "step 2"], "toolCalls": [{"name": "tool_name", "args": {}}]}.`,
+            },
+            {
+              role: "user",
+              content: `User Inquiry: ${inquiry}\nProject: ${context.project?.name || "General Workspace"}`,
+            },
+          ],
+          temperature: 0.1,
+          response_format: { type: "json_object" },
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const rawJson = data.choices?.[0]?.message?.content || "";
+        const parsed = JSON.parse(rawJson);
+        const validTools = new Set(tools.map((t) => t.name));
+        const filteredToolCalls: ModelToolCall[] = (parsed.toolCalls || []).filter(
+          (tc: ModelToolCall) => validTools.has(tc.name) && typeof tc.args === "object"
+        );
+
+        if (Array.isArray(parsed.plan) && filteredToolCalls.length > 0) {
+          return { plan: parsed.plan, toolCalls: filteredToolCalls };
+        }
+      }
+    } catch (err) {
+      console.warn("Groq plan generation exception, falling back to deterministic planner:", err);
+    }
+
     const fallback = new VectorisDeterministicEngineAdapter();
     return fallback.generatePlanAndTools(inquiry, context, tools);
   }

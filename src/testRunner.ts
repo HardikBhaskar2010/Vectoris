@@ -12,6 +12,8 @@ import { runAuthTests } from "./services/auth.test";
 import { runProjectPlanTests } from "./services/projectPlan.test";
 import { runToolRegistryTests } from "./ai/tools/toolRegistry.test";
 import { runAgentRuntimeTests } from "./ai/runtime/agentRuntime.test";
+import { runDocumentPipelineTests } from "./services/documentPipeline.test";
+import { runOfflineSyncTests } from "./services/offlineSync.test";
 
 export async function runAllTests() {
   console.log("==================================================");
@@ -54,6 +56,24 @@ export async function runAllTests() {
     passed++;
   } catch (err) {
     console.error("❌ Agent Runtime test failure:", err);
+    failed++;
+  }
+
+  // 5. Document Pipeline & Perception Tests
+  try {
+    await runDocumentPipelineTests();
+    passed++;
+  } catch (err) {
+    console.error("❌ Document Pipeline test failure:", err);
+    failed++;
+  }
+
+  // 6. Offline Mutation Queue & Replay Tests
+  try {
+    await runOfflineSyncTests();
+    passed++;
+  } catch (err) {
+    console.error("❌ Offline Sync test failure:", err);
     failed++;
   }
 

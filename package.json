@@ -9,6 +9,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "test": "tsx src/testRunner.ts",
     "tauri": "tauri",
     "tauri:dev": "tauri dev --target x86_64-pc-windows-gnu",
     "tauri:build": "tauri build --target x86_64-pc-windows-gnu"

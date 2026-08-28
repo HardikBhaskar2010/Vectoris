@@ -24,7 +24,15 @@ const BUILTIN_SKILLS: VectorisSkill[] = [
     description: "Evaluates single line diagrams, panel schedules, breaker ratings, transformer sizing, and cable feeder runs.",
     version: "1.2.0",
     category: "electrical",
-    allowedTools: ["read_project_files", "inspect_drawing", "get_project_context", "create_line_item"],
+    allowedTools: [
+      "calculate_electrical_load",
+      "verify_feeder_sizing",
+      "inspect_drawing_region",
+      "get_project_context",
+      "create_line_item",
+      "get_document_metadata",
+      "search_documents",
+    ],
     instructions:
       "Focus on continuous load margins (80% rule), feeder sizing, voltage drop calculations (<3% branch, <5% total), and panel schedule phase balance. Always cross-reference Single Line Diagrams (SLD) with physical equipment layouts.",
     isTrusted: true,
@@ -35,7 +43,13 @@ const BUILTIN_SKILLS: VectorisSkill[] = [
     description: "Resolves IEEE/ANSI electrical symbols, luminaire tags, circuit designations, and legend definitions.",
     version: "1.1.0",
     category: "drawing_analysis",
-    allowedTools: ["inspect_drawing", "search_project", "read_project_files"],
+    allowedTools: [
+      "inspect_drawing_region",
+      "list_sheets",
+      "get_document_metadata",
+      "search_documents",
+      "get_project_context",
+    ],
     instructions:
       "Always locate and inspect the Project Legend Sheet (e.g., E-001) first to establish custom project symbol definitions before classifying drawing elements.",
     isTrusted: true,
@@ -46,7 +60,14 @@ const BUILTIN_SKILLS: VectorisSkill[] = [
     description: "Audits AI-detected line items against floor plans and schedules to identify omissions, duplicates, or scope mismatches.",
     version: "1.3.0",
     category: "takeoff_audit",
-    allowedTools: ["get_project_context", "inspect_drawing", "update_line_item", "create_line_item"],
+    allowedTools: [
+      "search_line_items",
+      "get_line_item",
+      "get_takeoff_run",
+      "inspect_drawing_region",
+      "create_line_item",
+      "get_project_context",
+    ],
     instructions:
       "Compare floor plan counts with panel schedule circuit counts. Flag any discrepancies > 5% as variance items requiring engineer review.",
     isTrusted: true,
@@ -57,7 +78,13 @@ const BUILTIN_SKILLS: VectorisSkill[] = [
     description: "Verifies equipment ratings and conduit specifications against project specifications and standards.",
     version: "1.0.0",
     category: "compliance",
-    allowedTools: ["read_project_files", "search_project", "get_project_context"],
+    allowedTools: [
+      "search_documents",
+      "get_document_metadata",
+      "get_project_context",
+      "calculate_electrical_load",
+      "verify_feeder_sizing",
+    ],
     instructions:
       "Check NEMA enclosures, UL listings, insulation ratings (THHN/XHHW), and conduit fill ratios against project engineering specifications.",
     isTrusted: true,
@@ -72,8 +99,9 @@ const BUILTIN_SKILLS: VectorisSkill[] = [
     allowedTools: [
       "get_project_plan",
       "propose_project_plan_revision",
-      "read_project_files",
-      "search_project",
+      "search_documents",
+      "get_document_metadata",
+      "search_projects",
       "get_project_context",
     ],
     instructions:

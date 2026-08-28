@@ -47,6 +47,8 @@ import { projectPlanService, type CreateDraftParams } from "./projectPlanService
 import { agentRuntime } from "../ai/runtime/agentRuntime";
 import { authService } from "./authService";
 import { isSupabaseConfigured } from "./supabaseClient";
+import { documentProcessingService } from "./documentProcessingService";
+import { offlineSyncService } from "./offlineSyncService";
 
 const STORAGE_KEY_PREFIX = "vectoris.store.v1.";
 
@@ -101,6 +103,10 @@ class DataService {
     this.layers = loadFromStorage<LayerDef[]>("layers", INITIAL_LAYERS);
     this.detections = loadFromStorage<Record<string, Detection[]>>("detections", INITIAL_DETECTIONS);
     this.engineStatus = loadFromStorage<EngineStatusInfo>("engineStatus", INITIAL_ENGINE_STATUS);
+
+    if (typeof window !== "undefined") {
+      (window as any).dataService = this;
+    }
 
     this.initAuthSync();
   }
@@ -177,16 +183,26 @@ class DataService {
           }
         }
 
-        this.documents = allRemoteDocs;
+        // Preserve local unsynced documents and line items alongside remote items
+        const remoteDocIds = new Set(allRemoteDocs.map((d) => d.id));
+        const localUnsyncedDocs = this.documents.filter((d) => !remoteDocIds.has(d.id));
+        this.documents = [...allRemoteDocs, ...localUnsyncedDocs];
         saveToStorage("documents", this.documents);
 
-        this.lineItems = allRemoteLineItems;
+        const remoteLineItemIds = new Set(allRemoteLineItems.map((li) => li.id));
+        const localUnsyncedItems = this.lineItems.filter((li) => !remoteLineItemIds.has(li.id));
+        this.lineItems = [...allRemoteLineItems, ...localUnsyncedItems];
         saveToStorage("lineItems", this.lineItems);
         saveToStorage("takeoffSummaries", this.takeoffSummaries);
 
         // Fetch investigation sessions
-        const remoteSessions = await sessionService.getSessions();
-        this.sessions = remoteSessions || [];
+        const remoteSessions = (await sessionService.getSessions()) || [];
+        const remoteSessionIds = new Set(remoteSessions.map((s) => s.id));
+        const localUnsyncedSessions = this.sessions.filter((s) => !remoteSessionIds.has(s.id));
+        this.sessions = [...remoteSessions, ...localUnsyncedSessions];
+        if (this.sessions.length === 0) {
+          this.sessions = INITIAL_SESSIONS;
+        }
         saveToStorage("sessions", this.sessions);
 
         this.notify();
@@ -445,28 +461,7 @@ class DataService {
     this.documents = [...newDocs, ...this.documents];
     saveToStorage("documents", this.documents);
 
-    // Auto-generate Sheet entries for the new documents in this project
-    const newSheets: Sheet[] = newDocs.map((doc, idx) => {
-      const existingProjectSheets = this.sheets.filter((s) => s.project_id === projectId);
-      const sheetNumber = existingProjectSheets.length + idx + 1;
-      const cleanName = doc.filename.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
-      const sheetCode = doc.format === "PDF" ? `A-${100 + sheetNumber}` : `E-${100 + sheetNumber}`;
-      return {
-        id: generateId("s"),
-        project_id: projectId,
-        sheet_id: sheetCode,
-        name: cleanName,
-        type: doc.format === "Excel" ? "schedule" : "floor_plan",
-        detection_count: 0,
-        document_name: doc.filename,
-        is_empty: false,
-      };
-    });
-
-    this.sheets = [...this.sheets, ...newSheets];
-    saveToStorage("sheets", this.sheets);
-
-    // Update project updated_at & sheets metadata if needed
+    // Update project updated_at
     const proj = this.projects.find((p) => p.id === projectId);
     if (proj) {
       proj.updated_at = "Just now";
@@ -474,6 +469,13 @@ class DataService {
     }
 
     this.notify();
+
+    // Trigger real local-first document extraction, classification, and perception pipeline
+    for (const doc of newDocs) {
+      this.processDocumentAsync(projectId, doc.id).catch((err) =>
+        console.warn("Document processing pipeline failed:", err)
+      );
+    }
 
     // Async sync to Supabase if configured
     if (isSupabaseConfigured() && !projectId.startsWith("p-")) {
@@ -491,21 +493,101 @@ class DataService {
         )
         .then((remoteDocs) => {
           if (remoteDocs && remoteDocs.length > 0) {
-            // Update documents in local store with remote records
             for (const r of remoteDocs) {
-              const idx = this.documents.findIndex((d) => d.id === r.id || (d.filename === r.filename && d.project_id === projectId));
+              const idx = this.documents.findIndex(
+                (d) => d.id === r.id || (d.filename === r.filename && d.project_id === projectId)
+              );
               if (idx !== -1) {
-                this.documents[idx] = r;
+                this.documents[idx] = { ...this.documents[idx], ...r };
               }
             }
             saveToStorage("documents", this.documents);
             this.notify();
           }
         })
-        .catch((err) => console.warn("Supabase document persistence failed:", err));
+        .catch((err) => {
+          console.warn("Supabase document persistence failed, queuing for offline replay:", err);
+          offlineSyncService.enqueue("manual_line_item", {
+            action: "create_documents",
+            projectId,
+            documents: newDocs,
+          });
+        });
     }
 
     return newDocs;
+  }
+
+  /**
+   * Executes the genuine local-first page extraction, sheet classification,
+   * symbol perception, and takeoff derivation pipeline for a document.
+   */
+  public async processDocumentAsync(
+    projectId: string,
+    documentId: string,
+    fileData?: ArrayBuffer | Uint8Array | string
+  ): Promise<void> {
+    const doc = this.documents.find((d) => d.id === documentId);
+    if (!doc) return;
+
+    try {
+      const result = await documentProcessingService.processDocument(
+        projectId,
+        doc,
+        fileData,
+        (stage) => {
+          doc.upload_status = stage;
+          saveToStorage("documents", this.documents);
+          this.notify();
+        }
+      );
+
+      // Add newly derived sheets (avoiding duplicates)
+      const existingSheetIds = new Set(this.sheets.map((s) => s.sheet_id));
+      const freshSheets = result.sheets.filter((s) => !existingSheetIds.has(s.sheet_id));
+      this.sheets = [...this.sheets, ...freshSheets];
+      saveToStorage("sheets", this.sheets);
+
+      // Add newly derived detections
+      for (const sheet of result.sheets) {
+        const sheetDets = result.detections.filter((d) => d.sheet_id === sheet.id);
+        this.detections[sheet.id] = sheetDets;
+        this.detections[sheet.sheet_id] = sheetDets;
+      }
+      saveToStorage("detections", this.detections);
+
+      // Add newly derived line items
+      this.lineItems = [...this.lineItems, ...result.lineItems];
+      saveToStorage("lineItems", this.lineItems);
+
+      // Update document metadata
+      doc.sheet_count = result.pageCount;
+      doc.upload_status = "complete";
+      saveToStorage("documents", this.documents);
+
+      // Update project takeoff summary
+      const currentTakeoff = this.getTakeoff(projectId);
+      const projSheets = this.getSheets(projectId);
+      const projLineItems = this.getLineItems(projectId);
+
+      this.takeoffSummaries[projectId] = {
+        ...currentTakeoff,
+        status: "complete",
+        sheets_processed: projSheets.length,
+        sheets_total: projSheets.length,
+        line_items_proposed: projLineItems.length,
+        completed_at: "Just now",
+        model_version: "v2.4-perception",
+      };
+      saveToStorage("takeoffSummaries", this.takeoffSummaries);
+
+      this.notify();
+    } catch (err: any) {
+      console.warn(`Error processing document ${documentId}:`, err);
+      doc.upload_status = "error";
+      saveToStorage("documents", this.documents);
+      this.notify();
+    }
   }
 
   public removeDocument(docId: string): void {
@@ -606,7 +688,21 @@ class DataService {
             }
           }
         })
-        .catch((err) => console.warn("Supabase manual line item persistence failed:", err));
+        .catch((err) => {
+          console.warn("Supabase manual line item persistence failed, queuing for offline replay:", err);
+          offlineSyncService.enqueue("manual_line_item", {
+            action: "create_manual_line_item",
+            projectId,
+            item: {
+              id: newLineItem.id,
+              name: item.name,
+              itemCode: item.item_code,
+              category: item.category,
+              quantity: item.quantity,
+              unit: item.unit,
+            },
+          });
+        });
     }
 
     return newLineItem;
@@ -685,7 +781,16 @@ class DataService {
             correctionType,
             reason,
           })
-          .catch((err) => console.warn("Supabase approve_line_item RPC failed:", err));
+          .catch((err) => {
+            console.warn("Supabase approve_line_item RPC failed, queuing for offline replay:", err);
+            offlineSyncService.enqueue("line_item_status", {
+              lineItemId: id,
+              status: "approved",
+              humanValue: `${item.quantity} ${item.unit}`,
+              correctionType,
+              reason,
+            });
+          });
       } else if (status === "rejected") {
         takeoffService
           .rejectLineItem({
@@ -693,7 +798,15 @@ class DataService {
             correctionType,
             reason: reason || "Rejected by user during review",
           })
-          .catch((err) => console.warn("Supabase reject_line_item RPC failed:", err));
+          .catch((err) => {
+            console.warn("Supabase reject_line_item RPC failed, queuing for offline replay:", err);
+            offlineSyncService.enqueue("line_item_status", {
+              lineItemId: id,
+              status: "rejected",
+              correctionType,
+              reason: reason || "Rejected by user during review",
+            });
+          });
       }
     }
   }
@@ -1145,7 +1258,10 @@ class DataService {
   }
 }
 
-export const dataService = new DataService();
+const globalRef = (typeof globalThis !== "undefined" ? globalThis : window) as any;
+export const dataService: DataService =
+  globalRef.__vectorisDataService__ ||
+  (globalRef.__vectorisDataService__ = new DataService());
 
 // ── React Custom Hooks ────────────────────────────────────────────────────────
 
