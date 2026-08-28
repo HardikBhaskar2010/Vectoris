@@ -14,6 +14,9 @@ export type ResetStatus = "idle" | "loading" | "submitting" | "success" | "expir
 export type FormErrors = Partial<Record<"fullName" | "email" | "password" | "confirmPassword", string>>;
 
 function getInitialMode(): AuthMode {
+  if (authService.isRecoveryMode()) {
+    return "reset";
+  }
   const params = new URLSearchParams(window.location.search);
   const hash = window.location.hash;
   const mode = params.get("mode");
@@ -326,6 +329,7 @@ export function AuthPage() {
     const isRecoveryFlow =
       mode === "reset" ||
       mode === "forgot" ||
+      authService.isRecoveryMode() ||
       params.get("mode") === "reset" ||
       params.get("mode") === "forgot" ||
       params.get("type") === "recovery" ||
@@ -337,6 +341,8 @@ export function AuthPage() {
 
     authService.getSession().then(async (session) => {
       if (!isMounted) return;
+      if (authService.isRecoveryMode()) return;
+
       if (session?.user && authService.isEmailConfirmed(session.user)) {
         try {
           const userOrgs = await organizationService.getUserOrganizations();
@@ -357,10 +363,22 @@ export function AuthPage() {
     };
   }, [navigate, mode]);
 
+  // ── Recovery State Listener ───────────────────────────────────────────────
+  useEffect(() => {
+    const unbind = authService.onRecoveryStateChange((isRecovery) => {
+      if (isRecovery) {
+        setMode("reset");
+        setResetStatus("idle");
+        setFormMessage("");
+      }
+    });
+    return () => unbind();
+  }, []);
+
   // ── Desktop Deep-Link & URL Callback Listener ─────────────────────────────
   useEffect(() => {
     const handleAuthSuccess = async (session: unknown, user: unknown, isRecovery?: boolean) => {
-      if (isRecovery) {
+      if (isRecovery || authService.isRecoveryMode()) {
         setMode("reset");
         setResetStatus("idle");
         setFormMessage("");
@@ -590,6 +608,7 @@ export function AuthPage() {
     try {
       const res = await authService.updatePassword(newPassword);
       if (res.success) {
+        authService.setRecoveryMode(false);
         setResetStatus("success");
         setFormMessage("Your password has been updated successfully.");
       } else {
@@ -616,17 +635,32 @@ export function AuthPage() {
     }
   };
 
-  const handleResetSuccessContinue = async () => {
+  const handleSkipReset = async () => {
+    authService.setRecoveryMode(false);
     try {
-      await authService.signOut();
+      const userOrgs = await organizationService.getUserOrganizations();
+      if (userOrgs.length > 0) {
+        navigate("/dashboard", { replace: true });
+      } else {
+        navigate("/onboarding", { replace: true });
+      }
     } catch {
-      // Ignore sign out error
+      navigate("/dashboard", { replace: true });
     }
-    setNewPassword("");
-    setConfirmPassword("");
-    setPassword("");
-    setResetStatus("idle");
-    switchMode("signin");
+  };
+
+  const handleResetSuccessContinue = async () => {
+    authService.setRecoveryMode(false);
+    try {
+      const userOrgs = await organizationService.getUserOrganizations();
+      if (userOrgs.length > 0) {
+        navigate("/dashboard", { replace: true });
+      } else {
+        navigate("/onboarding", { replace: true });
+      }
+    } catch {
+      navigate("/dashboard", { replace: true });
+    }
   };
 
   // ── Standard Sign In / Sign Up Submission ─────────────────────────────────
@@ -1235,7 +1269,7 @@ export function AuthPage() {
                       gap: "8px",
                     }}
                   >
-                    <span>Continue to sign in</span>
+                    <span>Enter engineering workstation</span>
                     <span>→</span>
                   </button>
                 </div>
@@ -1333,13 +1367,33 @@ export function AuthPage() {
                   </div>
 
                   <button className="auth-submit" type="submit" disabled={!canSubmit}>
-                    {resetStatus === "submitting" ? "Updating password…" : "Update password"}
+                    {resetStatus === "submitting" ? "Updating password…" : "Update password & enter workstation"}
                   </button>
                 </form>
 
-                <div className="auth-secondary-actions">
+                <div className="auth-secondary-actions" style={{ display: "flex", flexDirection: "column", gap: "10px", alignItems: "center" }}>
+                  <button
+                    type="button"
+                    className="auth-link-btn"
+                    onClick={handleSkipReset}
+                    style={{
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "var(--app-accent, #6366f1)",
+                      cursor: "pointer",
+                      background: "none",
+                      border: "none",
+                      padding: "4px 8px",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                    }}
+                  >
+                    <span>Skip for now &amp; Continue to workstation</span>
+                    <span>→</span>
+                  </button>
                   <button type="button" onClick={() => switchMode("signin")}>
-                    ← Back to sign in
+                    ← Return to sign in
                   </button>
                 </div>
               </>

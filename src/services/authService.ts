@@ -38,6 +38,80 @@ export interface UpdatePasswordParams {
 }
 
 class AuthService {
+  private _isRecoveryMode: boolean = false;
+  private _recoveryListeners: Set<(isRecovery: boolean) => void> = new Set();
+
+  constructor() {
+    if (typeof window !== "undefined") {
+      try {
+        const stored = window.sessionStorage.getItem("vectoris.auth.recovery_mode");
+        if (stored === "true") {
+          this._isRecoveryMode = true;
+        }
+      } catch {
+        // Ignore storage errors
+      }
+    }
+  }
+
+  /**
+   * Checks whether the current active authentication session is in Password Recovery mode.
+   */
+  public isRecoveryMode(): boolean {
+    if (this._isRecoveryMode) return true;
+    if (typeof window !== "undefined") {
+      try {
+        const stored = window.sessionStorage.getItem("vectoris.auth.recovery_mode");
+        if (stored === "true") return true;
+        const params = new URLSearchParams(window.location.search);
+        const hash = window.location.hash;
+        return (
+          params.get("mode") === "reset" ||
+          params.get("type") === "recovery" ||
+          hash.includes("type=recovery")
+        );
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Sets or clears the Password Recovery mode flag.
+   */
+  public setRecoveryMode(active: boolean): void {
+    this._isRecoveryMode = active;
+    if (typeof window !== "undefined") {
+      try {
+        if (active) {
+          window.sessionStorage.setItem("vectoris.auth.recovery_mode", "true");
+        } else {
+          window.sessionStorage.removeItem("vectoris.auth.recovery_mode");
+        }
+      } catch {
+        // Ignore storage errors
+      }
+    }
+    this._recoveryListeners.forEach((cb) => {
+      try {
+        cb(active);
+      } catch {
+        // Ignore listener errors
+      }
+    });
+  }
+
+  /**
+   * Subscribes to recovery mode state transitions.
+   */
+  public onRecoveryStateChange(callback: (active: boolean) => void): () => void {
+    this._recoveryListeners.add(callback);
+    return () => {
+      this._recoveryListeners.delete(callback);
+    };
+  }
+
   /**
    * Checks whether the application is running inside a Tauri desktop shell.
    */
@@ -281,6 +355,8 @@ class AuthService {
         };
       }
 
+      this.setRecoveryMode(false);
+
       return {
         success: true,
         user: data.user,
@@ -298,6 +374,7 @@ class AuthService {
    * Terminates the current active session.
    */
   public async signOut(): Promise<{ success: boolean; error?: string }> {
+    this.setRecoveryMode(false);
     if (!isSupabaseConfigured()) {
       return { success: true };
     }
@@ -461,7 +538,14 @@ class AuthService {
       };
     }
 
-    const isRecovery = type === "recovery";
+    const isRecovery =
+      type === "recovery" ||
+      rawUrlOrFragment.includes("type=recovery") ||
+      rawUrlOrFragment.includes("mode=reset");
+
+    if (isRecovery) {
+      this.setRecoveryMode(true);
+    }
 
     try {
       if (accessToken && refreshToken) {
@@ -473,7 +557,7 @@ class AuthService {
         // Immediately sanitize browser URL if present
         if (typeof window !== "undefined" && window.history && (window.location.hash || window.location.search)) {
           try {
-            const cleanUrl = window.location.pathname;
+            const cleanUrl = isRecovery ? "/auth?mode=reset" : window.location.pathname;
             window.history.replaceState(null, "", cleanUrl);
           } catch {
             // Ignore history errors
@@ -500,7 +584,8 @@ class AuthService {
         // Sanitize browser URL
         if (typeof window !== "undefined" && window.history && window.location.search) {
           try {
-            window.history.replaceState(null, "", window.location.pathname);
+            const cleanUrl = isRecovery ? "/auth?mode=reset" : window.location.pathname;
+            window.history.replaceState(null, "", cleanUrl);
           } catch {
             // Ignore history errors
           }
@@ -544,8 +629,12 @@ class AuthService {
         urlStr.includes("access_token") ||
         urlStr.includes("code=") ||
         urlStr.includes("error=") ||
-        urlStr.includes("type=recovery")
+        urlStr.includes("type=recovery") ||
+        urlStr.includes("mode=reset")
       ) {
+        if (urlStr.includes("type=recovery") || urlStr.includes("mode=reset")) {
+          this.setRecoveryMode(true);
+        }
         const res = await this.handleAuthCallback(urlStr);
         if (res.success && res.session && res.user) {
           onAuthSuccess?.(res.session, res.user, res.isRecovery);

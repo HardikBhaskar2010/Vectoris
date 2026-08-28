@@ -1,6 +1,6 @@
 [package]
 name = "vectoris"
-version = "0.2.3"
+version = "0.2.4"
 description = "Vectoris — AI-Native Project Management & Project Intelligence Workspace"
 authors = ["you"]
 license = ""
@@ -27,3 +27,4 @@ tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-deep-link = "2"
+tauri-plugin-single-instance = "2"

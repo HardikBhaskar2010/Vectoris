@@ -57,6 +57,12 @@ function AppContent() {
 
     const restoreSession = async () => {
       try {
+        if (authService.isRecoveryMode()) {
+          // Stay on or direct to auth page in recovery/reset mode
+          navigate("/auth?mode=reset", { replace: true });
+          return;
+        }
+
         const params = new URLSearchParams(window.location.search);
         const hash = window.location.hash;
         const isPasswordRecoveryFlow =
@@ -66,12 +72,18 @@ function AppContent() {
           hash.includes("type=recovery");
 
         if (isPasswordRecoveryFlow) {
-          // Stay on auth page in recovery/reset mode
+          authService.setRecoveryMode(true);
+          navigate("/auth?mode=reset", { replace: true });
           return;
         }
 
         const session = await authService.getSession();
         if (!isMounted) return;
+
+        if (authService.isRecoveryMode()) {
+          navigate("/auth?mode=reset", { replace: true });
+          return;
+        }
 
         const isConfirmedUser = session?.user && authService.isEmailConfirmed(session.user);
 
@@ -108,16 +120,47 @@ function AppContent() {
 
     restoreSession();
 
+    // Listen for recovery state transitions across the application
+    const unbindRecovery = authService.onRecoveryStateChange((isRecovery) => {
+      if (!isMounted) return;
+      if (isRecovery) {
+        navigate("/auth?mode=reset", { replace: true });
+      }
+    });
+
+    // Global desktop deep link listener
+    const cleanupDesktopListener = authService.initializeDesktopAuthListener(
+      async (_session, _user, isRecovery) => {
+        if (!isMounted) return;
+        if (isRecovery || authService.isRecoveryMode()) {
+          navigate("/auth?mode=reset", { replace: true });
+        }
+      },
+      (_errMsg, isExpired) => {
+        if (!isMounted) return;
+        if (isExpired) {
+          navigate("/auth?mode=reset", { replace: true });
+        }
+      }
+    );
+
     // Listen for auth events across the app lifecycle
     const unsubscribe = authService.onAuthStateChange(async (event, session) => {
       if (!isMounted) return;
 
-      if (event === "PASSWORD_RECOVERY") {
+      if (event === "PASSWORD_RECOVERY" || authService.isRecoveryMode()) {
+        authService.setRecoveryMode(true);
         navigate("/auth?mode=reset", { replace: true });
         return;
       }
 
       if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
+        if (authService.isRecoveryMode()) {
+          // Do not forward to dashboard while user is in password recovery mode
+          navigate("/auth?mode=reset", { replace: true });
+          return;
+        }
+
         const params = new URLSearchParams(window.location.search);
         const hash = window.location.hash;
         const isRecoveryFlow =
@@ -126,7 +169,8 @@ function AppContent() {
           hash.includes("type=recovery");
 
         if (isRecoveryFlow) {
-          // Do not forward to dashboard while user is resetting their password
+          authService.setRecoveryMode(true);
+          navigate("/auth?mode=reset", { replace: true });
           return;
         }
 
@@ -148,6 +192,8 @@ function AppContent() {
 
     return () => {
       isMounted = false;
+      unbindRecovery();
+      cleanupDesktopListener();
       unsubscribe();
     };
   }, [navigate, currentPath]);

@@ -142,12 +142,93 @@ export default function SettingsPage() {
   const [profileUpdateStatus, setProfileUpdateStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [profileError, setProfileError] = useState<string | null>(null);
 
+  // Password Management State
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordUpdateStatus, setPasswordUpdateStatus] = useState<"idle" | "updating" | "success" | "error">("idle");
+  const [passwordFeedback, setPasswordFeedback] = useState<string | null>(null);
+  const [passwordErrors, setPasswordErrors] = useState<{ newPassword?: string; confirmPassword?: string }>({});
+
+  // Password Reset Email Dispatch State
+  const [resetEmailStatus, setResetEmailStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [resetEmailCooldown, setResetEmailCooldown] = useState(0);
+  const [resetEmailFeedback, setResetEmailFeedback] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (resetEmailCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResetEmailCooldown((c) => c - 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resetEmailCooldown]);
+
   // Sync editFullName when user loads
   useEffect(() => {
     if (user?.user_metadata?.full_name) {
       setEditFullName(user.user_metadata.full_name);
     }
   }, [user]);
+
+  const handleUpdatePassword = async () => {
+    const errors: { newPassword?: string; confirmPassword?: string } = {};
+    if (!newPassword || newPassword.length < 8) {
+      errors.newPassword = "Password must be at least 8 characters.";
+    }
+    if (!confirmPassword) {
+      errors.confirmPassword = "Confirm your new password.";
+    } else if (newPassword !== confirmPassword) {
+      errors.confirmPassword = "Passwords do not match.";
+    }
+
+    setPasswordErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      return;
+    }
+
+    setPasswordUpdateStatus("updating");
+    setPasswordFeedback(null);
+
+    const res = await authService.updatePassword(newPassword);
+    if (res.success) {
+      setPasswordUpdateStatus("success");
+      setPasswordFeedback("Your workstation master password has been successfully updated.");
+      setNewPassword("");
+      setConfirmPassword("");
+      setPasswordErrors({});
+      window.setTimeout(() => {
+        setPasswordUpdateStatus("idle");
+        setPasswordFeedback(null);
+      }, 4000);
+    } else {
+      setPasswordUpdateStatus("error");
+      setPasswordFeedback(res.error || "Failed to update password. Please verify requirements and try again.");
+    }
+  };
+
+  const handleSendResetEmail = async () => {
+    if (!user?.email || resetEmailCooldown > 0 || resetEmailStatus === "sending") return;
+
+    setResetEmailStatus("sending");
+    setResetEmailFeedback(null);
+
+    try {
+      const res = await authService.resetPasswordForEmail(user.email);
+      if (res.success) {
+        setResetEmailStatus("sent");
+        setResetEmailCooldown(60);
+        setResetEmailFeedback(`Password recovery email dispatched to ${user.email}. Check your inbox to reset via deep link.`);
+        window.setTimeout(() => setResetEmailFeedback(null), 8000);
+      } else {
+        setResetEmailStatus("error");
+        setResetEmailFeedback(res.error || "Failed to dispatch recovery link.");
+      }
+    } catch {
+      setResetEmailStatus("error");
+      setResetEmailFeedback("Network error while requesting password reset email.");
+    }
+  };
 
   // Organization & Team Management State
   const [userOrgs, setUserOrgs] = useState<OrganizationWithRole[]>([]);
@@ -1334,6 +1415,229 @@ export default function SettingsPage() {
                     </button>
                   </div>
 
+                  {/* Workstation Password & Credentials Card */}
+                  <div
+                    style={{
+                      padding: "24px",
+                      borderRadius: "10px",
+                      background: "var(--app-surface-2)",
+                      border: "1px solid var(--app-border)",
+                      marginBottom: "32px",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
+                      <div style={{ color: "var(--accent-primary, #3b82f6)", display: "flex", alignItems: "center" }}>
+                        <IconKey />
+                      </div>
+                      <h4 style={{ fontSize: "0.95rem", fontWeight: 700, margin: 0 }}>
+                        Workstation Password &amp; Credentials
+                      </h4>
+                    </div>
+                    <p style={{ fontSize: "12px", color: "var(--app-text-secondary)", margin: "0 0 20px 0", lineHeight: "1.5" }}>
+                      Update your account master password directly on this workstation, or dispatch a deep-link password recovery email.
+                    </p>
+
+                    {/* Feedback Callouts */}
+                    {passwordFeedback && (
+                      <div
+                        className="settings-callout"
+                        style={{
+                          margin: "0 0 20px 0",
+                          borderColor: passwordUpdateStatus === "error" ? "var(--color-danger, #ef4444)" : "var(--color-success, #10b981)",
+                          background: passwordUpdateStatus === "error" ? "rgba(239, 68, 68, 0.08)" : "rgba(16, 185, 129, 0.08)",
+                        }}
+                      >
+                        <span
+                          className="settings-callout__icon"
+                          style={{ color: passwordUpdateStatus === "error" ? "var(--color-danger, #ef4444)" : "var(--color-success, #10b981)" }}
+                        >
+                          {passwordUpdateStatus === "error" ? "✕" : <IconCheck />}
+                        </span>
+                        <div>
+                          <strong className="settings-callout__title">
+                            {passwordUpdateStatus === "error" ? "Password Update Error" : "Password Updated"}
+                          </strong>
+                          <p className="settings-callout__text">{passwordFeedback}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {resetEmailFeedback && (
+                      <div
+                        className="settings-callout"
+                        style={{
+                          margin: "0 0 20px 0",
+                          borderColor: resetEmailStatus === "error" ? "var(--color-danger, #ef4444)" : "var(--accent-primary, #3b82f6)",
+                          background: resetEmailStatus === "error" ? "rgba(239, 68, 68, 0.08)" : "rgba(59, 130, 246, 0.08)",
+                        }}
+                      >
+                        <span
+                          className="settings-callout__icon"
+                          style={{ color: resetEmailStatus === "error" ? "var(--color-danger, #ef4444)" : "var(--accent-primary, #3b82f6)" }}
+                        >
+                          {resetEmailStatus === "error" ? "✕" : <IconCheck />}
+                        </span>
+                        <div>
+                          <strong className="settings-callout__title">
+                            {resetEmailStatus === "error" ? "Reset Link Error" : "Recovery Link Dispatched"}
+                          </strong>
+                          <p className="settings-callout__text">{resetEmailFeedback}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        handleUpdatePassword();
+                      }}
+                    >
+                      <div className="settings-account-grid" style={{ marginBottom: "16px" }}>
+                        <label className="settings-field">
+                          <span>New Password</span>
+                          <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                            <input
+                              type={showNewPassword ? "text" : "password"}
+                              value={newPassword}
+                              onChange={(e) => {
+                                setNewPassword(e.target.value);
+                                if (passwordErrors.newPassword) {
+                                  setPasswordErrors((prev) => ({ ...prev, newPassword: undefined }));
+                                }
+                              }}
+                              placeholder="Min. 8 characters"
+                              style={{ width: "100%", paddingRight: "40px" }}
+                              autoComplete="new-password"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowNewPassword((s) => !s)}
+                              style={{
+                                position: "absolute",
+                                right: "10px",
+                                background: "none",
+                                border: "none",
+                                color: "var(--app-text-muted)",
+                                cursor: "pointer",
+                                padding: "4px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                              aria-label={showNewPassword ? "Hide password" : "Show password"}
+                            >
+                              {showNewPassword ? <IconEyeOff /> : <IconEye />}
+                            </button>
+                          </div>
+                          {passwordErrors.newPassword && (
+                            <span style={{ fontSize: "11px", color: "var(--color-danger, #ef4444)", marginTop: "4px" }}>
+                              {passwordErrors.newPassword}
+                            </span>
+                          )}
+                        </label>
+
+                        <label className="settings-field">
+                          <span>Confirm New Password</span>
+                          <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                            <input
+                              type={showConfirmPassword ? "text" : "password"}
+                              value={confirmPassword}
+                              onChange={(e) => {
+                                setConfirmPassword(e.target.value);
+                                if (passwordErrors.confirmPassword) {
+                                  setPasswordErrors((prev) => ({ ...prev, confirmPassword: undefined }));
+                                }
+                              }}
+                              placeholder="Re-enter password"
+                              style={{ width: "100%", paddingRight: "40px" }}
+                              autoComplete="new-password"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowConfirmPassword((s) => !s)}
+                              style={{
+                                position: "absolute",
+                                right: "10px",
+                                background: "none",
+                                border: "none",
+                                color: "var(--app-text-muted)",
+                                cursor: "pointer",
+                                padding: "4px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                              aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                            >
+                              {showConfirmPassword ? <IconEyeOff /> : <IconEye />}
+                            </button>
+                          </div>
+                          {passwordErrors.confirmPassword && (
+                            <span style={{ fontSize: "11px", color: "var(--color-danger, #ef4444)", marginTop: "4px" }}>
+                              {passwordErrors.confirmPassword}
+                            </span>
+                          )}
+                        </label>
+                      </div>
+
+                      {/* Real-time Password Strength Meter */}
+                      {newPassword.length > 0 && (
+                        <div style={{ marginBottom: "20px" }}>
+                          {(() => {
+                            const strength = getPasswordStrength(newPassword);
+                            return (
+                              <>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                                  <span style={{ fontSize: "11px", color: "var(--app-text-muted)" }}>Password Strength</span>
+                                  <span style={{ fontSize: "11px", fontWeight: 600, color: strength.color }}>
+                                    {strength.label}
+                                  </span>
+                                </div>
+                                <div style={{ width: "100%", height: "4px", background: "var(--app-border)", borderRadius: "2px", overflow: "hidden" }}>
+                                  <div
+                                    style={{
+                                      height: "100%",
+                                      width: `${strength.percent}%`,
+                                      background: strength.color,
+                                      transition: "width 0.2s ease, background-color 0.2s ease",
+                                    }}
+                                  />
+                                </div>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      )}
+
+                      {/* Action Buttons */}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+                        <button
+                          type="button"
+                          className="btn btn--ghost"
+                          onClick={handleSendResetEmail}
+                          disabled={resetEmailCooldown > 0 || resetEmailStatus === "sending" || !user?.email}
+                          style={{ fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "6px" }}
+                        >
+                          <span>
+                            {resetEmailCooldown > 0
+                              ? `Resend Reset Link (${resetEmailCooldown}s)`
+                              : resetEmailStatus === "sending"
+                              ? "Dispatching Recovery Link…"
+                              : "Dispatch Password Reset Link"}
+                          </span>
+                        </button>
+
+                        <button
+                          type="submit"
+                          className="btn btn--primary"
+                          disabled={passwordUpdateStatus === "updating" || !newPassword || !confirmPassword}
+                        >
+                          {passwordUpdateStatus === "updating" ? "Updating Password…" : "Update Password"}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+
                   {/* Quick-Switch Development Personas Bar */}
                   <div
                     style={{
@@ -1541,6 +1845,21 @@ export default function SettingsPage() {
                   >
                     <span className="settings-chip settings-chip--available">Local-Only</span>
                   </SettingsRow>
+
+                  <SettingsRow
+                    labelId="password-auth-label"
+                    title="Workstation Authentication & Credentials"
+                    description="Configure master password, session credentials, and recovery link dispatch via Supabase Auth."
+                  >
+                    <button
+                      type="button"
+                      className="btn btn--ghost"
+                      style={{ fontSize: "12px" }}
+                      onClick={() => setActiveTab("account")}
+                    >
+                      Manage Password →
+                    </button>
+                  </SettingsRow>
                 </div>
               </section>
             )}
@@ -1558,7 +1877,7 @@ export default function SettingsPage() {
                 <div className="settings-grid-3col">
                   <div className="settings-stat-card">
                     <span className="settings-stat-card__label">Application Version</span>
-                    <strong className="settings-stat-card__val">v0.2.3</strong>
+                    <strong className="settings-stat-card__val">v0.2.4</strong>
                     <span className="settings-stat-card__sub">Engineering Workstation Release</span>
                   </div>
                   <div className="settings-stat-card">
@@ -1889,4 +2208,48 @@ function IconCheck(props: { "aria-hidden"?: boolean | "true" | "false" }) {
       <path d="m4 9.4 3.1 3.1L14 5.6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
+}
+
+function IconKey(props: { "aria-hidden"?: boolean | "true" | "false" }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" {...props}>
+      <circle cx="6" cy="9" r="3.5" stroke="currentColor" strokeWidth="1.45" />
+      <path d="M9.5 9H15M12.5 9v2.5M14.5 9v1.5" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconEye(props: { "aria-hidden"?: boolean | "true" | "false" }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...props}>
+      <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" />
+    </svg>
+  );
+}
+
+function IconEyeOff(props: { "aria-hidden"?: boolean | "true" | "false" }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" {...props}>
+      <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61M2 2l20 20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function getPasswordStrength(password: string): { score: number; label: string; color: string; percent: number } {
+  if (!password) return { score: 0, label: "None", color: "var(--app-border)", percent: 0 };
+  let score = 0;
+  if (password.length >= 8) score += 1;
+  if (password.length >= 12) score += 1;
+  if (/[A-Z]/.test(password) && /[a-z]/.test(password)) score += 1;
+  if (/[0-9]/.test(password)) score += 1;
+  if (/[^A-Za-z0-9]/.test(password)) score += 1;
+
+  if (score <= 2) {
+    return { score, label: "Weak", color: "#ef4444", percent: 33 };
+  } else if (score <= 3) {
+    return { score, label: "Fair", color: "#f59e0b", percent: 66 };
+  } else {
+    return { score, label: "Strong & Compliant", color: "#10b981", percent: 100 };
+  }
 }

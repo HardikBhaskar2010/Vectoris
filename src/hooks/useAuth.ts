@@ -11,16 +11,19 @@ export interface UseAuthReturn {
   session: Session | null;
   loading: boolean;
   isAuthenticated: boolean;
+  isRecoveryMode: boolean;
   signIn: (params: SignInParams) => Promise<AuthResult>;
   signUp: (params: SignUpParams) => Promise<AuthResult>;
   signOut: () => Promise<void>;
   resetPasswordForEmail: (email: string) => Promise<{ success: boolean; error?: string }>;
   updatePassword: (password: string) => Promise<{ success: boolean; user?: User | null; error?: string }>;
+  skipPasswordReset: () => void;
 }
 
 export function useAuth(): UseAuthReturn {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
+  const [isRecoveryMode, setIsRecoveryMode] = useState(() => authService.isRecoveryMode());
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -33,15 +36,22 @@ export function useAuth(): UseAuthReturn {
       setLoading(false);
     });
 
+    const unsubscribeRecovery = authService.onRecoveryStateChange((recoveryState) => {
+      if (!isMounted) return;
+      setIsRecoveryMode(recoveryState);
+    });
+
     const unsubscribe = authService.onAuthStateChange((_event, newSession) => {
       if (!isMounted) return;
       setSession(newSession);
       setUser(newSession?.user ?? null);
+      setIsRecoveryMode(authService.isRecoveryMode());
       setLoading(false);
     });
 
     return () => {
       isMounted = false;
+      unsubscribeRecovery();
       unsubscribe();
     };
   }, []);
@@ -73,6 +83,7 @@ export function useAuth(): UseAuthReturn {
     await authService.signOut();
     setSession(null);
     setUser(null);
+    setIsRecoveryMode(false);
     setLoading(false);
   };
 
@@ -85,9 +96,15 @@ export function useAuth(): UseAuthReturn {
     const result = await authService.updatePassword(password);
     if (result.success && result.user) {
       setUser(result.user);
+      setIsRecoveryMode(false);
     }
     setLoading(false);
     return result;
+  };
+
+  const skipPasswordReset = (): void => {
+    authService.setRecoveryMode(false);
+    setIsRecoveryMode(false);
   };
 
   return {
@@ -95,10 +112,12 @@ export function useAuth(): UseAuthReturn {
     session,
     loading,
     isAuthenticated: Boolean(user),
+    isRecoveryMode,
     signIn,
     signUp,
     signOut,
     resetPasswordForEmail,
     updatePassword,
+    skipPasswordReset,
   };
 }
