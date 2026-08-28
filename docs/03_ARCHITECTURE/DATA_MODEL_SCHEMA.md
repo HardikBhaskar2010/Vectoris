@@ -336,13 +336,27 @@ as $$
   end
 $$;
 
+-- [AUDIT_04 CORRECTION] Originally specified as `security invoker` here,
+-- with a rationale that invoker was strictly least-privilege. That was
+-- wrong: org_members_select's policy is `using (my_org_role(organization_id)
+-- is not null)`, and my_org_role() itself queries org_members. Under
+-- SECURITY INVOKER, that inner query is subject to org_members' own RLS —
+-- i.e. evaluating the policy requires evaluating the policy, which Postgres
+-- correctly rejects as infinite recursion ("infinite recursion detected in
+-- policy for relation org_members"). SECURITY DEFINER is the standard,
+-- documented fix for a helper function used inside the RLS policy of the
+-- same table it queries. It remains safe here for the same reason invoker
+-- would have been safe if it worked at all: neither function accepts a
+-- caller-supplied identity — both derive the acting user from auth.uid()
+-- internally, which was always the actual hardening goal.
+--
 -- Public-facing: NO p_user_id parameter. Always evaluates for the calling
 -- session's own auth.uid(). This is the only version RLS policies call.
 create or replace function effective_project_role(p_project_id uuid)
 returns org_role
 language sql
 stable
-security invoker
+security definer
 set search_path = public, pg_temp
 as $$
   select coalesce(
@@ -357,7 +371,7 @@ $$;
 create or replace function my_org_role(p_org_id uuid) returns org_role
 language sql
 stable
-security invoker
+security definer
 set search_path = public, pg_temp
 as $$
   select role from public.org_members where organization_id = p_org_id and user_id = auth.uid();
@@ -395,7 +409,7 @@ grant execute on function my_org_role(uuid) to authenticated;
 grant execute on function role_rank(org_role) to authenticated;
 ```
 
-`security invoker` (the default, stated explicitly here) is intentional, not an oversight: `effective_project_role()`/`my_org_role()` only read `org_members`/`project_members`, and every user needs to be able to read their own membership rows anyway (granted below in §4.1/§4.2) for the function to work at all under RLS. Making it `SECURITY DEFINER` would be a *wider* privilege grant than necessary — the review asked for "SECURITY DEFINER only if required," and here it genuinely isn't.
+`security definer` is required here, not optional — see the `[AUDIT_04 CORRECTION]` note above the function definitions. The original review's "SECURITY DEFINER only if required" guidance is satisfied precisely because it *is* required for this self-referential-policy pattern, not merely convenient. Safety is preserved by the same property that made the (unworkable) invoker version safe in principle: neither function accepts a caller-supplied identity, so `SECURITY DEFINER`'s RLS-bypassing read access can never be pointed at anyone but the calling session's own `auth.uid()`.
 
 ### 4.1 organizations
 ```sql

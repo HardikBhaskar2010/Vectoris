@@ -8,6 +8,8 @@ dist-ssr/
 src-tauri/target/
 src-tauri/gen/schemas/
 src-tauri/target_check/
+supabase/.temp/
+
 
 # Standalone Installer Binaries & Bundles (distribute via GitHub Releases)
 *.exe
@@ -47,3 +49,12 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# Proprietary Client Engineering Documents & Raw Spreadsheets
+Research Folder/*.xlsx
+Research Folder/**/*.xlsx
+Research Folder/**/*.pdf
+Research Folder/**/*.docx
+*.xlsx
+*.docx
+
