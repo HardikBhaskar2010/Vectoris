@@ -22,7 +22,7 @@ import { AppShell } from "../components/AppShell";
 import { KPICard } from "../components/KPICard";
 import { BlueprintViewport } from "../components/BlueprintViewport";
 import { CreateProjectModal } from "../components/CreateProjectModal";
-import { useProjects, useAllDocuments } from "../services/dataService";
+import { useProjects, useAllDocuments, useLineItems } from "../services/dataService";
 import { tourService } from "../services/tourService";
 import { useAuth } from "../hooks/useAuth";
 
@@ -70,6 +70,10 @@ export function DashboardPage() {
   const projects = useProjects();
   const documents = useAllDocuments();
   const [pageState, setPageState] = useState<PageState>("data");
+
+  const primaryProjectId = projects[0]?.id || "33333333-3333-3333-3333-333333333333";
+  const primaryProjectName = projects[0]?.name || "ABC Data Center";
+  const primaryLineItems = useLineItems(primaryProjectId);
 
   const operatorName =
     user?.user_metadata?.full_name ||
@@ -274,27 +278,35 @@ export function DashboardPage() {
                 </section>
 
                 {/* Takeoff Items Stream */}
-                <section className="takeoff-stream" data-tour="dashboard-takeoff" aria-label="Takeoff items for ABC Data Center">
+                <section className="takeoff-stream" data-tour="dashboard-takeoff" aria-label={`Takeoff items for ${primaryProjectName}`}>
                   <div className="takeoff-stream__header">
                     <div className="takeoff-stream__title-row">
                       <IconStraighten aria-hidden="true" />
-                      <span className="takeoff-stream__title">Takeoff Items — ABC Data Center</span>
+                      <span className="takeoff-stream__title">Takeoff Items — {primaryProjectName}</span>
                     </div>
-                    <Link to="/project/p1/takeoff" className="takeoff-stream__link">Full Takeoff →</Link>
+                    <Link to={`/project/${primaryProjectId}/takeoff`} className="takeoff-stream__link">Full Takeoff →</Link>
                   </div>
                   <ol className="takeoff-stream__list" aria-label="Recent takeoff items">
-                    {DEMO_TAKEOFF_ITEMS.map((item) => (
-                      <li key={item.id} className="takeoff-stream__item">
-                        <span className={`takeoff-stream__dot takeoff-stream__dot--${item.dot}`} aria-hidden="true" />
-                        <span className="takeoff-stream__label">{item.label}</span>
-                        <span className="takeoff-stream__qty">{item.qty}</span>
-                        <TakeoffStatusBadge status={item.status} />
-                      </li>
-                    ))}
+                    {(primaryLineItems.length > 0 ? primaryLineItems.slice(0, 4) : DEMO_TAKEOFF_ITEMS).map((item, idx) => {
+                      const isReal = "item_code" in item;
+                      const label = isReal ? `${item.item_code} ${item.name}` : item.label;
+                      const qty = isReal ? `${item.quantity} ${item.unit}` : item.qty;
+                      const status = isReal ? (item.status === "approved" ? "verified" : item.status === "proposed" ? "review" : "rejected") : item.status;
+                      const dot = isReal ? (item.status === "approved" ? "cyan" : item.status === "proposed" ? "amber" : "red") : item.dot;
+
+                      return (
+                        <li key={item.id || idx} className="takeoff-stream__item">
+                          <span className={`takeoff-stream__dot takeoff-stream__dot--${dot}`} aria-hidden="true" />
+                          <span className="takeoff-stream__label" title={label}>{label}</span>
+                          <span className="takeoff-stream__qty font-mono">{qty}</span>
+                          <TakeoffStatusBadge status={status as "verified" | "review" | "flagged"} />
+                        </li>
+                      );
+                    })}
                   </ol>
                   <div className="takeoff-stream__footer">
-                    <span className="takeoff-stream__total">Total Takeoff: 380 Items</span>
-                    <Link to="/project/p1/workspace" className="btn btn--primary btn--sm">
+                    <span className="takeoff-stream__total font-mono">Total Takeoff: {primaryLineItems.length || 21} Items</span>
+                    <Link to={`/project/${primaryProjectId}/workspace`} className="btn btn--primary btn--sm">
                       Launch Drawing Takeoff
                       <IconArrow aria-hidden="true" />
                     </Link>

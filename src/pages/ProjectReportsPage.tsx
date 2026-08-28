@@ -36,7 +36,7 @@ interface ExportHistoryItem {
   size_kb: number;
 }
 
-import { useProject } from "../services/dataService";
+import { useProject, useLineItems, useDocuments } from "../services/dataService";
 import { generateId } from "../services/idService";
 
 const INITIAL_HISTORY: ExportHistoryItem[] = [
@@ -44,7 +44,7 @@ const INITIAL_HISTORY: ExportHistoryItem[] = [
     id: "exp-01",
     format: "XLSX",
     filename: "ABC_Data_Center_BOQ_2026-08-24.xlsx",
-    item_count: 382,
+    item_count: 21,
     generated_by: "Hardik Bhaskar",
     generated_at: "2 hours ago",
     size_kb: 148,
@@ -53,7 +53,7 @@ const INITIAL_HISTORY: ExportHistoryItem[] = [
     id: "exp-02",
     format: "PDF",
     filename: "ABC_Data_Center_Takeoff_Summary_Rev1.pdf",
-    item_count: 382,
+    item_count: 21,
     generated_by: "Hardik Bhaskar",
     generated_at: "3 hours ago",
     size_kb: 840,
@@ -62,7 +62,7 @@ const INITIAL_HISTORY: ExportHistoryItem[] = [
     id: "exp-03",
     format: "CSV",
     filename: "ABC_Data_Center_Raw_Export.csv",
-    item_count: 380,
+    item_count: 21,
     generated_by: "Rina Mehta",
     generated_at: "Yesterday",
     size_kb: 42,
@@ -80,7 +80,7 @@ interface FormatDetail {
 const FORMAT_DETAILS: Record<ExportFormat, FormatDetail> = {
   XLSX: {
     name: "Excel Workbook (XLSX)",
-    desc: "Formatted multi-tab spreadsheet with categorized BOQ line items, specifications, and project metadata.",
+    desc: "Formatted spreadsheet with categorized BOQ line items, specifications, and project metadata.",
     ext: ".xlsx",
     icon: IconFileXlsx,
     accentColor: "#16a34a",
@@ -114,6 +114,9 @@ export default function ProjectReportsPage() {
   const { params } = useRouter();
   const projectId = params.id || "p1";
   const project = useProject(projectId);
+  const lineItems = useLineItems(projectId);
+  const documents = useDocuments(projectId);
+
   const [history, setHistory] = useState<ExportHistoryItem[]>(INITIAL_HISTORY);
   const [exportingFormat, setExportingFormat] = useState<ExportFormat | null>(null);
   const [successToast, setSuccessToast] = useState<string | null>(null);
@@ -130,23 +133,82 @@ export default function ProjectReportsPage() {
     typeProvenance: project?.typeProvenance || "ai_inferred",
   };
 
+  const approvedCount = lineItems.filter((i) => i.status === "approved").length;
+
   const handleGenerateExport = (format: ExportFormat) => {
     setExportingFormat(format);
     setTimeout(() => {
+      const dateStr = new Date().toISOString().split("T")[0];
+      const filename = `${projectName.replace(/\s+/g, "_")}_${format}_${dateStr}${FORMAT_DETAILS[format].ext}`;
+
+      // Build real export payload
+      let blob: Blob;
+      if (format === "CSV") {
+        const headers = ["Item Code", "Name", "Specification", "Category", "Quantity", "Unit", "Source Document", "Status", "Reviewed By"];
+        const rows = lineItems.map((li) => [
+          `"${li.item_code || ""}"`,
+          `"${(li.name || "").replace(/"/g, '""')}"`,
+          `"${(li.specification || "").replace(/"/g, '""')}"`,
+          `"${li.category || ""}"`,
+          li.quantity,
+          `"${li.unit || ""}"`,
+          `"${(li.source_document_name || "").replace(/"/g, '""')}"`,
+          `"${li.status}"`,
+          `"${li.reviewed_by || ""}"`,
+        ]);
+        const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+        blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      } else if (format === "JSON") {
+        const jsonContent = JSON.stringify(
+          {
+            project_id: projectId,
+            project_name: projectName,
+            exported_at: new Date().toISOString(),
+            total_items: lineItems.length,
+            approved_items: approvedCount,
+            line_items: lineItems,
+          },
+          null,
+          2
+        );
+        blob = new Blob([jsonContent], { type: "application/json" });
+      } else {
+        // Text/tab-delimited for XLSX/PDF print layout
+        const summaryText = [
+          `VECTORIS ENGINEERING REPORT — ${format}`,
+          `Project: ${projectName}`,
+          `Date: ${new Date().toLocaleDateString()}`,
+          `Verified Line Items: ${lineItems.length}`,
+          "=".repeat(60),
+          ...lineItems.map((li) => `[${li.item_code}] ${li.name} — ${li.quantity} ${li.unit} (${li.category}) | Status: ${li.status}`),
+        ].join("\n");
+        blob = new Blob([summaryText], { type: "text/plain;charset=utf-8;" });
+      }
+
+      // Trigger genuine browser download
+      const downloadUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(downloadUrl);
+
       const newItem: ExportHistoryItem = {
         id: generateId("exp"),
         format,
-        filename: `${projectName.replace(/\s+/g, "_")}_${format}_${new Date().toISOString().split("T")[0]}${FORMAT_DETAILS[format].ext}`,
-        item_count: 382,
-        generated_by: "Hardik Bhaskar",
+        filename,
+        item_count: lineItems.length,
+        generated_by: "Lead Estimator",
         generated_at: "Just now",
-        size_kb: format === "PDF" ? 860 : format === "XLSX" ? 152 : format === "JSON" ? 64 : 44,
+        size_kb: Math.max(1, Math.round(blob.size / 1024)),
       };
-      setHistory(prev => [newItem, ...prev]);
+      setHistory((prev) => [newItem, ...prev]);
       setExportingFormat(null);
-      setSuccessToast(`Generated ${newItem.filename}`);
+      setSuccessToast(`Downloaded ${newItem.filename}`);
       setTimeout(() => setSuccessToast(null), 4000);
-    }, 1200);
+    }, 800);
   };
 
   return (
@@ -160,7 +222,7 @@ export default function ProjectReportsPage() {
         {successToast && (
           <div className="pr-toast" role="status" aria-live="polite">
             <IconCheckCircle className="pr-toast__icon" />
-            <span>{successToast} ready for download</span>
+            <span>{successToast}</span>
           </div>
         )}
 
@@ -180,9 +242,9 @@ export default function ProjectReportsPage() {
           <div className="pr-summary-header">
             <div>
               <span className="pr-summary-badge">Verified Takeoff Status</span>
-              <h2 className="pr-summary-title">382 Line Items Ready for Export</h2>
+              <h2 className="pr-summary-title">{lineItems.length} Line Items Ready for Export</h2>
               <p className="pr-summary-desc">
-                Derived from 112 analyzed sheets across Server Rooms A, B, and C drawings. All items have been verified by engineering review.
+                Derived from {documents.length} analyzed documents across drawing sheets and schedules. {approvedCount} items have been verified by engineering review.
               </p>
             </div>
             <Link to={`/project/${projectId}/takeoff`} className="btn btn--secondary btn--sm">
@@ -192,20 +254,20 @@ export default function ProjectReportsPage() {
 
           <div className="pr-metrics-row">
             <div className="pr-metric">
-              <span className="pr-metric-label">Lighting &amp; Fixtures</span>
-              <span className="pr-metric-val pr-mono">170 EA</span>
+              <span className="pr-metric-label">Total Scope Items</span>
+              <span className="pr-metric-val pr-mono">{lineItems.length} Items</span>
             </div>
             <div className="pr-metric">
-              <span className="pr-metric-label">Cable Tray &amp; Basket</span>
-              <span className="pr-metric-val pr-mono">580 m</span>
+              <span className="pr-metric-label">Verified Approved</span>
+              <span className="pr-metric-val pr-mono">{approvedCount} Items</span>
             </div>
             <div className="pr-metric">
-              <span className="pr-metric-label">Power Distribution</span>
-              <span className="pr-metric-val pr-mono">10 Units</span>
+              <span className="pr-metric-label">Pending Review</span>
+              <span className="pr-metric-val pr-mono">{lineItems.length - approvedCount} Items</span>
             </div>
             <div className="pr-metric">
-              <span className="pr-metric-label">Conduit &amp; Fittings</span>
-              <span className="pr-metric-val pr-mono">115 m</span>
+              <span className="pr-metric-label">Drawings Analyzed</span>
+              <span className="pr-metric-val pr-mono">{documents.length} Docs</span>
             </div>
           </div>
         </div>
