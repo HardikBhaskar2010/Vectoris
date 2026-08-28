@@ -289,10 +289,26 @@ export class GroqCloudModelAdapter implements ModelAdapter {
 
 // Export default adapter (uses Groq with qwen/qwen3.8-27b if key is present, else local deterministic engine)
 export function resolveDefaultModelAdapter(): ModelAdapter {
-  const groqKey = import.meta.env.VITE_GROQ_API_KEY;
-  const modelId = import.meta.env.VITE_AI_MODEL || "qwen/qwen3.8-27b";
+  let groqKey: string | undefined;
+  let modelId: string | undefined;
+
+  try {
+    if (typeof import.meta !== "undefined" && import.meta.env) {
+      groqKey = import.meta.env.VITE_GROQ_API_KEY;
+      modelId = import.meta.env.VITE_AI_MODEL;
+    }
+  } catch {
+    // Ignore import.meta access errors
+  }
+
+  const nodeProcess = typeof globalThis !== "undefined" ? (globalThis as { process?: { env?: Record<string, string> } }).process : undefined;
+  if (!groqKey && nodeProcess?.env) {
+    groqKey = nodeProcess.env.VITE_GROQ_API_KEY;
+    modelId = modelId || nodeProcess.env.VITE_AI_MODEL;
+  }
+
   if (groqKey && groqKey.startsWith("gsk_")) {
-    return new GroqCloudModelAdapter(groqKey, modelId);
+    return new GroqCloudModelAdapter(groqKey, modelId || "qwen/qwen3.8-27b");
   }
   return new VectorisDeterministicEngineAdapter();
 }

@@ -51,6 +51,7 @@ import { isSupabaseConfigured } from "./supabaseClient";
 const STORAGE_KEY_PREFIX = "vectoris.store.v1.";
 
 function loadFromStorage<T>(key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY_PREFIX + key);
     if (raw) return JSON.parse(raw);
@@ -61,6 +62,7 @@ function loadFromStorage<T>(key: string, fallback: T): T {
 }
 
 function saveToStorage<T>(key: string, data: T): void {
+  if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(STORAGE_KEY_PREFIX + key, JSON.stringify(data));
   } catch (err) {
@@ -392,8 +394,15 @@ class DataService {
 
   // ── Documents ───────────────────────────────────────────────────────────────
 
+  private resolveProjectId(projectId: string): string {
+    if (projectId === "p1") return "33333333-3333-3333-3333-333333333333";
+    if (projectId === "p2") return "44444444-4444-4444-4444-444444444444";
+    return projectId;
+  }
+
   public getDocuments(projectId: string): ProjectDocument[] {
-    return this.documents.filter((d) => d.project_id === projectId);
+    const targetId = this.resolveProjectId(projectId);
+    return this.documents.filter((d) => d.project_id === projectId || d.project_id === targetId);
   }
 
   public getAllDocuments(): ProjectDocument[] {
@@ -520,8 +529,10 @@ class DataService {
   // ── Takeoff & Line Items ─────────────────────────────────────────────────────
 
   public getTakeoff(projectId: string): TakeoffRunSummary {
+    const targetId = this.resolveProjectId(projectId);
     return (
-      this.takeoffSummaries[projectId] || {
+      this.takeoffSummaries[projectId] ||
+      this.takeoffSummaries[targetId] || {
         id: `tr-${projectId}`,
         project_id: projectId,
         status: "pending",
@@ -544,7 +555,8 @@ class DataService {
   }
 
   public getLineItems(projectId: string): LineItem[] {
-    return this.lineItems.filter((li) => li.project_id === projectId);
+    const targetId = this.resolveProjectId(projectId);
+    return this.lineItems.filter((li) => li.project_id === projectId || li.project_id === targetId);
   }
 
   public getAllLineItems(): LineItem[] {
@@ -687,7 +699,8 @@ class DataService {
   }
 
   public getSheets(projectId: string): Sheet[] {
-    return this.sheets.filter((s) => s.project_id === projectId);
+    const targetId = this.resolveProjectId(projectId);
+    return this.sheets.filter((s) => s.project_id === projectId || s.project_id === targetId);
   }
 
   public getLayers(): LayerDef[] {

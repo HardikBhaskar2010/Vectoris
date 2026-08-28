@@ -474,16 +474,19 @@ class ToolRegistry {
           return { success: false, error_code: "not_found", message: "No project scope specified." };
         }
         const sheets = dataService.getSheets(pId);
-        const sheetNum = (args.sheetNumber as string).toLowerCase().trim();
-        const sheet = sheets.find(
-          (s) => s.sheet_id.toLowerCase() === sheetNum || s.name.toLowerCase().includes(sheetNum)
-        ) || sheets[0];
+        const rawSheet = (args.sheetNumber || args.sheet_number || args.sheet_id || args.sheet || "") as string;
+        const sheetNum = rawSheet.toLowerCase().trim();
+        const sheet = sheetNum
+          ? sheets.find(
+              (s) => s.sheet_id.toLowerCase() === sheetNum || s.name.toLowerCase().includes(sheetNum)
+            ) || sheets[0]
+          : sheets[0];
 
         if (!sheet) {
           return {
             success: false,
             error_code: "not_found",
-            message: `Sheet '${args.sheetNumber}' not found in project drawings.`,
+            message: `Sheet '${rawSheet || "default"}' not found in project drawings.`,
           };
         }
 
@@ -797,10 +800,11 @@ class ToolRegistry {
         required: ["kva", "voltage"],
       },
       execute: async (args) => {
-        const kva = Number(args.kva);
-        const v = Number(args.voltage);
-        const is3P = args.isThreePhase !== false;
-        const pf = Number(args.powerFactor) || 0.85;
+        const pf = Number(args.powerFactor || args.power_factor) || 0.85;
+        const rawKva = args.kva !== undefined ? Number(args.kva) : (Number(args.load_kw || args.kw || 0) / pf);
+        const kva = rawKva || 150;
+        const v = Number(args.voltage || args.voltage_v || args.voltageV) || 480;
+        const is3P = args.isThreePhase !== undefined ? Boolean(args.isThreePhase) : (args.phases !== undefined ? Number(args.phases) === 3 : true);
 
         if (v <= 0 || kva <= 0) {
           return {
@@ -821,21 +825,34 @@ class ToolRegistry {
 
         const continuousAmperes = fla * 1.25; // NEC 125% continuous load rule
         const kw = kva * pf;
+        const STANDARD_BREAKERS = [
+          15, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80, 90, 100,
+          110, 125, 150, 175, 200, 225, 250, 300, 350, 400, 450,
+          500, 600, 700, 800, 1000, 1200, 1600, 2000, 2500, 3000, 4000,
+        ];
+        const breakerAmps =
+          STANDARD_BREAKERS.find((b) => b >= continuousAmperes) ||
+          Math.ceil(continuousAmperes / 100) * 100;
 
         return {
           success: true,
           data: {
-            apparent_power_kva: kva,
+            apparent_power_kva: Math.round(kva * 10) / 10,
+            kva: Math.round(kva * 10) / 10,
             real_power_kw: Math.round(kw * 10) / 10,
+            load_kw: Math.round(kw * 10) / 10,
             system_voltage_v: v,
             phase: is3P ? "3-Phase" : "1-Phase",
             full_load_amperes: Math.round(fla * 10) / 10,
+            fla_amps: Math.round(fla * 10) / 10,
             continuous_load_amperes_125pct: Math.round(continuousAmperes * 10) / 10,
-            recommended_minimum_breaker_amperes: Math.ceil(continuousAmperes / 5) * 5,
+            design_amps: Math.round(continuousAmperes * 10) / 10,
+            recommended_minimum_breaker_amperes: breakerAmps,
+            recommended_breaker_amps: breakerAmps,
           },
           evidence: [
             {
-              provenance_note: `Calculated: ${kva} kVA at ${v}V (${is3P ? "3-Phase" : "1-Phase"}) yields ${Math.round(fla * 10) / 10} FLA (125% continuous: ${Math.round(continuousAmperes * 10) / 10} A)`,
+              provenance_note: `Calculated: ${kva.toFixed(1)} kVA at ${v}V (${is3P ? "3-Phase" : "1-Phase"}) yields ${Math.round(fla * 10) / 10} FLA (125% continuous: ${Math.round(continuousAmperes * 10) / 10} A)`,
             },
           ],
         };
@@ -859,34 +876,36 @@ class ToolRegistry {
           breakerAmperes: { type: "number", description: "Breaker trip rating in Amperes (e.g. 50, 100, 200, 400)" },
           conductorMaterial: { type: "string", description: "Conductor material: Copper (Cu) or Aluminum (Al)" },
         },
-        required: ["breakerAmperes"],
+        required: [],
       },
       execute: async (args) => {
-        const amps = Number(args.breakerAmperes);
-        const material = ((args.conductorMaterial as string) || "Copper").toLowerCase();
+        const amps = Number(args.breakerAmperes || args.target_amps || args.targetAmps || args.amps || 200);
+        const material = ((args.conductorMaterial || args.material || "Copper") as string).toLowerCase();
         const isCu = !material.includes("al");
 
         // Standard 75°C ampacity table lookup (NEC Table 310.16)
         let recommendedGauge = "12 AWG";
+        let rawGauge = "12 AWG";
         let conduitEstimate = '3/4" EMT';
+        let ampacity = 20;
 
         if (isCu) {
-          if (amps <= 20) { recommendedGauge = "12 AWG Cu"; conduitEstimate = '1/2" EMT'; }
-          else if (amps <= 30) { recommendedGauge = "10 AWG Cu"; conduitEstimate = '3/4" EMT'; }
-          else if (amps <= 50) { recommendedGauge = "8 AWG Cu"; conduitEstimate = '3/4" EMT'; }
-          else if (amps <= 70) { recommendedGauge = "4 AWG Cu"; conduitEstimate = '1" EMT'; }
-          else if (amps <= 100) { recommendedGauge = "3 AWG Cu"; conduitEstimate = '1-1/4" EMT'; }
-          else if (amps <= 125) { recommendedGauge = "1 AWG Cu"; conduitEstimate = '1-1/4" EMT'; }
-          else if (amps <= 150) { recommendedGauge = "1/0 AWG Cu"; conduitEstimate = '1-1/2" EMT'; }
-          else if (amps <= 200) { recommendedGauge = "3/0 AWG Cu"; conduitEstimate = '2" EMT'; }
-          else if (amps <= 250) { recommendedGauge = "250 kcmil Cu"; conduitEstimate = '2-1/2" EMT'; }
-          else if (amps <= 400) { recommendedGauge = "500 kcmil Cu (or 2x 3/0)"; conduitEstimate = '3" EMT'; }
-          else { recommendedGauge = "Parallel Sets Required (>400A)"; conduitEstimate = "Dual 3\" EMT"; }
+          if (amps <= 20) { rawGauge = "12 AWG"; recommendedGauge = "12 AWG Cu"; conduitEstimate = '1/2" EMT'; ampacity = 20; }
+          else if (amps <= 30) { rawGauge = "10 AWG"; recommendedGauge = "10 AWG Cu"; conduitEstimate = '3/4" EMT'; ampacity = 30; }
+          else if (amps <= 50) { rawGauge = "8 AWG"; recommendedGauge = "8 AWG Cu"; conduitEstimate = '3/4" EMT'; ampacity = 50; }
+          else if (amps <= 70) { rawGauge = "4 AWG"; recommendedGauge = "4 AWG Cu"; conduitEstimate = '1" EMT'; ampacity = 85; }
+          else if (amps <= 100) { rawGauge = "3 AWG"; recommendedGauge = "3 AWG Cu"; conduitEstimate = '1-1/4" EMT'; ampacity = 100; }
+          else if (amps <= 125) { rawGauge = "1 AWG"; recommendedGauge = "1 AWG Cu"; conduitEstimate = '1-1/4" EMT'; ampacity = 130; }
+          else if (amps <= 150) { rawGauge = "1/0 AWG"; recommendedGauge = "1/0 AWG Cu"; conduitEstimate = '1-1/2" EMT'; ampacity = 150; }
+          else if (amps <= 200) { rawGauge = "3/0 AWG"; recommendedGauge = "3/0 AWG Cu"; conduitEstimate = '2" EMT'; ampacity = 200; }
+          else if (amps <= 250) { rawGauge = "250 kcmil"; recommendedGauge = "250 kcmil Cu"; conduitEstimate = '2-1/2" EMT'; ampacity = 255; }
+          else if (amps <= 400) { rawGauge = "500 kcmil"; recommendedGauge = "500 kcmil Cu (or 2x 3/0)"; conduitEstimate = '3" EMT'; ampacity = 380; }
+          else { rawGauge = "Parallel Sets"; recommendedGauge = "Parallel Sets Required (>400A)"; conduitEstimate = "Dual 3\" EMT"; ampacity = amps; }
         } else {
-          if (amps <= 100) { recommendedGauge = "1 AWG Al"; conduitEstimate = '1-1/4" EMT'; }
-          else if (amps <= 200) { recommendedGauge = "4/0 AWG Al"; conduitEstimate = '2" EMT'; }
-          else if (amps <= 400) { recommendedGauge = "600 kcmil Al (or 2x 4/0)"; conduitEstimate = '3-1/2" EMT'; }
-          else { recommendedGauge = "Parallel Sets Required (>400A)"; conduitEstimate = "Dual 3-1/2\" EMT"; }
+          if (amps <= 100) { rawGauge = "1 AWG"; recommendedGauge = "1 AWG Al"; conduitEstimate = '1-1/4" EMT'; ampacity = 100; }
+          else if (amps <= 200) { rawGauge = "4/0 AWG"; recommendedGauge = "4/0 AWG Al"; conduitEstimate = '2" EMT'; ampacity = 205; }
+          else if (amps <= 400) { rawGauge = "600 kcmil"; recommendedGauge = "600 kcmil Al (or 2x 4/0)"; conduitEstimate = '3-1/2" EMT'; ampacity = 375; }
+          else { rawGauge = "Parallel Sets"; recommendedGauge = "Parallel Sets Required (>400A)"; conduitEstimate = "Dual 3-1/2\" EMT"; ampacity = amps; }
         }
 
         return {
@@ -895,7 +914,11 @@ class ToolRegistry {
             breaker_rating_amperes: amps,
             material: isCu ? "Copper (Cu, 75°C)" : "Aluminum (Al, 75°C)",
             recommended_conductor_size: recommendedGauge,
+            conductor_size: rawGauge,
+            conductor_ampacity: ampacity,
             recommended_conduit_trade_size: conduitEstimate,
+            conduit_trade_size_in: conduitEstimate,
+            continuous_rating_amps: Math.round(ampacity * 0.8),
             code_standard_reference: "NEC 310.16 / 75°C Terminal Column",
           },
           evidence: [
