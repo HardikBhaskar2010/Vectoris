@@ -203,6 +203,33 @@ class VectorisRouter {
       selectedSkillIds.push("mep-spec-compliance");
       candidateToolNames.push("search_documents", "get_document_metadata", "read_project_files");
       contextReqs.requires_document_manifest = true;
+    } else if (
+      q.includes("plan") ||
+      q.includes("scope") ||
+      q.includes("milestone") ||
+      q.includes("risk") ||
+      q.includes("dependencies") ||
+      q.includes("dependency") ||
+      q.includes("synthesize") ||
+      q.includes("decision") ||
+      q.includes("explain this project")
+    ) {
+      intent = "project_understanding";
+      complexity = "medium";
+      executionMode = "react_multi_step";
+      classification = "READ";
+      confidence = 0.94;
+      explanation = "Project Plan inquiry or synthesis request across Scope, Milestones, Risks, and Dependencies.";
+
+      selectedSkillIds.push("project-plan-synthesis");
+      candidateToolNames.push(
+        "get_project_plan",
+        "propose_project_plan_revision",
+        "get_project_context",
+        "read_project_files"
+      );
+      contextReqs.requires_document_manifest = true;
+      contextReqs.requires_takeoff_summary = true;
     } else if (hasProject) {
       intent = "project_understanding";
       complexity = "low";

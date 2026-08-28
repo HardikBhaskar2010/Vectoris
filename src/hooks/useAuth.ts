@@ -14,6 +14,8 @@ export interface UseAuthReturn {
   signIn: (params: SignInParams) => Promise<AuthResult>;
   signUp: (params: SignUpParams) => Promise<AuthResult>;
   signOut: () => Promise<void>;
+  resetPasswordForEmail: (email: string) => Promise<{ success: boolean; error?: string }>;
+  updatePassword: (password: string) => Promise<{ success: boolean; user?: User | null; error?: string }>;
 }
 
 export function useAuth(): UseAuthReturn {
@@ -74,6 +76,20 @@ export function useAuth(): UseAuthReturn {
     setLoading(false);
   };
 
+  const resetPasswordForEmail = async (email: string): Promise<{ success: boolean; error?: string }> => {
+    return authService.resetPasswordForEmail(email);
+  };
+
+  const updatePassword = async (password: string): Promise<{ success: boolean; user?: User | null; error?: string }> => {
+    setLoading(true);
+    const result = await authService.updatePassword(password);
+    if (result.success && result.user) {
+      setUser(result.user);
+    }
+    setLoading(false);
+    return result;
+  };
+
   return {
     user,
     session,
@@ -82,5 +98,7 @@ export function useAuth(): UseAuthReturn {
     signIn,
     signUp,
     signOut,
+    resetPasswordForEmail,
+    updatePassword,
   };
 }

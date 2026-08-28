@@ -127,7 +127,7 @@ export class UpdateService {
 
     this.state = {
       status: "idle",
-      currentVersion: "0.2.2", // Initial package baseline, updated dynamically on launch
+      currentVersion: "0.2.3", // Initial package baseline, updated dynamically on launch
       availableRelease: null,
       progress: null,
       lastCheckedAt: storedLastCheck,

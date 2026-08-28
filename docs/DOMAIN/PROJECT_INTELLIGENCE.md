@@ -31,15 +31,29 @@ The gap this closes: today, a general question like *"Explain this project to me
 | `CorrectionEvent` | Yes | What a human changed, and why |
 | AI `Session` history | Yes (`AI_SESSION.md`) | Prior discussions and analytical findings |
 | Project metadata (type, discipline) | Yes, with provenance (`ai_inferred` / `user_provided` / `verified`) | Scope framing |
-| **Decisions** | **Candidate entity** | Explicit record of human determinations on ambiguous scope |
-| **Activity feed** | **Candidate entity** | Chronological project-level event stream |
+| `Decision` | Yes (`docs/PLAN.md`, `DATA_MODEL.md`) | First-class append-only entity attached to `plan_claim_identities.claim_id` |
+| `Activity feed` | Derived | Chronological stream derived from `audit_events`, plan history, chat messages, and Decisions (no separate table) |
 
-## 4. Grounded Synthesis — the Non-Negotiable Rule
+## 4. Grounded Synthesis — Canonical Taxonomy and Rules
 
-- Every synthesized statement about a project must be traceable to specific evidence (a document, a takeoff line, a prior human-verified answer).
-- Where evidence is absent or thin, Project Intelligence must state so explicitly ("unresolved" or "not yet analyzed").
-- Project Intelligence distinguishes: **known from evidence**, **inferred**, **explicitly decided by a human**, and **unresolved/unknown**.
-- A human Decision, once recorded, outranks automated inference.
+Every atomic plan claim receives exactly one of four canonical classifications:
+
+1. **Known from evidence** — directly stated or measured in project documents; cites specific source document, sheet, and coordinates/location.
+2. **Inferred** — derived logically from cited sources; includes explicit engineering reasoning and uncertainty bounds.
+3. **Human-decided** — explicitly accepted or authored by a human engineer; references a first-class `Decision` attached to the stable `plan_claim_identities.claim_id`.
+4. **Unresolved/unknown** — evidence absent, contradictory, or insufficient; reason for omission or ambiguity shown explicitly.
+
+### Section Aggregation Rule
+- A section (e.g. *Scope & outcomes*, *Milestones*, *Risks*, *Dependencies*) containing mixed classifications is **visibly marked as mixed**.
+- The system must never flatten or launder distinct claim-level statuses into a misleading single section-level status.
+
+### Decision Precedence & Persistence Rule
+- A human `Decision`, once recorded, outranks automated AI inference.
+- A `Decision` belongs to a **claim identity** (`plan_claim_identities.claim_id`), not to a specific plan version. It persists across plan versions v1, v2, v3 until explicitly superseded by a human.
+
+### Lineage & Split/Merge Conflict Rule
+- When claim lineage occurs (`split` or `merge`), Decisions are **never** automatically propagated.
+- If a parent claim with an active Decision splits into children, or multiple claims merge, the resulting proposed state surfaces as an explicit, human-resolvable conflict. Activation of any draft is blocked until the conflict is resolved.
 
 ## 5. Relationship to Investigation Workshop
 
@@ -83,18 +97,18 @@ Project Intelligence is the shared grounding layer that project-scoped investiga
   Delivery
 ```
 
-And the current **Takeoff MVP** is the operational wedge built directly inside this container:
+And the current **Takeoff & Project Plan MVP** is the operational wedge built directly inside this container:
 
 ```text
 Project
   ↓
 Documents / Drawings
   ↓
-AI + Detection
+AI + Detection + Plan Synthesis
   ↓
-Human Verification
+Human Verification (Takeoff Review & Plan Claim Diff / Decision Resolution)
   ↓
-Takeoff
+Takeoff & Active Plan
   ↓
 Export
 ```
@@ -105,15 +119,17 @@ Export
 |---|---|---|
 | Project workspace container + documents + takeoff summary scanning | **MVP (Built/In Scope)** | Core foundational container |
 | Evidence-linked answers to project-scoped questions via Investigation Workshop | **MVP (Built/In Scope)** | Fully supported via `AI_SESSION.md` |
-| Deep automated cross-document synthesis ("explain this project") | **NEAR-TERM (OD-24)** | Requires standardized grounding heuristic before release |
+| Grounded Project Plan synthesis (Scope, Milestones, Risks, Dependencies) | **MVP (Built/In Scope)** | OD-24 resolved 2026-08-28 per `docs/PLAN.md` |
 | Curated first-view by discipline role | **NEAR-TERM (OD-25)** | Builds on `COLLABORATION.md` discipline model |
 | Downstream estimating, BOQ, bidding, delivery workflows | **SEQUENTIAL HORIZONS** | Built on the validated takeoff foundation |
 
 ## 8. Cross-References
 
 - `../00_PROJECT/VISION.md` — "Project as Primary Object" framing this document supports
+- `../PLAN.md` — Authoritative specification for Project Plan data model and pipeline
 - `COLLABORATION.md` — how a project becomes useful to someone who did not create it
 - `../06_PAGES/AI_SESSION.md` — the interface this capability grounds
+- `../06_PAGES/PROJECT_PLAN.md` — Project Plan page specification
 - `../06_PAGES/PROJECT_OVERVIEW.md` — the existing, lighter-weight state-scanning surface (not superseded)
 - `ESTIMATION_BIDDING_DOMAIN.md` — the evidence-classification discipline this document reuses (§4)
-- `../OPEN_DECISIONS.md` — OD-24, OD-25
+- `../OPEN_DECISIONS.md` — OD-24 (resolved), OD-25 (open), OD-27 (open)

@@ -21,11 +21,15 @@ import type {
   Detection,
   EngineStatusInfo,
   DocumentFormat,
+  ProjectPlan,
+  PlanVersion,
+  DecisionResolution,
 } from "../data/types";
 import { generateId } from "./idService";
 import { INITIAL_PROJECTS } from "../data/mockProjects";
 import { INITIAL_DOCUMENTS } from "../data/mockDocuments";
 import { INITIAL_SESSIONS } from "../data/mockSessions";
+import { INITIAL_PROJECT_PLANS } from "../data/mockProjectPlan";
 import {
   INITIAL_TAKEOFF_SUMMARY,
   INITIAL_LINE_ITEMS,
@@ -39,6 +43,7 @@ import { organizationService } from "./organizationService";
 import { documentService } from "./documentService";
 import { takeoffService } from "./takeoffService";
 import { sessionService } from "./sessionService";
+import { projectPlanService, type CreateDraftParams } from "./projectPlanService";
 import { agentRuntime } from "../ai/runtime/agentRuntime";
 import { authService } from "./authService";
 import { isSupabaseConfigured } from "./supabaseClient";
@@ -73,6 +78,7 @@ class DataService {
   private layers: LayerDef[];
   private detections: Record<string, Detection[]>;
   private engineStatus: EngineStatusInfo;
+  private projectPlans: Record<string, ProjectPlan>;
   private listeners: Set<() => void> = new Set();
   private isSyncing = false;
 
@@ -80,6 +86,10 @@ class DataService {
     this.projects = loadFromStorage<Project[]>("projects", INITIAL_PROJECTS);
     this.documents = loadFromStorage<ProjectDocument[]>("documents", INITIAL_DOCUMENTS);
     this.sessions = loadFromStorage<ChatSession[]>("sessions", INITIAL_SESSIONS);
+    this.projectPlans = loadFromStorage<Record<string, ProjectPlan>>(
+      "projectPlans",
+      INITIAL_PROJECT_PLANS
+    );
     this.takeoffSummaries = loadFromStorage<Record<string, TakeoffRunSummary>>(
       "takeoffSummaries",
       INITIAL_TAKEOFF_SUMMARY
@@ -1053,12 +1063,53 @@ class DataService {
     return { projects, documents, sessions };
   }
 
+  // ── Project Plan ─────────────────────────────────────────────────────────────
+
+  public getProjectPlan(projectId: string): ProjectPlan | null {
+    return this.projectPlans[projectId] || null;
+  }
+
+  public async fetchProjectPlan(projectId: string): Promise<ProjectPlan | null> {
+    const plan = await projectPlanService.getProjectPlan(projectId);
+    if (plan) {
+      this.projectPlans[projectId] = plan;
+      saveToStorage("projectPlans", this.projectPlans);
+      this.notify();
+    }
+    return plan;
+  }
+
+  public async createProjectPlanDraft(params: CreateDraftParams): Promise<string> {
+    const draftId = await projectPlanService.createDraft(params);
+    await this.fetchProjectPlan(params.projectId);
+    return draftId;
+  }
+
+  public async acceptProjectPlanDraft(
+    projectId: string,
+    draftVersionId: string,
+    resolutions?: DecisionResolution[]
+  ): Promise<void> {
+    await projectPlanService.acceptDraft(draftVersionId, resolutions);
+    await this.fetchProjectPlan(projectId);
+  }
+
+  public async rejectProjectPlanDraft(
+    projectId: string,
+    draftVersionId: string,
+    reason?: string
+  ): Promise<void> {
+    await projectPlanService.rejectDraft(draftVersionId, reason);
+    await this.fetchProjectPlan(projectId);
+  }
+
   // ── Reset ───────────────────────────────────────────────────────────────────
 
   public resetToDefaults(): void {
     this.projects = [...INITIAL_PROJECTS];
     this.documents = [...INITIAL_DOCUMENTS];
     this.sessions = [...INITIAL_SESSIONS];
+    this.projectPlans = { ...INITIAL_PROJECT_PLANS };
     this.takeoffSummaries = { ...INITIAL_TAKEOFF_SUMMARY };
     this.lineItems = [...INITIAL_LINE_ITEMS];
     this.sheets = [...INITIAL_SHEETS];
@@ -1069,6 +1120,7 @@ class DataService {
     saveToStorage("projects", this.projects);
     saveToStorage("documents", this.documents);
     saveToStorage("sessions", this.sessions);
+    saveToStorage("projectPlans", this.projectPlans);
     saveToStorage("takeoffSummaries", this.takeoffSummaries);
     saveToStorage("lineItems", this.lineItems);
     saveToStorage("sheets", this.sheets);
@@ -1235,3 +1287,35 @@ export function useEngineStatus(): EngineStatusInfo {
 
   return status;
 }
+
+export function useProjectPlan(projectId?: string | null): ProjectPlan | null {
+  const [plan, setPlan] = useState<ProjectPlan | null>(() =>
+    projectId ? dataService.getProjectPlan(projectId) : null
+  );
+
+  useEffect(() => {
+    if (!projectId) {
+      setPlan(null);
+      return;
+    }
+    setPlan(dataService.getProjectPlan(projectId));
+    dataService.fetchProjectPlan(projectId);
+
+    return dataService.subscribe(() => {
+      setPlan(dataService.getProjectPlan(projectId));
+    });
+  }, [projectId]);
+
+  return plan;
+}
+
+export function useActivePlanVersion(projectId?: string | null): PlanVersion | null {
+  const plan = useProjectPlan(projectId);
+  return plan?.active_version || null;
+}
+
+export function useDraftPlanVersion(projectId?: string | null): PlanVersion | null {
+  const plan = useProjectPlan(projectId);
+  return plan?.draft_version || null;
+}
+

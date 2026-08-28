@@ -20,14 +20,16 @@
  *   /project/:id/bid          → ProjectFutureStub (disabled)
  */
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { RouterProvider, useRouter } from "../router";
 import { DesktopTitleBar } from "../components/DesktopTitleBar";
+import { BrandMark } from "../components/BrandMark";
 import { AuthPage } from "../pages/AuthPage";
 import { OnboardingPage } from "../pages/OnboardingPage";
 import { DashboardPage } from "../pages/DashboardPage";
 import ProjectsPage from "../pages/ProjectsPage";
 import ProjectOverviewPage from "../pages/ProjectOverviewPage";
+import ProjectPlanPage from "../pages/ProjectPlanPage";
 import ProjectDocumentsPage from "../pages/ProjectDocumentsPage";
 import ProjectTakeoffPage from "../pages/ProjectTakeoffPage";
 import ProjectReportsPage from "../pages/ProjectReportsPage";
@@ -35,11 +37,120 @@ import SessionsPage from "../pages/SessionsPage";
 import SettingsPage from "../pages/SettingsPage";
 import ProjectWorkspacePage from "../pages/ProjectWorkspacePage";
 import { ProjectShell } from "../components/ProjectShell";
+import { ContextMenuProvider } from "../components/ContextMenu";
 import { authService } from "../services/authService";
 import { organizationService } from "../services/organizationService";
+import { isSupabaseConfigured } from "../services/supabaseClient";
 
 function AppContent() {
   const { currentPath, searchParams, navigate } = useRouter();
+  const [isAuthChecking, setIsAuthChecking] = useState(() => isSupabaseConfigured());
+
+  // Restore authenticated workstation session on initial startup
+  useEffect(() => {
+    if (!isSupabaseConfigured()) {
+      setIsAuthChecking(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    const restoreSession = async () => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const hash = window.location.hash;
+        const isPasswordRecoveryFlow =
+          params.get("mode") === "reset" ||
+          params.get("mode") === "forgot" ||
+          params.get("type") === "recovery" ||
+          hash.includes("type=recovery");
+
+        if (isPasswordRecoveryFlow) {
+          // Stay on auth page in recovery/reset mode
+          return;
+        }
+
+        const session = await authService.getSession();
+        if (!isMounted) return;
+
+        const isConfirmedUser = session?.user && authService.isEmailConfirmed(session.user);
+
+        if (isConfirmedUser) {
+          // If the app started at root ("/" or "/auth" without explicit verify or error params)
+          const isAtAuthEntry = currentPath === "/" || currentPath.startsWith("/auth");
+          if (isAtAuthEntry) {
+            const userOrgs = await organizationService.getUserOrganizations();
+            if (!isMounted) return;
+            if (userOrgs.length > 0) {
+              navigate("/dashboard", { replace: true });
+            } else {
+              navigate("/onboarding", { replace: true });
+            }
+          }
+        } else {
+          // If trying to access a protected workstation page without an active session
+          const isProtected =
+            currentPath !== "/" &&
+            !currentPath.startsWith("/auth") &&
+            !currentPath.startsWith("/onboarding");
+          if (isProtected) {
+            navigate("/auth?mode=signin", { replace: true });
+          }
+        }
+      } catch (err) {
+        console.warn("Session restore error:", err);
+      } finally {
+        if (isMounted) {
+          setIsAuthChecking(false);
+        }
+      }
+    };
+
+    restoreSession();
+
+    // Listen for auth events across the app lifecycle
+    const unsubscribe = authService.onAuthStateChange(async (event, session) => {
+      if (!isMounted) return;
+
+      if (event === "PASSWORD_RECOVERY") {
+        navigate("/auth?mode=reset", { replace: true });
+        return;
+      }
+
+      if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
+        const params = new URLSearchParams(window.location.search);
+        const hash = window.location.hash;
+        const isRecoveryFlow =
+          params.get("mode") === "reset" ||
+          params.get("type") === "recovery" ||
+          hash.includes("type=recovery");
+
+        if (isRecoveryFlow) {
+          // Do not forward to dashboard while user is resetting their password
+          return;
+        }
+
+        if (session?.user && authService.isEmailConfirmed(session.user)) {
+          if (currentPath === "/" || currentPath.startsWith("/auth")) {
+            const userOrgs = await organizationService.getUserOrganizations();
+            if (!isMounted) return;
+            if (userOrgs.length > 0) {
+              navigate("/dashboard", { replace: true });
+            } else {
+              navigate("/onboarding", { replace: true });
+            }
+          }
+        }
+      } else if (event === "SIGNED_OUT") {
+        navigate("/auth?mode=signin", { replace: true });
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, [navigate, currentPath]);
 
   // Sync theme to document for global CSS overrides
   useEffect(() => {
@@ -116,6 +227,45 @@ function AppContent() {
   };
 
   const renderContent = () => {
+    // ── Restoring Session Screen ───────────────────────────────────────────────
+    if (isAuthChecking && (currentPath === "/" || currentPath.startsWith("/auth"))) {
+      return (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            height: "100%",
+            minHeight: "400px",
+            background: "var(--app-surface-0, #090a0f)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: "16px",
+            }}
+          >
+            <BrandMark size="lg" iconOnly />
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                fontSize: "0.8125rem",
+                color: "var(--app-text-muted, #94a3b8)",
+                fontWeight: 500,
+              }}
+            >
+              <span>Restoring workstation session…</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     // ── Root Entry Surface & Auth ──────────────────────────────────────────────
     if (currentPath === "/" || currentPath.startsWith("/auth")) return <AuthPage />;
     if (currentPath === "/onboarding" || currentPath.startsWith("/onboarding")) return <OnboardingPage />;
@@ -135,6 +285,7 @@ function AppContent() {
     }
 
     // ── Project sub-routes (order: most specific first) ─────────────────────────
+    if (currentPath.match(/^\/project\/[^/]+\/plan/))        return <ProjectPlanPage />;
     if (currentPath.match(/^\/project\/[^/]+\/documents/))   return <ProjectDocumentsPage />;
     if (currentPath.match(/^\/project\/[^/]+\/workspace/))   return <ProjectWorkspacePage />;
     if (currentPath.match(/^\/project\/[^/]+\/takeoff/))     return <ProjectTakeoffPage />;
@@ -168,7 +319,9 @@ function AppContent() {
 export function App() {
   return (
     <RouterProvider>
-      <AppContent />
+      <ContextMenuProvider>
+        <AppContent />
+      </ContextMenuProvider>
     </RouterProvider>
   );
 }

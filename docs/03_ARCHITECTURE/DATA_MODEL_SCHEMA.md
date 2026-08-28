@@ -996,44 +996,143 @@ These triggers fire regardless of caller (including `service_role`), which is co
 
 ---
 
-## 7. Migration Phases
+## 3.14 Project Plan Tables (docs/PLAN.md)
 
-Unchanged in structure from v1, now includes the trigger/RPC work explicitly per phase:
+```sql
+create type plan_version_status as enum ('draft', 'active', 'superseded');
+create type claim_section as enum ('scope_outcomes', 'milestones', 'risks', 'dependencies');
+create type claim_grounding as enum ('known_from_evidence', 'inferred', 'human_decided', 'unresolved');
+create type lineage_relationship as enum ('split', 'merge');
+
+-- Stable claim identity: created once, never reused, project-scoped
+create table plan_claim_identities (
+  claim_id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+create index idx_plan_claim_identities_proj on plan_claim_identities(project_id);
+
+-- One logical plan per project
+create table project_plans (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects(id) on delete cascade unique,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index idx_project_plans_proj on project_plans(project_id);
+
+-- Immutable plan versions (lifecycle transitions via RPC only)
+create table project_plan_versions (
+  id uuid primary key default gen_random_uuid(),
+  plan_id uuid not null references project_plans(id) on delete cascade,
+  version_number int not null,
+  status plan_version_status not null default 'draft',
+  created_by uuid not null references auth.users(id),
+  created_at timestamptz not null default now(),
+  activated_at timestamptz,
+  superseded_at timestamptz,
+  unique (plan_id, version_number)
+);
+create index idx_project_plan_versions_plan on project_plan_versions(plan_id, version_number desc);
+
+-- Partial unique constraints: exactly one draft and one active version per plan
+create unique index one_open_draft_per_plan
+  on project_plan_versions (plan_id)
+  where status = 'draft';
+
+create unique index one_active_version_per_plan
+  on project_plan_versions (plan_id)
+  where status = 'active';
+
+-- Normalized plan version source document associations
+create table plan_version_documents (
+  plan_version_id uuid not null references project_plan_versions(id) on delete cascade,
+  document_id uuid not null references documents(id) on delete cascade,
+  primary key (plan_version_id, document_id)
+);
+
+-- First-class append-only Decisions attached to claim identity
+create table decisions (
+  id uuid primary key default gen_random_uuid(),
+  claim_id uuid not null references plan_claim_identities(claim_id) on delete cascade,
+  project_id uuid not null references projects(id) on delete cascade,
+  decision_text text not null,
+  rationale text,
+  decided_by uuid not null references auth.users(id),
+  decided_at timestamptz not null default now(),
+  superseded_by uuid references decisions(id),
+  superseded_at timestamptz,
+  is_active boolean not null default true
+);
+create index idx_decisions_claim on decisions(claim_id) where is_active is true;
+create index idx_decisions_project on decisions(project_id);
+
+-- Immutable plan claims per version
+create table project_plan_claims (
+  id uuid primary key default gen_random_uuid(),
+  claim_id uuid not null references plan_claim_identities(claim_id) on delete cascade,
+  plan_version_id uuid not null references project_plan_versions(id) on delete cascade,
+  section claim_section not null,
+  content text not null,
+  grounding claim_grounding not null,
+  evidence_links jsonb not null default '[]'::jsonb,
+  inference_rationale text,
+  unresolved_reason text,
+  conflict_with_decision_id uuid references decisions(id),
+  conflict_details text,
+  created_at timestamptz not null default now(),
+  unique (plan_version_id, claim_id)
+);
+create index idx_plan_claims_version on project_plan_claims(plan_version_id);
+create index idx_plan_claims_identity on project_plan_claims(claim_id);
+
+-- Claim split/merge lineage
+create table claim_lineage (
+  id uuid primary key default gen_random_uuid(),
+  parent_claim_id uuid not null references plan_claim_identities(claim_id) on delete cascade,
+  child_claim_id uuid not null references plan_claim_identities(claim_id) on delete cascade,
+  relationship lineage_relationship not null,
+  occurred_at timestamptz not null default now(),
+  triggering_plan_version_id uuid not null references project_plan_versions(id) on delete cascade,
+  check (parent_claim_id <> child_claim_id)
+);
+create index idx_claim_lineage_parent on claim_lineage(parent_claim_id);
+create index idx_claim_lineage_child on claim_lineage(child_claim_id);
+
+-- Normalized link table to Investigation Workshop chat sessions
+create table plan_chat_sessions (
+  plan_id uuid not null references project_plans(id) on delete cascade,
+  chat_session_id uuid not null references chat_sessions(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (plan_id, chat_session_id)
+);
+```
+
+---
+
+## 7. Migration Phases
 
 | Phase | Tables | RLS + RPCs + Triggers | Unblocks |
 |---|---|---|---|
 | 1 — Foundation | `organizations`, `org_members` | §4.1, §4.2 helper functions (§4.0) | Auth wiring, org creation |
-| 2 — Projects | `projects`, `project_members` | §4.3, §4.4, `soft_delete_project`/`restore_project` | Real Projects CRUD — smallest real slice, see §9 |
+| 2 — Projects | `projects`, `project_members` | §4.3, §4.4, `soft_delete_project`/`restore_project` | Real Projects CRUD |
 | 3 — Documents | `documents`, `sheets` | §4.5, §4.6, `soft_delete_document` | Real upload metadata |
-| 4 — Takeoff | `takeoff_runs`, `takeoff_run_documents`, `detections`, `line_items` | §4.7–§4.9, all three §6 triggers, `approve_line_item`/`reject_line_item` | Requires the Phase 0.5 Perception spike — do not build ahead of it |
-| 5 — Audit | `correction_events`, `audit_events` | §4.10, §4.16, `mark_training_candidate` | Correction ledger, `04_AI/TRAINING.md` foundation |
+| 4 — Takeoff | `takeoff_runs`, `takeoff_run_documents`, `detections`, `line_items` | §4.7–§4.9, triggers, `approve_line_item`/`reject_line_item` | Perception Takeoff |
+| 5 — Audit | `correction_events`, `audit_events` | §4.10, §4.16, `mark_training_candidate` | Correction ledger |
 | 6 — Sessions | `chat_sessions`, `messages`, `session_shares` | §4.12–§4.14 | Investigation Workshop persistence |
 | 7 — Export | `exports` | §4.11 | Export history |
-
-Every table's RLS policies, column grants, and triggers ship in the same migration as the table itself — never a table without its full policy set in the same commit.
+| 8 — Project Plan | `project_plans`, `project_plan_versions`, `plan_claim_identities`, `project_plan_claims`, `claim_lineage`, `decisions`, `plan_version_documents`, `plan_chat_sessions` | RLS + project triggers + `create_project_plan_draft`, `accept_project_plan_draft`, `reject_project_plan_draft`, `start_plan_chat_session` | Grounded Project Plan synthesis |
 
 ## 8. Recommendation on Backend Boundary — Unchanged from v1
 
-The review explicitly endorsed keeping this unchanged: no FastAPI/Redis/Celery yet for Phases 1–3 (Supabase PostgREST + RLS directly from the Tauri client is sufficient — there's no async job or AI call yet to justify custom backend infrastructure). FastAPI enters at Phase 4, and becomes the sole holder of the `service_role` key used by `mark_training_candidate()` and the Perception/worker-side writes to `sheets`/`detections`. See v1 §7 for the full rationale; `AUDIT_03.md` §13 reaches the same conclusion independently.
+The review explicitly endorsed keeping this unchanged: no FastAPI/Redis/Celery yet for Phases 1–3 (Supabase PostgREST + RLS directly from the Tauri client is sufficient).
 
 ## 9. Summary of v1 → v2 Changes
 
-| # | Review point | Fix |
-|---|---|---|
-| 1 | `project_members` had no INSERT/UPDATE/DELETE policies; no rank enforcement | §4.3 — full policy set with `role_rank()` gating |
-| 2 | `projects_delete` was actually an unrestricted UPDATE policy | §4.4 — column-restricted UPDATE + RPC-only soft-delete (§5) |
-| 3 | `effective_project_role()` trusted a caller-supplied `p_user_id` | §4.0 — parameter removed from the public function; unsafe form isolated behind `service_role`-only `_effective_role_for()` |
-| 4 | RLS enablement used `-- repeat` shorthand | §4 — all 16 tables enumerated explicitly |
-| 5 | `line_items` UPDATE didn't constrain which fields change or gate status transitions | §3.9/§4.9 — three-way column split + `approve_line_item()`/`reject_line_item()` RPCs |
-| 6 | `is_training_candidate` was client-settable in principle | §4.10 — excluded from the client `INSERT` grant entirely; `mark_training_candidate()` is `service_role`-only |
-| 7 | No cross-table project-consistency guarantee | §6 — three `BEFORE INSERT/UPDATE` triggers |
-| 8 | `storage_reference` ambiguously mixed local/cloud | §3.5/§3.11 — `storage_mode` enum + mode-specific columns + `CHECK` constraint |
-| 9 | `evidence_links` JSONB risked becoming permanent schema by default | §3.12 — explicit technical-debt note, proposed OD-26 |
-| 10 | Session-sharing policies unspecified; tunnel-into-project risk unaddressed | §4.12–§4.14 — explicit policies + explicit statement of the mechanism (independent RLS on `documents`/`line_items`) that prevents the tunnel |
-| 11 | `audit_events` write/delete semantics and transactionality unspecified | §4.16 (no UPDATE/DELETE grant) + §5 (RPCs write action + audit row in one transaction) + §3.13 honesty note on table-owner access |
+Includes full Project Plan specification per `docs/PLAN.md`.
 
 ## 10. Cross-References
 
-- `../03_ARCHITECTURE/DATA_MODEL.md`, `SECURITY.md`, `../01_PRODUCT/USER_ROLES.md` — unchanged dependencies from v1
-- `../OPEN_DECISIONS.md` — OD-09 (§3.7, unresolved), OD-12 (§3.13), OD-22/OD-23 (excluded), proposed **OD-26** (§3.12, evidence normalization — not yet added to the registry, flagged here for the founder to add)
-- `Research Folder/AUDIT_03.md` §13 — backend-boundary sequencing this document's §8 confirms
+- `../03_ARCHITECTURE/DATA_MODEL.md`, `SECURITY.md`, `../01_PRODUCT/USER_ROLES.md`
+- `../PLAN.md` — Authoritative specification for Project Plan entities and RPCs
+- `../OPEN_DECISIONS.md` — OD-24 (resolved), OD-27 (stale evidence candidate)

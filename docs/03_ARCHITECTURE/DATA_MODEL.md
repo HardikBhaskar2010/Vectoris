@@ -20,6 +20,15 @@ erDiagram
     DETECTION ||--o| LINE_ITEM : "becomes / links to"
     LINE_ITEM ||--o{ CORRECTION_EVENT : "has history"
     PROJECT ||--o{ EXPORT : generates
+    PROJECT ||--o| PROJECT_PLAN : has
+    PROJECT_PLAN ||--o{ PROJECT_PLAN_VERSION : "versioned snapshots"
+    PROJECT ||--o{ PLAN_CLAIM_IDENTITY : "scoped identities"
+    PROJECT_PLAN_VERSION ||--o{ PROJECT_PLAN_CLAIM : contains
+    PLAN_CLAIM_IDENTITY ||--o{ PROJECT_PLAN_CLAIM : "instantiated across versions"
+    PLAN_CLAIM_IDENTITY ||--o{ DECISION : "human determinations"
+    PLAN_CLAIM_IDENTITY ||--o{ CLAIM_LINEAGE : "split / merge"
+    PROJECT_PLAN_VERSION ||--o{ PLAN_VERSION_DOCUMENT : "cites evidence"
+    PROJECT_PLAN ||--o{ PLAN_CHAT_SESSION : "Investigation Workshop links"
     PROJECT ||--o{ CHAT_SESSION : "optionally attaches to"
     CHAT_SESSION ||--o{ MESSAGE : contains
     MEMBER ||--o{ PROJECT : "assigned role on"
@@ -42,6 +51,40 @@ This is a **conceptual** model per the founder brief §28 — not a final schema
 `id, organization_id, name, description (optional), inferred_type, user_provided_type, verified_type, created_by, created_at, updated_at`
 
 Project type distinguishes **AI-inferred context**, **user-provided context**, and **verified/final context** as three separate fields — per founder decision §4, these must never be conflated into a single "type" value.
+
+### Project Plan
+`id, project_id (unique — one logical plan per project), created_at, updated_at`
+
+### Project Plan Version
+`id, plan_id, version_number, status (draft | active | superseded), created_by, created_at, activated_at, superseded_at`
+
+- Content (claims, grounding, evidence links) is strictly immutable post-creation.
+- Exactly one open draft per plan (`status = 'draft'`) enforced at the database level.
+- Exactly one active version per plan (`status = 'active'`).
+
+### Plan Claim Identity
+`claim_id (UUID primary key, created once, never reused, project-scoped), project_id, created_at`
+
+The claim identity is the stable identity across plan versions. A claim appearing in v1, v2, and v3 shares the same `claim_id`.
+
+### Project Plan Claim
+`id, claim_id (references plan_claim_identities), plan_version_id (references project_plan_versions), section ('scope_outcomes' | 'milestones' | 'risks' | 'dependencies'), content, grounding ('known_from_evidence' | 'inferred' | 'human_decided' | 'unresolved'), evidence_links (JSONB), inference_rationale, unresolved_reason, conflict_with_decision_id (nullable), conflict_details`
+
+### Claim Lineage
+`id, parent_claim_id, child_claim_id, relationship ('split' | 'merge'), occurred_at, triggering_plan_version_id`
+
+Database triggers enforce that parent claim, child claim, and triggering plan version belong to the same project. Decisions are never automatically transferred across lineage.
+
+### Decision
+`id, claim_id (references plan_claim_identities), project_id, decision_text, rationale, decided_by, decided_at, superseded_by, superseded_at, is_active`
+
+First-class append-only entity attached to the stable `claim_id` identity, persisting across plan versions.
+
+### Plan Version Document
+`plan_version_id, document_id` (normalized association with project consistency trigger)
+
+### Plan Chat Session
+`plan_id, chat_session_id, created_at` (permanent normalized link to an ordinary project-scoped Investigation Workshop session)
 
 ### Document
 `id, project_id, filename, format, upload_status, storage_reference (local path / object ref), uploaded_by, uploaded_at`

@@ -29,8 +29,8 @@
 | OD-19 | **Processing page: auto-navigate vs. prompt on completion** | `06_PAGES/PROCESSING.md` Open Questions | Product / Design | `PROCESSING.md` | **Open — TBD** |
 | OD-22 | **Estimate entity model:** separate `Estimate` table with FK to TakeoffRun, or derived fields on TakeoffRun? | `03_ARCHITECTURE/DATA_MODEL.md` §3, future Estimate feature | Engineering | `DATA_MODEL.md` | **Open — must resolve before building Estimate** |
 | OD-23 | **Bid/Proposal mechanics:** what does a Bid contain? pricing adjustments, alternates, terms, proposal format — entirely unspecified | `06_PAGES/PROJECT_NAVIGATION.md` | Founder / Product | `PROJECT_NAVIGATION.md`, `LONG_TERM_VISION.md` | **Open — requires discovery + spec. Do not design until resolved** |
-| OD-24 | **Project Intelligence grounding procedure + Decision/Activity entities:** how cross-document project-level synthesis is assembled and classified (known/inferred/decided/unresolved); whether `Decision` and `Activity` become first-class entities distinct from `CorrectionEvent` | `03_ARCHITECTURE/DATA_MODEL.md`, `DOMAIN/PROJECT_INTELLIGENCE.md` | Product / Engineering | `DOMAIN/PROJECT_INTELLIGENCE.md` | **Open — required before "explain this project" capability can be built** |
 | OD-25 | **Discipline Role model:** single- vs. multi-select, per-project vs. per-org default, fixed vs. org-customizable taxonomy, exact UI for curated first-view | `DOMAIN/COLLABORATION.md` §7 | Product / Founder | `DOMAIN/COLLABORATION.md`, `01_PRODUCT/USER_ROLES.md` §6 | **Open — required before Discipline Role tagging can be built** |
+| OD-27 | **Stale evidence detection:** how changes/re-uploads to cited documents trigger stale-evidence flags on existing plan claims | `docs/PLAN.md` §11, `03_ARCHITECTURE/DATA_MODEL_SCHEMA.md` | Engineering | `docs/PLAN.md` §11 | **Open — candidate; deferred until document versioning/hash model is designed** |
 
 ---
 
@@ -47,6 +47,7 @@
 | OD-14 | Dashboard vs. Projects as separate surfaces | 2026-08-24 | `02_DESIGN/NAVIGATION.md` §5 — locked as separate (Dashboard = org pulse; Projects = library) |
 | OD-20 | Typography (Urbanist + Plex Mono) | 2026-08-23 | `DESIGN_SYSTEM.md` |
 | OD-21 | Spacing scale (8px base) | 2026-08-23 | `DESIGN_SYSTEM.md` |
+| OD-24 | Project Intelligence grounding procedure + Decision/Activity entities | 2026-08-28 | `docs/PLAN.md` §2, `DOMAIN/PROJECT_INTELLIGENCE.md` (Resolved by founder authorization, 2026-08-28) |
 
 ---
 

@@ -62,6 +62,24 @@ const BUILTIN_SKILLS: VectorisSkill[] = [
       "Check NEMA enclosures, UL listings, insulation ratings (THHN/XHHW), and conduit fill ratios against project engineering specifications.",
     isTrusted: true,
   },
+  {
+    id: "project-plan-synthesis",
+    name: "Grounded Project Plan Synthesis & Review",
+    description:
+      "Synthesizes and audits the 4 core plan sections (Scope, Milestones, Risks, Dependencies) with evidence grounding and Decision lineage.",
+    version: "1.0.0",
+    category: "compliance",
+    allowedTools: [
+      "get_project_plan",
+      "propose_project_plan_revision",
+      "read_project_files",
+      "search_project",
+      "get_project_context",
+    ],
+    instructions:
+      "Maintain the 4 fixed sections (Scope & outcomes, Milestones, Risks, Dependencies). Classify every atomic claim into known_from_evidence, inferred, human_decided, or unresolved. Link exact source document evidence, record explicit engineering inference rationales, and never overwrite active human decisions.",
+    isTrusted: true,
+  },
 ];
 
 class SkillRegistry {
@@ -140,6 +158,20 @@ class SkillRegistry {
       q.includes("standard")
     ) {
       const s = this.getSkill("mep-spec-compliance");
+      if (s && !matches.some((m) => m.id === s.id)) matches.push(s);
+    }
+
+    // Project Plan keywords
+    if (
+      q.includes("plan") ||
+      q.includes("scope") ||
+      q.includes("milestone") ||
+      q.includes("risk") ||
+      q.includes("dependency") ||
+      q.includes("decision") ||
+      q.includes("synthesis")
+    ) {
+      const s = this.getSkill("project-plan-synthesis");
       if (s && !matches.some((m) => m.id === s.id)) matches.push(s);
     }
 

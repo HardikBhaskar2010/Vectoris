@@ -42,55 +42,70 @@ TBD — founder-owned. Typically minimal: centered form, wordmark, no navigation
 Auth form, error inline display. No app-navigation components (user is not yet authenticated).
 
 ## User Interactions
-Enter credentials and submit; follow a sign-up flow; follow a password-reset flow; accept an invitation via a link (carries role and org context).
+Enter credentials and submit; follow a sign-up flow; request a password reset ("Forgot password?"); receive neutral dispatch confirmation; open password reset link (via browser or desktop deep link `vectoris://auth-callback`); establish recovery session; set new password; view success confirmation and return to sign in; accept an invitation via a link (carries role and org context).
 
 ## AI Behavior
 None. No AI on the auth surface.
 
 ## Data Requirements
-User credentials (not stored client-side beyond the active session token). For invitation links: organization ID, assigned role, invite expiry.
+User credentials (not stored client-side beyond the active session token). For invitation links: organization ID, assigned role, invite expiry. For password recovery: recovery session token (consumed immediately and cleared from URL).
 
 ## API Requirements
-Auth endpoint (login / create account / token refresh / logout). Auth provider: **TBD** — see `../03_ARCHITECTURE/SECURITY.md` §2.
+Auth endpoints (login / create account / token refresh / logout / resetPasswordForEmail / updateUser / onAuthStateChange). Auth provider: **Supabase Auth** with PostgreSQL and Row Level Security.
 
 ## State Model
 
 ### Loading
 Form submitting — disable inputs, show inline loading indicator.
+
 ### Empty
 Default: empty form ready for input.
+
 ### Success
-Navigate to Dashboard (or to the page the user was redirected from, if applicable).
+- Sign in / Sign up: Navigate to Dashboard (or Onboarding if no organization).
+- Password Update: Display success confirmation screen with "Continue to sign in" CTA.
+
 ### Error
-Authentication failure (wrong credentials, expired invite, account not found) — specific, actionable inline message. Never a generic "error" without context.
-### Permission denied
-An expired or already-used invitation link must show a clear, specific message, not a generic auth failure.
-### Offline
-Auth requires connectivity; must display a clear "no connection — cannot sign in" message rather than a silent hang.
+Authentication failure (wrong credentials, expired invite, network failure) — specific, actionable inline message.
 
-## Accessibility
-Form fields have explicit labels; error messages are programmatically associated with inputs; submit is keyboard-reachable.
+### Forgot Password States
+- **Idle:** Operator enters work email.
+- **Submitting:** Dispatching recovery email.
+- **Sent (Neutral Confirmation):** Displays "Check your work email" with enumeration protection (never reveals account non-existence). Provides 60s cooldown resend control.
+- **Blocked:** Validation or rate-limit notice.
 
-## Keyboard Interaction
+### Password Reset States
+- **Recovery Session:** URL contains `#access_token=...&type=recovery` or deep link event. `PASSWORD_RECOVERY` event triggers reset mode without forwarding to Dashboard.
+- **Ready:** Operator inputs new password and confirmation (minimum 8 characters).
+- **Submitting:** Calling `supabase.auth.updateUser({ password })`.
+- **Success:** Password updated successfully.
+- **Expired / Invalid:** Link is expired or already used. Shows dedicated "Reset link expired" view with CTA to request a new link.
+
+### Accessibility
+Form fields have explicit labels; error messages are programmatically associated with inputs (`aria-invalid`, `aria-describedby`); submit is keyboard-reachable.
+
+### Keyboard Interaction
 Tab through fields; Enter to submit; standard form navigation.
 
-## Motion
-Minimal — per `../02_DESIGN/MOTION.md`. Form error shake or similar micro-feedback on validation failure is acceptable.
+### Motion
+Subtle and functional — per `../02_DESIGN/MOTION.md`. Form error shake on validation failure and sliding pill transition between tabs.
 
-## Responsive / Window Behavior
-Desktop app window model; form must be usable at minimum supported window size.
+### Responsive / Window Behavior
+Desktop app window model; split-panel layout on desktop; single-column form on mobile/narrow windows.
 
 ## Acceptance Criteria
 - AC: A user can sign in with valid credentials and land on Dashboard.
 - AC: An invalid credential attempt produces a clear, specific inline error.
+- AC: A user can click "Forgot password?", enter their work email, and receive a neutral confirmation without account enumeration.
+- AC: Clicking a recovery email opens Vectoris (`vectoris://auth-callback` or web `/auth?mode=reset`) in password reset mode without triggering premature dashboard redirects.
+- AC: A user can enter a new password (min 8 characters) and confirmation to update their password.
+- AC: An expired or invalid recovery token displays an informative expired state with an option to request a fresh link.
 - AC: Following an organization invitation link pre-populates or contextualizes the auth flow correctly.
-- AC: A session-expired redirect brings the user back to their intended destination post-auth where feasible.
 
 ## Dependencies
 `DASHBOARD.md`, `../01_PRODUCT/USER_ROLES.md` (invitation mechanics)
 
-## Open Questions
-- Auth provider: TBD — see `OPEN_DECISIONS.md` OD-10.
-- Sign-up flow detail (email verification, onboarding wizard, etc.) — TBD.
-- SSO / provider-based auth (Google, etc.) — not yet specified; TBD if required at MVP.
-- Password-reset flow — TBD (required before production, not specified at this level).
+## Open Decisions & Status
+- Auth provider: **Supabase Auth** (RESOLVED).
+- Password-reset flow: **Implemented** with email enumeration protection, desktop deep link support, and recovery session safeguards.
+- SSO / provider-based auth: Reserved for future enterprise scope.

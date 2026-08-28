@@ -5,7 +5,7 @@
 **Does not own:** Per-page layout (→ 06_PAGES/*), routing graph (→ APP_FLOW.md), design tokens (→ DESIGN_SYSTEM.md)
 
 > Resolves the contradiction between DASHBOARD.md §IA and APP_FLOW.md on sidebar structure.  
-> Locks the four decisions from the Aug 2026 architecture review: OD-14, OD-24, OD-25.
+> Locks OD-14 (Dashboard vs Projects) and incorporates the resolved Project Plan tab per `docs/PLAN.md`.
 
 ---
 
@@ -41,6 +41,7 @@ The following are project-level capabilities and live inside the project sub-nav
 
 | Item | Where it lives |
 |---|---|
+| Project Plan | Project sub-nav → Plan |
 | Drawing Workspace | Project sub-nav → Workspace |
 | Takeoff | Project sub-nav → Takeoff |
 | Documents | Project sub-nav → Documents |
@@ -59,13 +60,13 @@ When a user is inside a project, a horizontal tab bar renders below the project 
 ### Tab bar
 
 ```
-Overview  ·  Documents  ·  Workspace  ·  Takeoff  ·  Reports
+Overview  ·  Plan  ·  Documents  ·  Workspace  ·  Takeoff  ·  Reports
 ```
 
 Future tabs (greyed/locked until the capability exists):
 
 ```
-Overview  ·  Documents  ·  Workspace  ·  Takeoff  ·  [Estimate]  ·  [Bid]  ·  Reports
+Overview  ·  Plan  ·  Documents  ·  Workspace  ·  Takeoff  ·  [Estimate]  ·  [Bid]  ·  Reports
 ```
 
 ### Canonical tabs, labels, and routes
@@ -73,6 +74,7 @@ Overview  ·  Documents  ·  Workspace  ·  Takeoff  ·  [Estimate]  ·  [Bid]  
 | Tab | Label | Route | MVP scope | Notes |
 |---|---|---|---|---|
 | Overview | Overview | `/project/:id` | ✅ MVP | Project status hub |
+| Plan | Plan | `/project/:id/plan` | ✅ MVP | Grounded project synthesis (Scope, Milestones, Risks, Dependencies) |
 | Documents | Documents | `/project/:id/documents` | ✅ MVP | All uploads + per-document processing status |
 | Workspace | Workspace | `/project/:id/workspace` | ✅ MVP | Drawing canvas + detection overlay |
 | Takeoff | Takeoff | `/project/:id/takeoff` | ✅ MVP | Line items; review; approval |
@@ -148,4 +150,4 @@ They are not merged. The Dashboard may link to recent projects and surface top-l
 - Project IA detail: `PROJECT_NAVIGATION.md`
 - Global sidebar implementation: `../src/components/AppShell.tsx`
 - Page specs: `../06_PAGES/*`
-- Open decisions resolved by this document: OD-14, OD-24, OD-25 (see `../OPEN_DECISIONS.md`)
+- Open decisions resolved by this document or referenced: OD-14, OD-24 (resolved per `docs/PLAN.md`), OD-25 (see `../OPEN_DECISIONS.md`)

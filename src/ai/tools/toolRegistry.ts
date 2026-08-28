@@ -8,6 +8,7 @@
  */
 
 import { dataService } from "../../services/dataService";
+import { projectPlanService } from "../../services/projectPlanService";
 import type {
   LineItem,
   ProjectDocument,
@@ -16,6 +17,8 @@ import type {
   Coordinates,
   CorrectionRecord,
   ProjectMember,
+  ClaimSection,
+  ClaimGrounding,
 } from "../../data/types";
 
 export type ToolCategory =
@@ -900,6 +903,170 @@ class ToolRegistry {
               provenance_note: `Feeder sizing: ${amps}A breaker requires minimum ${recommendedGauge} in ${conduitEstimate}`,
             },
           ],
+        };
+      },
+    });
+
+    // ── Propose Project Plan Revision Tool (docs/PLAN.md) ──────────────────────
+    this.register({
+      tool_id: "propose_project_plan_revision",
+      name: "propose_project_plan_revision",
+      version: "1.0.0",
+      description:
+        "Proposes a grounded revision to the Project Plan (Scope & outcomes, Milestones, Risks, Dependencies) by creating an immutable draft snapshot. Never directly overwrites the active plan.",
+      category: "project",
+      classification: "READ",
+      risk_level: "medium",
+      required_role: "editor",
+      requires_project_scope: true,
+      requires_human_approval: true,
+      parameters: {
+        type: "object",
+        properties: {
+          projectId: {
+            type: "string",
+            description: "UUID of the project to revise",
+          },
+          documentIds: {
+            type: "array",
+            items: { type: "string" },
+            description: "Optional document UUIDs to link as grounding evidence",
+          },
+          claims: {
+            type: "array",
+            description:
+              "List of atomic plan claims across the 4 fixed sections (scope_outcomes, milestones, risks, dependencies)",
+            items: {
+              type: "object",
+              properties: {
+                claim_id: { type: "string", description: "Stable claim UUID if modifying an existing claim" },
+                section: {
+                  type: "string",
+                  enum: ["scope_outcomes", "milestones", "risks", "dependencies"],
+                },
+                content: { type: "string", description: "Atomic statement content" },
+                grounding: {
+                  type: "string",
+                  enum: ["known_from_evidence", "inferred", "human_decided", "unresolved"],
+                },
+                inference_rationale: { type: "string" },
+                unresolved_reason: { type: "string" },
+              },
+              required: ["section", "content", "grounding"],
+            },
+          },
+          lineage: {
+            type: "array",
+            description: "Optional claim split/merge lineage relationships",
+            items: {
+              type: "object",
+              properties: {
+                parent_claim_id: { type: "string" },
+                child_claim_id: { type: "string" },
+                relationship: { type: "string", enum: ["split", "merge"] },
+              },
+              required: ["parent_claim_id", "child_claim_id", "relationship"],
+            },
+          },
+        },
+        required: ["claims"],
+      },
+      execute: async (args, context) => {
+        const projectId = (args.projectId as string) || context.projectId;
+        if (!projectId) {
+          return {
+            success: false,
+            error_code: "validation_failed",
+            message: "Missing required parameter 'projectId'.",
+          };
+        }
+
+        const claims = (args.claims as any[]) || [];
+        if (claims.length === 0) {
+          return {
+            success: false,
+            error_code: "validation_failed",
+            message: "Parameter 'claims' must contain at least one atomic claim.",
+          };
+        }
+
+        const documentIds = (args.documentIds as string[]) || [];
+        const lineage = (args.lineage as any[]) || [];
+
+        try {
+          const draftVersionId = await projectPlanService.createDraft({
+            projectId,
+            documentIds,
+            claims,
+            lineage,
+          });
+
+          await dataService.fetchProjectPlan(projectId);
+
+          return {
+            success: true,
+            data: {
+              draft_version_id: draftVersionId,
+              project_id: projectId,
+              claim_count: claims.length,
+              status: "draft_created",
+              message:
+                "Project Plan draft created successfully. The draft is ready for human claim diff review and Decision conflict resolution.",
+            },
+            evidence: [
+              {
+                provenance_note: `Generated immutable plan draft ${draftVersionId} with ${claims.length} claims across 4 sections.`,
+              },
+            ],
+          };
+        } catch (err: any) {
+          return {
+            success: false,
+            error_code: "internal_error",
+            message: err?.message || "Failed to create project plan draft snapshot.",
+          };
+        }
+      },
+    });
+
+    // ── Get Project Plan Tool ─────────────────────────────────────────────────
+    this.register({
+      tool_id: "get_project_plan",
+      name: "get_project_plan",
+      version: "1.0.0",
+      description: "Retrieves the current active Project Plan and any open draft for a project.",
+      category: "project",
+      classification: "READ",
+      risk_level: "low",
+      required_role: "viewer",
+      requires_project_scope: true,
+      requires_human_approval: false,
+      parameters: {
+        type: "object",
+        properties: {
+          projectId: { type: "string", description: "Target project UUID" },
+        },
+      },
+      execute: async (args, context) => {
+        const projectId = (args.projectId as string) || context.projectId;
+        if (!projectId) {
+          return {
+            success: false,
+            error_code: "validation_failed",
+            message: "Missing required parameter 'projectId'.",
+          };
+        }
+
+        const plan = await projectPlanService.getProjectPlan(projectId);
+        return {
+          success: true,
+          data: {
+            plan_id: plan?.id,
+            project_id: projectId,
+            active_version: plan?.active_version || null,
+            draft_version: plan?.draft_version || null,
+            total_versions: plan?.version_history?.length || 0,
+          },
         };
       },
     });

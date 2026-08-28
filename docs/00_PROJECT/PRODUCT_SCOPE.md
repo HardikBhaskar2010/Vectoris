@@ -10,8 +10,8 @@
 
 | Horizon | Definition | Authorization |
 |---|---|---|
-| **CURRENT MVP** | Drawing-first takeoff inside the Project workspace: Project context → Documents/Drawings → AI Detection → Human Verification → Takeoff → Export | Authorized now |
-| **NEAR-TERM EXPANSION** | Downstream BOQ generation, engineering application mapping, requirement-based entry, project-level synthesis | Requires passing relevant discovery Gates (legacy `THESIS.md`) before implementation |
+| **CURRENT MVP** | Drawing-first takeoff and Grounded Project Plan synthesis inside the Project workspace: Project context → Documents/Drawings → AI Detection & Plan Synthesis → Human Verification → Takeoff & Plan → Export | Authorized now |
+| **NEAR-TERM EXPANSION** | Downstream BOQ generation, engineering application mapping, requirement-based entry | Requires passing relevant discovery Gates (legacy `THESIS.md`) before implementation |
 | **LONG-TERM VISION** | Full end-to-end workflow pipeline: BOQ → Engineering → Estimation → Commercial → Bids → Delivery inside the Project Intelligence workspace | Architecture accommodates this progression; implementation focuses on validated wedges |
 
 This mirrors the core engineering discipline: *"The end state is large. The first product must be small and precise."*
@@ -27,6 +27,7 @@ This mirrors the core engineering discipline: *"The end state is large. The firs
 - Structured correction event capture
 - Export (XLSX/CSV/JSON/PDF)
 - Project chat sessions (AI agent, tool-using, evidence-linked)
+- Grounded Project Plan synthesis (Scope, Milestones, Risks, Dependencies with evidence grounding and Decision lineage)
 
 ### Explicitly Out of Scope Now
 Carried forward and generalized from legacy `README.md` and `SCOPE.md`:

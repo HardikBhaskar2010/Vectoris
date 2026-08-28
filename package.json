@@ -1,6 +1,6 @@
 {
   "name": "vectoris-frontend",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "AI-native Project Management & Project Intelligence workspace for electrical and MEP engineering, unifying drawing takeoff, document synthesis, and collaborative estimation.",
   "private": true,
   "type": "module",

@@ -82,19 +82,33 @@ sequenceDiagram
 
 This workflow does not change the invitation mechanism already specified in `USER_ROLES.md` §4. It adds an optional Discipline Role tag and a Project Intelligence-driven landing experience — see `../DOMAIN/COLLABORATION.md` and `../DOMAIN/PROJECT_INTELLIGENCE.md`. Status: NEAR-TERM, OPEN DECISION (OD-25) — not yet authorized for build.
 
-## 6b. Workflow: Project Understanding Synthesis (NEAR-TERM — see `../DOMAIN/PROJECT_INTELLIGENCE.md`)
+## 6b. Workflow: Grounded Project Plan Synthesis & Review (MVP — see `../PLAN.md` & `../DOMAIN/PROJECT_INTELLIGENCE.md`)
 
-```text
-User asks (in Investigation Workshop, project-scoped): "Explain this project to me" / "What's unresolved?"
-   -> Agent reads across: documents, takeoff state, prior sessions, decisions, activity
-   -> Agent classifies each claim: known-from-evidence / inferred / human-decided / unresolved
-   -> Agent responds, evidence-linked, explicitly marking gaps as gaps (not silently omitted)
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant IW as Investigation Workshop / UI
+    participant AI as Agent Runtime (Brain)
+    participant DB as Postgres (Guarded RPCs)
+
+    U->>IW: Request Plan Synthesis / Re-synthesis (select documents)
+    IW->>AI: Trigger propose_project_plan_revision
+    AI->>DB: create_project_plan_draft()
+    DB-->>IW: Draft created with stable claim IDs, grounding & conflict markers
+    IW->>U: Present claim-level diff (Active vs Draft)
+    alt Conflict with active Decision exists
+        U->>IW: Resolve Decision conflict (Accept / Keep / Custom)
+    end
+    U->>DB: accept_project_plan_draft(draft_id, resolutions)
+    DB->>DB: Atomically apply Decisions, mark active, supersede prior active version
+    DB-->>IW: Active Project Plan updated
 ```
 
-This is the same evidence-linking discipline `AI_SESSION.md` §AI Behavior already requires for single-document questions, applied at project scope. Status: NEAR-TERM, OPEN DECISION (OD-24) — requires a defined grounding procedure before build; see `../DOMAIN/PROJECT_INTELLIGENCE.md` §4.
+This ensures the non-negotiable pipeline is always preserved: AI proposes → System records draft → Human reviews claim-level diff → Human resolves conflicts → Guarded RPC atomically activates snapshot.
 
 ## 7. Cross-References
 
-- Page-level detail for each step: `../06_PAGES/*`
+- Page-level detail for each step: `../06_PAGES/*`, `../06_PAGES/PROJECT_PLAN.md`
+- Authoritative Project Plan specification: `../PLAN.md`
 - Navigation between states: `APP_FLOW.md`
 - Data captured at each step: `../03_ARCHITECTURE/DATA_MODEL.md`

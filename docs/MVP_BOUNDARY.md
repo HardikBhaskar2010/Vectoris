@@ -29,6 +29,7 @@
 | AI chat sessions | Project-scoped agentic sessions with tool-using Brain; multiple sessions per project |
 | Agentic AI (Brain + Perception + Tools + Memory + Control) | Full agentic hybrid architecture at MVP — prompting/scaffolding first, fine-tuning later |
 | Audit / correction event ledger | Structured, append-only record; foundation for future learning pipeline |
+| Grounded Project Plan synthesis | Four fixed sections (Scope & outcomes, Milestones, Risks, Dependencies) with evidence grounding, stable claim identities, lineage tracking, and explicit Decision conflict resolution |
 
 ---
 
@@ -54,7 +55,6 @@ Downstream workflows and non-core capabilities reserved for future horizons:
 | Autonomous pricing decisions | Rejected — human approval is non-negotiable |
 | Full negotiation automation | Long-term |
 | Conduit/wire quantity estimation without validation | Long-term (requires validated spike) |
-| Deep automated cross-document synthesis ("explain this project") | Near-term (OD-24) — see `DOMAIN/PROJECT_INTELLIGENCE.md` |
 | Curated first-view by discipline role | Near-term (OD-25) — see `DOMAIN/COLLABORATION.md` |
 
 ---

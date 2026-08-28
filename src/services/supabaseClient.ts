@@ -9,8 +9,14 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "../data/database.types";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+const globalProcess = typeof globalThis !== "undefined" ? (globalThis as { process?: { env?: Record<string, string> } }).process : undefined;
+const env =
+  typeof import.meta !== "undefined" && import.meta.env
+    ? import.meta.env
+    : globalProcess?.env ?? {};
+
+const supabaseUrl = (env.VITE_SUPABASE_URL as string | undefined);
+const supabaseAnonKey = (env.VITE_SUPABASE_ANON_KEY as string | undefined);
 
 export const isSupabaseConfigured = (): boolean => {
   return Boolean(

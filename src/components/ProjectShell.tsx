@@ -69,6 +69,7 @@ interface ProjectShellProps {
 // ── Tab definitions (canonical, per PROJECT_NAVIGATION.md & PROJECT_INTELLIGENCE.md) ──
 const TABS: Tab[] = [
   { id: "overview",    label: "Overview",             segment: "" },
+  { id: "plan",        label: "Plan",                 segment: "plan" },
   { id: "documents",   label: "Documents",            segment: "documents" },
   { id: "workspace",   label: "Workspace",            segment: "workspace" },
   { id: "takeoff",     label: "Takeoff",              segment: "takeoff" },
@@ -76,7 +77,6 @@ const TABS: Tab[] = [
   { id: "engineering", label: "Engineering",          segment: "engineering", future: true },
   { id: "estimate",    label: "Estimate",             segment: "estimate",    future: true },
   { id: "bid",         label: "Bid",                  segment: "bid",         future: true },
-  { id: "activity",    label: "Activity / Decisions", segment: "activity",    future: true },
   { id: "reports",     label: "Reports",              segment: "reports" },
 ];
 

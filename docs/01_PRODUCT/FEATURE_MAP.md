@@ -23,6 +23,7 @@
 | Organizations, roles, invites | MVP | |
 | Multi-user concurrent projects | MVP | Conflict handling TBD |
 | Project chat sessions (agentic) | MVP | Tool-using agent scoped to project evidence |
+| Grounded Project Plan synthesis | MVP | Scope & outcomes, Milestones, Risks, Dependencies with evidence grounding and Decision lineage |
 | Session sharing/permissions | Near-term | Architecture supported at MVP; UI may lag |
 | Requirement-based entry (H2 pathway) | Near-term / Long-term | Requires Gate H2-1 through H2-4 pass (legacy `THESIS.md`) |
 | Application/where-used mapping | Near-term | Observed in historical BOQs, not yet built |

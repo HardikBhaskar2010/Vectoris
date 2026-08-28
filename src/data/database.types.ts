@@ -44,6 +44,18 @@ export type DbCorrectionType =
   | "other";
 export type DbExportFormat = "XLSX" | "CSV" | "JSON" | "PDF";
 export type MessageRole = "user" | "agent";
+export type DbPlanVersionStatus = "draft" | "active" | "superseded";
+export type DbClaimSection =
+  | "scope_outcomes"
+  | "milestones"
+  | "risks"
+  | "dependencies";
+export type DbClaimGrounding =
+  | "known_from_evidence"
+  | "inferred"
+  | "human_decided"
+  | "unresolved";
+export type DbLineageRelationship = "split" | "merge";
 
 export interface Database {
   public: {
@@ -621,6 +633,222 @@ export interface Database {
         };
         Relationships: [];
       };
+      plan_claim_identities: {
+        Row: {
+          claim_id: string;
+          project_id: string;
+          created_at: string;
+        };
+        Insert: {
+          claim_id?: string;
+          project_id: string;
+          created_at?: string;
+        };
+        Update: {
+          claim_id?: string;
+          project_id?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      project_plans: {
+        Row: {
+          id: string;
+          project_id: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          project_id: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          project_id?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      project_plan_versions: {
+        Row: {
+          id: string;
+          plan_id: string;
+          version_number: number;
+          status: DbPlanVersionStatus;
+          created_by: string;
+          created_at: string;
+          activated_at: string | null;
+          superseded_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          plan_id: string;
+          version_number: number;
+          status?: DbPlanVersionStatus;
+          created_by: string;
+          created_at?: string;
+          activated_at?: string | null;
+          superseded_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          plan_id?: string;
+          version_number?: number;
+          status?: DbPlanVersionStatus;
+          created_by?: string;
+          created_at?: string;
+          activated_at?: string | null;
+          superseded_at?: string | null;
+        };
+        Relationships: [];
+      };
+      plan_version_documents: {
+        Row: {
+          plan_version_id: string;
+          document_id: string;
+        };
+        Insert: {
+          plan_version_id: string;
+          document_id: string;
+        };
+        Update: {
+          plan_version_id?: string;
+          document_id?: string;
+        };
+        Relationships: [];
+      };
+      decisions: {
+        Row: {
+          id: string;
+          claim_id: string;
+          project_id: string;
+          decision_text: string;
+          rationale: string | null;
+          decided_by: string;
+          decided_at: string;
+          superseded_by: string | null;
+          superseded_at: string | null;
+          is_active: boolean;
+        };
+        Insert: {
+          id?: string;
+          claim_id: string;
+          project_id: string;
+          decision_text: string;
+          rationale?: string | null;
+          decided_by: string;
+          decided_at?: string;
+          superseded_by?: string | null;
+          superseded_at?: string | null;
+          is_active?: boolean;
+        };
+        Update: {
+          id?: string;
+          claim_id?: string;
+          project_id?: string;
+          decision_text?: string;
+          rationale?: string | null;
+          decided_by?: string;
+          decided_at?: string;
+          superseded_by?: string | null;
+          superseded_at?: string | null;
+          is_active?: boolean;
+        };
+        Relationships: [];
+      };
+      project_plan_claims: {
+        Row: {
+          id: string;
+          claim_id: string;
+          plan_version_id: string;
+          section: DbClaimSection;
+          content: string;
+          grounding: DbClaimGrounding;
+          evidence_links: Json;
+          inference_rationale: string | null;
+          unresolved_reason: string | null;
+          conflict_with_decision_id: string | null;
+          conflict_details: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          claim_id: string;
+          plan_version_id: string;
+          section: DbClaimSection;
+          content: string;
+          grounding: DbClaimGrounding;
+          evidence_links?: Json;
+          inference_rationale?: string | null;
+          unresolved_reason?: string | null;
+          conflict_with_decision_id?: string | null;
+          conflict_details?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          claim_id?: string;
+          plan_version_id?: string;
+          section?: DbClaimSection;
+          content?: string;
+          grounding?: DbClaimGrounding;
+          evidence_links?: Json;
+          inference_rationale?: string | null;
+          unresolved_reason?: string | null;
+          conflict_with_decision_id?: string | null;
+          conflict_details?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      claim_lineage: {
+        Row: {
+          id: string;
+          parent_claim_id: string;
+          child_claim_id: string;
+          relationship: DbLineageRelationship;
+          occurred_at: string;
+          triggering_plan_version_id: string;
+        };
+        Insert: {
+          id?: string;
+          parent_claim_id: string;
+          child_claim_id: string;
+          relationship: DbLineageRelationship;
+          occurred_at?: string;
+          triggering_plan_version_id: string;
+        };
+        Update: {
+          id?: string;
+          parent_claim_id?: string;
+          child_claim_id?: string;
+          relationship?: DbLineageRelationship;
+          occurred_at?: string;
+          triggering_plan_version_id?: string;
+        };
+        Relationships: [];
+      };
+      plan_chat_sessions: {
+        Row: {
+          plan_id: string;
+          chat_session_id: string;
+          created_at: string;
+        };
+        Insert: {
+          plan_id: string;
+          chat_session_id: string;
+          created_at?: string;
+        };
+        Update: {
+          plan_id?: string;
+          chat_session_id?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {};
     Functions: {
@@ -668,6 +896,36 @@ export interface Database {
         };
         Returns: string;
       };
+      create_project_plan_draft: {
+        Args: {
+          p_project_id: string;
+          p_document_ids: string[];
+          p_claims: Json;
+          p_lineage?: Json;
+        };
+        Returns: string;
+      };
+      accept_project_plan_draft: {
+        Args: {
+          p_draft_version_id: string;
+          p_decision_resolutions?: Json;
+        };
+        Returns: void;
+      };
+      reject_project_plan_draft: {
+        Args: {
+          p_draft_version_id: string;
+          p_reason?: string;
+        };
+        Returns: void;
+      };
+      start_plan_chat_session: {
+        Args: {
+          p_project_id: string;
+          p_title?: string;
+        };
+        Returns: string;
+      };
     };
     Enums: {
       org_role: OrgRole;
@@ -680,6 +938,10 @@ export interface Database {
       correction_type: DbCorrectionType;
       export_format: DbExportFormat;
       message_role: MessageRole;
+      plan_version_status: DbPlanVersionStatus;
+      claim_section: DbClaimSection;
+      claim_grounding: DbClaimGrounding;
+      lineage_relationship: DbLineageRelationship;
     };
   };
 }

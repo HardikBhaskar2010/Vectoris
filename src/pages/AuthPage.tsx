@@ -5,14 +5,35 @@ import { SystemNotice } from "../components/SystemNotice";
 import { useOnlineStatus } from "../hooks/useOnlineStatus";
 import { authService, type AuthResult } from "../services/authService";
 import { organizationService } from "../services/organizationService";
+import { isSupabaseConfigured } from "../services/supabaseClient";
 
-type AuthMode = "signin" | "signup";
-type FormStatus = "idle" | "submitting" | "blocked" | "success";
-type FormErrors = Partial<Record<"fullName" | "email" | "password", string>>;
+export type AuthMode = "signin" | "signup" | "forgot" | "reset";
+export type FormStatus = "idle" | "submitting" | "blocked" | "success";
+export type ForgotStatus = "idle" | "submitting" | "sent" | "blocked";
+export type ResetStatus = "idle" | "loading" | "submitting" | "success" | "expired" | "blocked";
+export type FormErrors = Partial<Record<"fullName" | "email" | "password" | "confirmPassword", string>>;
 
 function getInitialMode(): AuthMode {
-  const mode = new URLSearchParams(window.location.search).get("mode");
-  return mode === "signin" ? "signin" : "signup";
+  const params = new URLSearchParams(window.location.search);
+  const hash = window.location.hash;
+  const mode = params.get("mode");
+  const type = params.get("type");
+
+  if (
+    mode === "reset" ||
+    mode === "reset-password" ||
+    type === "recovery" ||
+    hash.includes("type=recovery")
+  ) {
+    return "reset";
+  }
+  if (mode === "forgot" || mode === "forgot-password") {
+    return "forgot";
+  }
+  if (mode === "signup") {
+    return "signup";
+  }
+  return "signin";
 }
 
 function readInviteContext() {
@@ -33,9 +54,10 @@ function readInviteContext() {
 }
 
 function validateField(
-  field: "fullName" | "email" | "password",
+  field: "fullName" | "email" | "password" | "confirmPassword",
   value: string,
   mode: AuthMode,
+  extra?: { password?: string }
 ): string {
   if (field === "fullName" && mode === "signup" && value.trim().length < 2) {
     return "Enter your full name so your organization can identify your approvals.";
@@ -45,6 +67,12 @@ function validateField(
   }
   if (field === "password" && value.length < 8) {
     return "Use at least 8 characters.";
+  }
+  if (field === "confirmPassword" && mode === "reset") {
+    if (!value) return "Confirm your new password.";
+    if (extra?.password && value !== extra.password) {
+      return "Passwords do not match.";
+    }
   }
   return "";
 }
@@ -97,6 +125,8 @@ export function AuthPage() {
       window.removeEventListener("themechange", handleThemeChange);
     };
   }, []);
+
+  // Standard Login / Signup State
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState(inviteContext.email);
   const [password, setPassword] = useState("");
@@ -104,6 +134,18 @@ export function AuthPage() {
   const [status, setStatus] = useState<FormStatus>("idle");
   const [errors, setErrors] = useState<FormErrors>({});
   const [formMessage, setFormMessage] = useState("");
+
+  // Forgot Password State
+  const [forgotEmail, setForgotEmail] = useState(inviteContext.email || "");
+  const [forgotStatus, setForgotStatus] = useState<ForgotStatus>("idle");
+  const [forgotResendCooldown, setForgotResendCooldown] = useState(0);
+
+  // Reset Password State
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [resetStatus, setResetStatus] = useState<ResetStatus>("idle");
 
   // Email verification check state
   const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(() => {
@@ -125,6 +167,14 @@ export function AuthPage() {
     return () => clearInterval(timer);
   }, [resendCooldown]);
 
+  useEffect(() => {
+    if (forgotResendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setForgotResendCooldown((prev) => prev - 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [forgotResendCooldown]);
+
   // Refs for transitions-dev sliding pill (tabs-sliding §16)
   const tabsRef = useRef<HTMLDivElement>(null);
   const pillRef = useRef<HTMLSpanElement>(null);
@@ -133,11 +183,12 @@ export function AuthPage() {
   const revertTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const isSignup = mode === "signup";
-  const isSubmitting = status === "submitting";
+  const isSubmitting = status === "submitting" || forgotStatus === "submitting" || resetStatus === "submitting";
   const canSubmit = isOnline && !inviteContext.isDenied && !isSubmitting;
 
   // ── Sliding pill: move pill to active tab (transitions-dev §16) ──────────
   const movePill = useCallback((animate: boolean) => {
+    if (mode === "forgot" || mode === "reset") return;
     const bar = tabsRef.current;
     const pill = pillRef.current;
     if (!bar || !pill) return;
@@ -155,19 +206,23 @@ export function AuthPage() {
       pill.style.transform = `translateX(${activeTab.offsetLeft}px)`;
       pill.style.width = `${activeTab.offsetWidth}px`;
     }
-  }, []);
+  }, [mode]);
 
   // Initialize pill on mount and window resize
   useEffect(() => {
-    requestAnimationFrame(() => movePill(false));
-    const onResize = () => movePill(false);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [movePill]);
+    if (mode === "signin" || mode === "signup") {
+      requestAnimationFrame(() => movePill(false));
+      const onResize = () => movePill(false);
+      window.addEventListener("resize", onResize);
+      return () => window.removeEventListener("resize", onResize);
+    }
+  }, [mode, movePill]);
 
   // Move pill when mode changes (animated)
   useEffect(() => {
-    requestAnimationFrame(() => movePill(true));
+    if (mode === "signin" || mode === "signup") {
+      requestAnimationFrame(() => movePill(true));
+    }
   }, [mode, movePill]);
 
   // ── Error shake: trigger shake animation on a field ──────────────────────
@@ -184,7 +239,7 @@ export function AuthPage() {
     void shakeTarget.offsetWidth; // reflow to replay
     shakeTarget.classList.add("is-shaking");
 
-    const shakeMs = 80 * 2 + 60 * 2; // matches --shake-dur-a * 2 + --shake-dur-b * 2
+    const shakeMs = 80 * 2 + 60 * 2;
     setTimeout(() => shakeTarget.classList.remove("is-shaking"), shakeMs + 20);
 
     if (revertTimers.current[fieldId]) clearTimeout(revertTimers.current[fieldId]);
@@ -200,19 +255,32 @@ export function AuthPage() {
     setErrors({});
     setFormMessage("");
     setStatus("idle");
-    // Preserve ?theme param when switching modes
+    if (nextMode === "forgot") {
+      setForgotStatus("idle");
+    }
+    if (nextMode === "reset") {
+      setResetStatus("idle");
+    }
     const params = new URLSearchParams(window.location.search);
     params.set("mode", nextMode);
     window.history.replaceState(null, "", `/auth?${params.toString()}`);
   };
 
-  // ── Inline blur validation (apple-design §16 — validate inline, not submit) ──
-  const handleBlur = (field: "fullName" | "email" | "password", value: string) => {
-    if (!value) return; // don't validate empty on first visit
-    const err = validateField(field, value, mode);
+  // ── Inline blur validation ───────────────────────────────────────────────
+  const handleBlur = (
+    field: "fullName" | "email" | "password" | "confirmPassword",
+    value: string
+  ) => {
+    if (!value) return;
+    const err = validateField(field, value, mode, { password: newPassword });
     if (err) {
       setErrors((prev) => ({ ...prev, [field]: err }));
-      const idMap = { fullName: "fullName", email: "email", password: "password" };
+      const idMap = {
+        fullName: "fullName",
+        email: mode === "forgot" ? "forgotEmail" : "email",
+        password: mode === "reset" ? "newPassword" : "password",
+        confirmPassword: "confirmPassword",
+      };
       triggerShake(idMap[field]);
     } else {
       setErrors((prev) => {
@@ -223,8 +291,10 @@ export function AuthPage() {
     }
   };
 
-  // Clear error when user starts typing (typing cancels auto-revert — §12)
-  const clearFieldError = (field: "fullName" | "email" | "password", fieldId: string) => {
+  const clearFieldError = (
+    field: "fullName" | "email" | "password" | "confirmPassword",
+    fieldId: string
+  ) => {
     if (errors[field]) {
       setErrors((prev) => {
         const next = { ...prev };
@@ -232,8 +302,9 @@ export function AuthPage() {
         return next;
       });
       const wrap = document.getElementById(fieldId)?.closest<HTMLElement>(".auth-field");
-      const shakeTarget = document.getElementById(fieldId)?.closest<HTMLElement>(".t-input")
-        ?? document.getElementById(fieldId);
+      const shakeTarget =
+        document.getElementById(fieldId)?.closest<HTMLElement>(".t-input") ??
+        document.getElementById(fieldId);
       if (wrap) wrap.classList.remove("is-error");
       if (shakeTarget) shakeTarget.classList.remove("is-error");
       if (revertTimers.current[fieldId]) {
@@ -245,9 +316,57 @@ export function AuthPage() {
 
   const { navigate } = useRouter();
 
+  // ── Auto-forward if already authenticated (Safeguarded against recovery sessions) ─
+  useEffect(() => {
+    if (!isSupabaseConfigured()) return;
+    let isMounted = true;
+
+    const params = new URLSearchParams(window.location.search);
+    const hash = window.location.hash;
+    const isRecoveryFlow =
+      mode === "reset" ||
+      mode === "forgot" ||
+      params.get("mode") === "reset" ||
+      params.get("mode") === "forgot" ||
+      params.get("type") === "recovery" ||
+      hash.includes("type=recovery");
+
+    if (isRecoveryFlow) {
+      return;
+    }
+
+    authService.getSession().then(async (session) => {
+      if (!isMounted) return;
+      if (session?.user && authService.isEmailConfirmed(session.user)) {
+        try {
+          const userOrgs = await organizationService.getUserOrganizations();
+          if (!isMounted) return;
+          if (userOrgs.length > 0) {
+            navigate("/dashboard", { replace: true });
+          } else {
+            navigate("/onboarding", { replace: true });
+          }
+        } catch {
+          if (isMounted) navigate("/onboarding", { replace: true });
+        }
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [navigate, mode]);
+
   // ── Desktop Deep-Link & URL Callback Listener ─────────────────────────────
   useEffect(() => {
-    const handleAuthSuccess = async () => {
+    const handleAuthSuccess = async (session: unknown, user: unknown, isRecovery?: boolean) => {
+      if (isRecovery) {
+        setMode("reset");
+        setResetStatus("idle");
+        setFormMessage("");
+        return;
+      }
+
       setStatus("success");
       setFormMessage("Email verified! Entering workstation…");
       setUnverifiedEmail(null);
@@ -267,9 +386,15 @@ export function AuthPage() {
       }
     };
 
-    const handleAuthError = (errMsg: string) => {
-      setStatus("blocked");
-      setFormMessage(errMsg);
+    const handleAuthError = (errMsg: string, isExpired?: boolean) => {
+      if (isExpired || mode === "reset") {
+        setMode("reset");
+        setResetStatus("expired");
+        setFormMessage(errMsg || "This password reset link is no longer valid.");
+      } else {
+        setStatus("blocked");
+        setFormMessage(errMsg);
+      }
     };
 
     const cleanup = authService.initializeDesktopAuthListener(
@@ -278,7 +403,7 @@ export function AuthPage() {
     );
 
     return () => cleanup();
-  }, [navigate]);
+  }, [navigate, mode]);
 
   // ── Background Verification Polling (Dual-Sync Resiliency) ─────────────────
   useEffect(() => {
@@ -377,6 +502,134 @@ export function AuthPage() {
     }
   };
 
+  // ── Forgot Password Submission ────────────────────────────────────────────
+  const handleForgotSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!isOnline) {
+      setForgotStatus("blocked");
+      setFormMessage("No connection detected. Vectoris needs network connectivity before requesting a password reset.");
+      return;
+    }
+
+    const emailErr = validateField("email", forgotEmail, "forgot");
+    if (emailErr) {
+      setErrors({ email: emailErr });
+      setForgotStatus("blocked");
+      setFormMessage("Enter a valid work email address.");
+      triggerShake("forgotEmail");
+      return;
+    }
+
+    setForgotStatus("submitting");
+    setFormMessage("");
+    setErrors({});
+
+    try {
+      const res = await authService.resetPasswordForEmail(forgotEmail);
+      if (res.success) {
+        setForgotStatus("sent");
+        setForgotResendCooldown(60);
+      } else {
+        setForgotStatus("blocked");
+        setFormMessage(res.error || "Unable to send reset link. Please try again.");
+        triggerShake("forgotEmail");
+      }
+    } catch (err: unknown) {
+      setForgotStatus("blocked");
+      const msg = err instanceof Error ? err.message : "Error requesting password reset.";
+      setFormMessage(msg);
+      triggerShake("forgotEmail");
+    }
+  };
+
+  const handleForgotResend = async () => {
+    if (forgotResendCooldown > 0 || forgotStatus === "submitting" || !forgotEmail) return;
+    try {
+      const res = await authService.resetPasswordForEmail(forgotEmail);
+      if (res.success) {
+        setFormMessage(`A new password reset link has been dispatched.`);
+        setForgotResendCooldown(60);
+      } else {
+        setFormMessage(res.error || "Failed to resend reset link.");
+      }
+    } catch {
+      setFormMessage("Error resending password reset link.");
+    }
+  };
+
+  // ── Reset Password Submission ─────────────────────────────────────────────
+  const handleResetSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!isOnline) {
+      setResetStatus("blocked");
+      setFormMessage("No connection detected. Vectoris needs network connectivity before updating your password.");
+      return;
+    }
+
+    const passErr = validateField("password", newPassword, "reset");
+    const confirmErr = validateField("confirmPassword", confirmPassword, "reset", { password: newPassword });
+
+    const nextErrors: FormErrors = {};
+    if (passErr) nextErrors.password = passErr;
+    if (confirmErr) nextErrors.confirmPassword = confirmErr;
+    setErrors(nextErrors);
+
+    if (Object.keys(nextErrors).length > 0) {
+      setResetStatus("blocked");
+      setFormMessage("Resolve the highlighted fields before continuing.");
+      if (nextErrors.password) triggerShake("newPassword");
+      if (nextErrors.confirmPassword) triggerShake("confirmPassword");
+      return;
+    }
+
+    setResetStatus("submitting");
+    setFormMessage("");
+
+    try {
+      const res = await authService.updatePassword(newPassword);
+      if (res.success) {
+        setResetStatus("success");
+        setFormMessage("Your password has been updated successfully.");
+      } else {
+        const lower = (res.error || "").toLowerCase();
+        if (
+          lower.includes("expired") ||
+          lower.includes("invalid") ||
+          lower.includes("session") ||
+          lower.includes("token")
+        ) {
+          setResetStatus("expired");
+          setFormMessage("This password reset session has expired. Request a new link to continue.");
+        } else {
+          setResetStatus("blocked");
+          setFormMessage(res.error || "Failed to update password. Please check requirements and try again.");
+          triggerShake("newPassword");
+        }
+      }
+    } catch (err: unknown) {
+      setResetStatus("blocked");
+      const msg = err instanceof Error ? err.message : "Error updating password.";
+      setFormMessage(msg);
+      triggerShake("newPassword");
+    }
+  };
+
+  const handleResetSuccessContinue = async () => {
+    try {
+      await authService.signOut();
+    } catch {
+      // Ignore sign out error
+    }
+    setNewPassword("");
+    setConfirmPassword("");
+    setPassword("");
+    setResetStatus("idle");
+    switchMode("signin");
+  };
+
+  // ── Standard Sign In / Sign Up Submission ─────────────────────────────────
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -433,7 +686,7 @@ export function AuthPage() {
             ? "Account created successfully. Initializing workspace…"
             : "Credentials verified. Entering workstation…"
         );
-        
+
         // Resolve user organization membership
         const userOrgs = await organizationService.getUserOrganizations();
         const hasOrg = userOrgs.length > 0;
@@ -510,7 +763,9 @@ export function AuthPage() {
             </aside>
           ) : null}
 
-          {/* Conditional: Verification Required Screen vs Standard Auth Form */}
+          {/* ══════════════════════════════════════════════════════════
+              VIEW 1: Email Verification Required
+             ══════════════════════════════════════════════════════════ */}
           {unverifiedEmail ? (
             <div className="auth-verification-view" style={{ padding: "8px 0" }}>
               <div className="auth-heading" style={{ marginBottom: "20px" }}>
@@ -572,7 +827,11 @@ export function AuthPage() {
 
               {verificationFeedback && (
                 <div
-                  className={verificationFeedback.includes("verified") || verificationFeedback.includes("confirmed") ? "auth-alert auth-alert--success" : "auth-alert"}
+                  className={
+                    verificationFeedback.includes("verified") || verificationFeedback.includes("confirmed")
+                      ? "auth-alert auth-alert--success"
+                      : "auth-alert"
+                  }
                   style={{ marginBottom: "20px" }}
                   role="status"
                 >
@@ -644,9 +903,453 @@ export function AuthPage() {
                 </button>
               </div>
             </div>
+          ) : mode === "forgot" ? (
+            /* ══════════════════════════════════════════════════════════
+                VIEW 2: Forgot Password Flow
+               ══════════════════════════════════════════════════════════ */
+            forgotStatus === "sent" ? (
+              /* Neutral Confirmation State (Email Enumeration Protection) */
+              <div className="auth-verification-view" style={{ padding: "8px 0" }}>
+                <div className="auth-heading" style={{ marginBottom: "20px" }}>
+                  <h1 id="auth-title">Check your work email</h1>
+                  <span>
+                    If an account exists for <strong>{forgotEmail}</strong>, we've sent a password reset link.
+                  </span>
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: "12px",
+                    padding: "14px 16px",
+                    borderRadius: "8px",
+                    background: "rgba(16, 185, 129, 0.1)",
+                    border: "1px solid rgba(16, 185, 129, 0.28)",
+                    marginBottom: "20px",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: "8px",
+                      height: "8px",
+                      borderRadius: "50%",
+                      background: "#10b981",
+                      boxShadow: "0 0 8px rgba(16, 185, 129, 0.6)",
+                      marginTop: "5px",
+                      flexShrink: 0,
+                    }}
+                    aria-hidden="true"
+                  />
+                  <div>
+                    <div
+                      style={{
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        color: "#34d399",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.06em",
+                      }}
+                    >
+                      Status: Reset Link Dispatched
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "12px",
+                        color: "var(--app-text-secondary, #cbd5e1)",
+                        marginTop: "4px",
+                        lineHeight: "1.4",
+                      }}
+                    >
+                      Click the link in the email to create a new password. If you don't see the email, check your spam or junk folder.
+                    </div>
+                  </div>
+                </div>
+
+                {formMessage ? (
+                  <div className="auth-alert auth-alert--success" style={{ marginBottom: "20px" }} role="status">
+                    {formMessage}
+                  </div>
+                ) : null}
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  <button
+                    type="button"
+                    className="btn btn--secondary"
+                    onClick={handleForgotResend}
+                    disabled={forgotResendCooldown > 0 || isSubmitting}
+                    style={{
+                      width: "100%",
+                      padding: "10px",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                    }}
+                  >
+                    {forgotResendCooldown > 0
+                      ? `Resend link in ${forgotResendCooldown}s`
+                      : "Resend reset link"}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn btn--ghost"
+                    onClick={() => switchMode("signin")}
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      fontSize: "13px",
+                      color: "var(--app-text-muted, #94a3b8)",
+                      marginTop: "6px",
+                    }}
+                  >
+                    ← Back to Sign In
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* Request Reset Form */
+              <>
+                <div className="auth-heading">
+                  <h1 id="auth-title">Reset your password</h1>
+                  <span>
+                    Enter your work email address and we'll send a secure link to reset your password.
+                  </span>
+                </div>
+
+                {formMessage ? (
+                  <div className="auth-alert" role="alert" tabIndex={-1}>
+                    {formMessage}
+                  </div>
+                ) : null}
+
+                <form className="auth-form" noValidate onSubmit={handleForgotSubmit}>
+                  <div className="auth-field t-input-wrap">
+                    <label htmlFor="forgotEmail">Work email</label>
+                    <div className="t-input">
+                      <input
+                        id="forgotEmail"
+                        name="forgotEmail"
+                        type="email"
+                        autoComplete="email"
+                        value={forgotEmail}
+                        onChange={(e) => {
+                          setForgotEmail(e.target.value);
+                          clearFieldError("email", "forgotEmail");
+                        }}
+                        onBlur={(e) => handleBlur("email", e.target.value)}
+                        aria-invalid={Boolean(errors.email)}
+                        aria-describedby={errors.email ? "forgotEmail-error" : undefined}
+                        disabled={isSubmitting}
+                        placeholder="jane.doe@company.com"
+                      />
+                    </div>
+                    {errors.email ? (
+                      <p id="forgotEmail-error" className="t-error-msg auth-field__error">
+                        {errors.email}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <button className="auth-submit" type="submit" disabled={!canSubmit}>
+                    {forgotStatus === "submitting" ? "Sending reset link…" : "Send reset link"}
+                  </button>
+                </form>
+
+                <div className="auth-secondary-actions">
+                  <button type="button" onClick={() => switchMode("signin")}>
+                    ← Back to sign in
+                  </button>
+                </div>
+              </>
+            )
+          ) : mode === "reset" ? (
+            /* ══════════════════════════════════════════════════════════
+                VIEW 3: Reset Password Flow
+               ══════════════════════════════════════════════════════════ */
+            resetStatus === "expired" ? (
+              /* Expired / Invalid Session State */
+              <div className="auth-verification-view" style={{ padding: "8px 0" }}>
+                <div className="auth-heading" style={{ marginBottom: "20px" }}>
+                  <h1 id="auth-title">Reset link expired</h1>
+                  <span>
+                    This password reset link is no longer valid. Request a new one to continue.
+                  </span>
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: "12px",
+                    padding: "14px 16px",
+                    borderRadius: "8px",
+                    background: "rgba(239, 68, 68, 0.1)",
+                    border: "1px solid rgba(239, 68, 68, 0.3)",
+                    marginBottom: "20px",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: "8px",
+                      height: "8px",
+                      borderRadius: "50%",
+                      background: "#ef4444",
+                      boxShadow: "0 0 8px rgba(239, 68, 68, 0.6)",
+                      marginTop: "5px",
+                      flexShrink: 0,
+                    }}
+                    aria-hidden="true"
+                  />
+                  <div>
+                    <div
+                      style={{
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        color: "#f87171",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.06em",
+                      }}
+                    >
+                      Status: Link Expired or Used
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "12px",
+                        color: "var(--app-text-secondary, #cbd5e1)",
+                        marginTop: "4px",
+                        lineHeight: "1.4",
+                      }}
+                    >
+                      For security, password reset links expire after a limited period or upon first use.
+                    </div>
+                  </div>
+                </div>
+
+                {formMessage ? (
+                  <div className="auth-alert" style={{ marginBottom: "20px" }} role="alert">
+                    {formMessage}
+                  </div>
+                ) : null}
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  <button
+                    type="button"
+                    className="btn btn--primary"
+                    onClick={() => switchMode("forgot")}
+                    style={{
+                      width: "100%",
+                      padding: "12px",
+                      fontSize: "14px",
+                      fontWeight: 600,
+                    }}
+                  >
+                    Request a new reset link
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn btn--ghost"
+                    onClick={() => switchMode("signin")}
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      fontSize: "13px",
+                      color: "var(--app-text-muted, #94a3b8)",
+                      marginTop: "6px",
+                    }}
+                  >
+                    ← Back to Sign In
+                  </button>
+                </div>
+              </div>
+            ) : resetStatus === "success" ? (
+              /* Success State */
+              <div className="auth-verification-view" style={{ padding: "8px 0" }}>
+                <div className="auth-heading" style={{ marginBottom: "20px" }}>
+                  <h1 id="auth-title">Password updated</h1>
+                  <span>Your Vectoris password has been changed successfully.</span>
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: "12px",
+                    padding: "14px 16px",
+                    borderRadius: "8px",
+                    background: "rgba(16, 185, 129, 0.1)",
+                    border: "1px solid rgba(16, 185, 129, 0.28)",
+                    marginBottom: "20px",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: "8px",
+                      height: "8px",
+                      borderRadius: "50%",
+                      background: "#10b981",
+                      boxShadow: "0 0 8px rgba(16, 185, 129, 0.6)",
+                      marginTop: "5px",
+                      flexShrink: 0,
+                    }}
+                    aria-hidden="true"
+                  />
+                  <div>
+                    <div
+                      style={{
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        color: "#34d399",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.06em",
+                      }}
+                    >
+                      Status: Password Successfully Updated
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "12px",
+                        color: "var(--app-text-secondary, #cbd5e1)",
+                        marginTop: "4px",
+                        lineHeight: "1.4",
+                      }}
+                    >
+                      You can now sign in with your updated credentials.
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  <button
+                    type="button"
+                    className="btn btn--primary"
+                    onClick={handleResetSuccessContinue}
+                    style={{
+                      width: "100%",
+                      padding: "12px",
+                      fontSize: "14px",
+                      fontWeight: 600,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "8px",
+                    }}
+                  >
+                    <span>Continue to sign in</span>
+                    <span>→</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* Create New Password Form */
+              <>
+                <div className="auth-heading">
+                  <h1 id="auth-title">Create a new password</h1>
+                  <span>Choose a new, secure password for your Vectoris account.</span>
+                </div>
+
+                {formMessage ? (
+                  <div className="auth-alert" role="alert" tabIndex={-1}>
+                    {formMessage}
+                  </div>
+                ) : null}
+
+                <form className="auth-form" noValidate onSubmit={handleResetSubmit}>
+                  <div className="auth-field t-input-wrap">
+                    <label htmlFor="newPassword">New password</label>
+                    <div className="password-control t-input">
+                      <input
+                        id="newPassword"
+                        name="newPassword"
+                        type={showNewPassword ? "text" : "password"}
+                        autoComplete="new-password"
+                        value={newPassword}
+                        onChange={(e) => {
+                          setNewPassword(e.target.value);
+                          clearFieldError("password", "newPassword");
+                        }}
+                        onBlur={(e) => handleBlur("password", e.target.value)}
+                        aria-invalid={Boolean(errors.password)}
+                        aria-describedby={errors.password ? "newPassword-error newPassword-hint" : "newPassword-hint"}
+                        disabled={isSubmitting}
+                        placeholder="••••••••"
+                      />
+                      <button
+                        type="button"
+                        className="password-control__toggle"
+                        aria-label={showNewPassword ? "Hide password" : "Show password"}
+                        aria-pressed={showNewPassword}
+                        onClick={() => setShowNewPassword((c) => !c)}
+                        disabled={isSubmitting}
+                      >
+                        {showNewPassword ? "Hide" : "Show"}
+                      </button>
+                    </div>
+                    {errors.password ? (
+                      <p id="newPassword-error" className="t-error-msg auth-field__error">
+                        {errors.password}
+                      </p>
+                    ) : null}
+                    <span id="newPassword-hint" className="auth-field__hint">
+                      Use at least 8 characters.
+                    </span>
+                  </div>
+
+                  <div className="auth-field t-input-wrap">
+                    <label htmlFor="confirmPassword">Confirm new password</label>
+                    <div className="password-control t-input">
+                      <input
+                        id="confirmPassword"
+                        name="confirmPassword"
+                        type={showConfirmPassword ? "text" : "password"}
+                        autoComplete="new-password"
+                        value={confirmPassword}
+                        onChange={(e) => {
+                          setConfirmPassword(e.target.value);
+                          clearFieldError("confirmPassword", "confirmPassword");
+                        }}
+                        onBlur={(e) => handleBlur("confirmPassword", e.target.value)}
+                        aria-invalid={Boolean(errors.confirmPassword)}
+                        aria-describedby={errors.confirmPassword ? "confirmPassword-error" : undefined}
+                        disabled={isSubmitting}
+                        placeholder="••••••••"
+                      />
+                      <button
+                        type="button"
+                        className="password-control__toggle"
+                        aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                        aria-pressed={showConfirmPassword}
+                        onClick={() => setShowConfirmPassword((c) => !c)}
+                        disabled={isSubmitting}
+                      >
+                        {showConfirmPassword ? "Hide" : "Show"}
+                      </button>
+                    </div>
+                    {errors.confirmPassword ? (
+                      <p id="confirmPassword-error" className="t-error-msg auth-field__error">
+                        {errors.confirmPassword}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <button className="auth-submit" type="submit" disabled={!canSubmit}>
+                    {resetStatus === "submitting" ? "Updating password…" : "Update password"}
+                  </button>
+                </form>
+
+                <div className="auth-secondary-actions">
+                  <button type="button" onClick={() => switchMode("signin")}>
+                    ← Back to sign in
+                  </button>
+                </div>
+              </>
+            )
           ) : (
+            /* ══════════════════════════════════════════════════════════
+                VIEW 4: Standard Sign In / Sign Up Form
+               ══════════════════════════════════════════════════════════ */
             <>
-              {/* Heading — NO eyebrow label above h1 (impeccable craft-floor ban) */}
+              {/* Heading */}
               <div className="auth-heading">
                 <h1 id="auth-title">{isSignup ? "Create your account" : "Sign in to Vectoris"}</h1>
                 <span>
@@ -725,7 +1428,9 @@ export function AuthPage() {
                       />
                     </div>
                     {errors.fullName ? (
-                      <p id="fullName-error" className="t-error-msg auth-field__error">{errors.fullName}</p>
+                      <p id="fullName-error" className="t-error-msg auth-field__error">
+                        {errors.fullName}
+                      </p>
                     ) : null}
                   </div>
                 ) : null}
@@ -751,7 +1456,9 @@ export function AuthPage() {
                     />
                   </div>
                   {errors.email ? (
-                    <p id="email-error" className="t-error-msg auth-field__error">{errors.email}</p>
+                    <p id="email-error" className="t-error-msg auth-field__error">
+                      {errors.email}
+                    </p>
                   ) : null}
                 </div>
 
@@ -786,9 +1493,13 @@ export function AuthPage() {
                     </button>
                   </div>
                   {errors.password ? (
-                    <p id="password-error" className="t-error-msg auth-field__error">{errors.password}</p>
+                    <p id="password-error" className="t-error-msg auth-field__error">
+                      {errors.password}
+                    </p>
                   ) : null}
-                  <span id="password-hint" className="auth-field__hint">Password managers and paste are supported.</span>
+                  <span id="password-hint" className="auth-field__hint">
+                    Password managers and paste are supported.
+                  </span>
                 </div>
 
                 <button className="auth-submit" type="submit" disabled={!canSubmit}>
@@ -824,16 +1535,31 @@ export function AuthPage() {
                   </button>
                 </div>
               </div>
+
+              {/* Secondary actions */}
+              <div className="auth-secondary-actions">
+                {!isSignup ? (
+                  <button
+                    type="button"
+                    onClick={() => switchMode("forgot")}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "var(--auth-text-secondary)",
+                      cursor: "pointer",
+                      fontFamily: "var(--font-ui)",
+                      fontSize: "0.9rem",
+                    }}
+                  >
+                    Forgot password?
+                  </button>
+                ) : null}
+                <button type="button" onClick={() => switchMode(isSignup ? "signin" : "signup")}>
+                  {isSignup ? "Already have an account? Sign in" : "Need access? Create an account"}
+                </button>
+              </div>
             </>
           )}
-
-          {/* Secondary actions */}
-          <div className="auth-secondary-actions">
-            {!isSignup ? <Link to="/auth?mode=reset">Forgot password?</Link> : null}
-            <button type="button" onClick={() => switchMode(isSignup ? "signin" : "signup")}>
-              {isSignup ? "Already have an account? Sign in" : "Need access? Create an account"}
-            </button>
-          </div>
 
           {/* Dev / QA Testing Bypass */}
           <div
@@ -872,7 +1598,6 @@ export function AuthPage() {
 }
 
 // ── OAuth brand marks ─────────────────────────────────────────────────────
-// SVGs match official Google and Microsoft brand guidelines.
 
 function GoogleWordmark() {
   return (
@@ -884,7 +1609,6 @@ function GoogleWordmark() {
       aria-hidden="true"
       role="img"
     >
-      {/* Google "G" mark */}
       <g clipPath="url(#g-clip)">
         <path
           d="M10 4.18c1.56 0 2.95.54 4.05 1.44l3.01-3.01A9.72 9.72 0 0010 .5a9.75 9.75 0 00-8.7 5.35l3.5 2.72A5.81 5.81 0 0110 4.18z"
@@ -906,7 +1630,6 @@ function GoogleWordmark() {
       <defs>
         <clipPath id="g-clip"><rect width="19.5" height="19" x="0" y=".5"/></clipPath>
       </defs>
-      {/* "oogle" wordmark */}
       <text x="24" y="15" fontFamily="-apple-system,system-ui,sans-serif" fontSize="13" fontWeight="500" fill="currentColor" letterSpacing="-0.01em">Google</text>
     </svg>
   );
@@ -922,12 +1645,10 @@ function MicrosoftWordmark() {
       aria-hidden="true"
       role="img"
     >
-      {/* Microsoft 4-square logo */}
       <rect x="0"  y="0"  width="9" height="9" fill="#F25022"/>
       <rect x="10" y="0"  width="9" height="9" fill="#7FBA00"/>
       <rect x="0"  y="10" width="9" height="9" fill="#00A4EF"/>
       <rect x="10" y="10" width="9" height="9" fill="#FFB900"/>
-      {/* "Microsoft" wordmark */}
       <text x="24" y="15" fontFamily="-apple-system,system-ui,sans-serif" fontSize="13" fontWeight="500" fill="currentColor" letterSpacing="-0.01em">Microsoft</text>
     </svg>
   );

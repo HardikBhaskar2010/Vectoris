@@ -143,6 +143,9 @@ export function ProjectCard({
     return (
       <tr
         className="project-row"
+        data-context-type="project"
+        data-project-id={id}
+        data-project-name={name}
         onClick={() => onClick?.(project)}
         tabIndex={0}
         role="button"
@@ -213,6 +216,9 @@ export function ProjectCard({
     >
       <div
         className="t-tilt-card project-card"
+        data-context-type="project"
+        data-project-id={id}
+        data-project-name={name}
         ref={tiltCardRef}
         onClick={() => onClick?.(project)}
         tabIndex={0}

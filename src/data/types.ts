@@ -349,3 +349,113 @@ export interface EngineStatusInfo {
   sheets_indexed: number;
   version: string;
 }
+
+// ── Project Plan Types (docs/PLAN.md) ──────────────────────────────────────────
+
+export type PlanVersionStatus = "draft" | "active" | "superseded";
+
+export type ClaimSection =
+  | "scope_outcomes"
+  | "milestones"
+  | "risks"
+  | "dependencies";
+
+export type ClaimGrounding =
+  | "known_from_evidence"
+  | "inferred"
+  | "human_decided"
+  | "unresolved";
+
+export type LineageRelationship = "split" | "merge";
+
+export interface PlanClaimEvidenceLink {
+  document_id: string;
+  document_name?: string;
+  sheet_id?: string;
+  sheet_index?: number;
+  coordinates?: Coordinates;
+  note?: string;
+}
+
+export interface PlanClaim {
+  id: string;
+  claim_id: string;
+  plan_version_id: string;
+  section: ClaimSection;
+  content: string;
+  grounding: ClaimGrounding;
+  evidence_links: PlanClaimEvidenceLink[];
+  inference_rationale?: string | null;
+  unresolved_reason?: string | null;
+  conflict_with_decision_id?: string | null;
+  conflict_details?: string | null;
+  created_at?: string;
+}
+
+export interface PlanVersion {
+  id: string;
+  plan_id: string;
+  version_number: number;
+  status: PlanVersionStatus;
+  created_by: string;
+  created_at: string;
+  activated_at?: string | null;
+  superseded_at?: string | null;
+  claims: PlanClaim[];
+  documents?: ProjectDocument[];
+}
+
+export interface ProjectPlan {
+  id: string;
+  project_id: string;
+  created_at: string;
+  updated_at: string;
+  active_version?: PlanVersion | null;
+  draft_version?: PlanVersion | null;
+  version_history?: PlanVersion[];
+}
+
+export interface Decision {
+  id: string;
+  claim_id: string;
+  project_id: string;
+  decision_text: string;
+  rationale?: string | null;
+  decided_by: string;
+  decided_at: string;
+  superseded_by?: string | null;
+  superseded_at?: string | null;
+  is_active: boolean;
+}
+
+export interface ClaimLineage {
+  id: string;
+  parent_claim_id: string;
+  child_claim_id: string;
+  relationship: LineageRelationship;
+  occurred_at: string;
+  triggering_plan_version_id: string;
+}
+
+export interface DecisionResolution {
+  claim_id: string;
+  action: "accept_proposed" | "keep_existing" | "custom_decision";
+  custom_decision_text?: string;
+  rationale?: string;
+}
+
+export type ClaimDiffType = "added" | "removed" | "modified" | "unchanged";
+
+export interface ClaimDiffItem {
+  claim_id: string;
+  section: ClaimSection;
+  diff_type: ClaimDiffType;
+  active_claim?: PlanClaim;
+  draft_claim?: PlanClaim;
+  conflict?: {
+    decision_id: string;
+    decision_text: string;
+    conflict_details?: string;
+  };
+  lineage?: ClaimLineage[];
+}

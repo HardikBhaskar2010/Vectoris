@@ -14,6 +14,8 @@ export interface AuthResult {
   session?: Session | null;
   error?: string;
   isEmailUnconfirmed?: boolean;
+  isRecovery?: boolean;
+  isExpired?: boolean;
 }
 
 export interface SignUpParams {
@@ -24,6 +26,14 @@ export interface SignUpParams {
 
 export interface SignInParams {
   email: string;
+  password: string;
+}
+
+export interface ResetPasswordParams {
+  email: string;
+}
+
+export interface UpdatePasswordParams {
   password: string;
 }
 
@@ -39,17 +49,10 @@ class AuthService {
   }
 
   /**
-   * Resolves the appropriate authentication redirect URL based on runtime environment.
-   * - Installed Tauri Desktop: "vectoris://auth-callback"
-   * - Web Development: "http://localhost:5173/auth?mode=callback" (or current origin)
+   * Resolves the primary authentication redirect URL.
+   * "vectoris://auth-callback" is the main canonical URL for accepting user authentication in the app.
    */
   public getAuthRedirectUrl(): string {
-    if (this.isTauriEnvironment()) {
-      return "vectoris://auth-callback";
-    }
-    if (typeof window !== "undefined" && window.location) {
-      return `${window.location.origin}/auth?mode=callback`;
-    }
     return "vectoris://auth-callback";
   }
 
@@ -183,7 +186,7 @@ class AuthService {
   }
 
   /**
-   * Resends the verification confirmation email.
+   * Resends the verification confirmation email with the canonical vectoris://auth-callback redirect.
    */
   public async resendVerificationEmail(email: string): Promise<{ success: boolean; error?: string }> {
     if (!isSupabaseConfigured()) {
@@ -194,6 +197,9 @@ class AuthService {
       const { error } = await supabase.auth.resend({
         type: "signup",
         email: email.trim(),
+        options: {
+          emailRedirectTo: this.getAuthRedirectUrl(),
+        },
       });
 
       if (error) {
@@ -204,6 +210,87 @@ class AuthService {
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to resend confirmation email.";
       return { success: false, error: message };
+    }
+  }
+
+  /**
+   * Dispatches a secure password reset link to the given work email.
+   * Uses email enumeration protection: always returns success to the UI unless a hard network/rate-limit error occurs.
+   */
+  public async resetPasswordForEmail(email: string): Promise<{ success: boolean; error?: string }> {
+    if (!isSupabaseConfigured()) {
+      return { success: true };
+    }
+
+    const redirectTo = this.getAuthRedirectUrl();
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo,
+      });
+
+      if (error) {
+        const lower = (error.message || "").toLowerCase();
+        // Rate limit errors should be reported honestly without leaking email existence
+        if (lower.includes("rate limit") || lower.includes("too many requests")) {
+          return {
+            success: false,
+            error: "Too many reset attempts. Please wait a few minutes before trying again.",
+          };
+        }
+        // Log safe internal warning without leaking sensitive user details
+        console.warn("Auth: reset password dispatch notice handled safely.");
+      }
+
+      // Neutral success response prevents email enumeration
+      return { success: true };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Network error during password reset request.";
+      return {
+        success: false,
+        error: msg,
+      };
+    }
+  }
+
+  /**
+   * Updates the password for the current authenticated recovery user.
+   */
+  public async updatePassword(newPassword: string): Promise<{ success: boolean; user?: User | null; error?: string }> {
+    if (!isSupabaseConfigured()) {
+      return { success: true };
+    }
+
+    try {
+      const { data, error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (error) {
+        let userFacingError = error.message;
+        const lower = (error.message || "").toLowerCase();
+        if (lower.includes("same_password") || lower.includes("should be different")) {
+          userFacingError = "New password must be different from your previous password.";
+        } else if (lower.includes("password should be at least")) {
+          userFacingError = "Password must be at least 8 characters.";
+        }
+
+        return {
+          success: false,
+          error: userFacingError,
+        };
+      }
+
+      return {
+        success: true,
+        user: data.user,
+      };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to update password.";
+      return {
+        success: false,
+        error: msg,
+      };
     }
   }
 
@@ -358,15 +445,23 @@ class AuthService {
       return { success: false, error: "Supabase connection is not configured." };
     }
 
-    const { accessToken, refreshToken, code, error, errorDescription } =
+    const { accessToken, refreshToken, code, type, error, errorDescription } =
       this.extractAuthParams(rawUrlOrFragment);
 
     if (error || errorDescription) {
+      const errText = errorDescription || error || "Authentication verification failed.";
+      const isExpired =
+        errText.toLowerCase().includes("expired") ||
+        errText.toLowerCase().includes("invalid") ||
+        errText.toLowerCase().includes("access_denied");
       return {
         success: false,
-        error: errorDescription || error || "Authentication verification failed.",
+        error: errText,
+        isExpired,
       };
     }
+
+    const isRecovery = type === "recovery";
 
     try {
       if (accessToken && refreshToken) {
@@ -386,7 +481,8 @@ class AuthService {
         }
 
         if (sessionError) {
-          return { success: false, error: sessionError.message };
+          const isExpired = sessionError.message.toLowerCase().includes("expired");
+          return { success: false, error: sessionError.message, isExpired };
         }
 
         return {
@@ -394,6 +490,7 @@ class AuthService {
           user: data.user,
           session: data.session,
           isEmailUnconfirmed: false,
+          isRecovery,
         };
       }
 
@@ -410,7 +507,8 @@ class AuthService {
         }
 
         if (exchangeError) {
-          return { success: false, error: exchangeError.message };
+          const isExpired = exchangeError.message.toLowerCase().includes("expired");
+          return { success: false, error: exchangeError.message, isExpired };
         }
 
         return {
@@ -418,6 +516,7 @@ class AuthService {
           user: data.user,
           session: data.session,
           isEmailUnconfirmed: false,
+          isRecovery,
         };
       }
 
@@ -433,20 +532,25 @@ class AuthService {
    * as well as web URL fragment checks on initial application mount.
    */
   public initializeDesktopAuthListener(
-    onAuthSuccess?: (session: Session, user: User) => void,
-    onAuthError?: (errorMsg: string) => void
+    onAuthSuccess?: (session: Session, user: User, isRecovery?: boolean) => void,
+    onAuthError?: (errorMsg: string, isExpired?: boolean) => void
   ): () => void {
     let isDisposed = false;
     let deepLinkUnlisten: (() => void) | null = null;
 
     const processIncoming = async (urlStr: string) => {
       if (isDisposed || !urlStr) return;
-      if (urlStr.includes("access_token") || urlStr.includes("code=") || urlStr.includes("error=")) {
+      if (
+        urlStr.includes("access_token") ||
+        urlStr.includes("code=") ||
+        urlStr.includes("error=") ||
+        urlStr.includes("type=recovery")
+      ) {
         const res = await this.handleAuthCallback(urlStr);
         if (res.success && res.session && res.user) {
-          onAuthSuccess?.(res.session, res.user);
+          onAuthSuccess?.(res.session, res.user, res.isRecovery);
         } else if (res.error) {
-          onAuthError?.(res.error);
+          onAuthError?.(res.error, res.isExpired);
         }
       }
     };
