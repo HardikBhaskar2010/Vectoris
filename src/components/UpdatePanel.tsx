@@ -222,7 +222,7 @@ export function UpdatePanel() {
               <button
                 type="button"
                 className="btn btn--primary"
-                onClick={status === "download-failed" ? handleDownloadAndInstall : handleCheck}
+                onClick={handleCheck}
               >
                 <IconRefresh aria-hidden="true" />
                 Try Again

@@ -408,6 +408,9 @@ export class UpdateService {
       const errorString = err instanceof Error ? err.message : String(err);
       console.error("Vectoris update download/install failed:", errorString);
 
+      // Invalidate active update instance on failure so retries force a clean check
+      this.activeTauriUpdate = null;
+
       this.emitState({
         status: "download-failed",
         errorMessage: "The update could not be downloaded. Your current Vectoris installation has not been changed.",
@@ -423,6 +426,7 @@ export class UpdateService {
    */
   public dismiss(): void {
     if (this.isDownloading) return;
+    this.activeTauriUpdate = null;
     this.emitState({
       status: "idle",
       errorMessage: null,
