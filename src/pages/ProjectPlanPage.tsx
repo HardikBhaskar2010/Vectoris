@@ -18,7 +18,6 @@ import {
   useSessions,
 } from "../services/dataService";
 import { projectPlanService } from "../services/projectPlanService";
-import { agentRuntime } from "../ai/runtime/agentRuntime";
 import type {
   PlanClaim,
   PlanVersion,

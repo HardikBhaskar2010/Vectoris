@@ -229,7 +229,7 @@ class TakeoffService {
     sheets: Sheet[];
     detections: Detection[];
     lineItems: LineItem[];
-  }): Promise<{ success: boolean; error?: string }> {
+  }): Promise<{ success: boolean; isOfflineQueued?: boolean; error?: string }> {
     if (!isSupabaseConfigured() || params.projectId.startsWith("p-") || params.projectId.startsWith("proj-")) {
       return { success: true };
     }
@@ -245,7 +245,7 @@ class TakeoffService {
         detections: params.detections,
         lineItems: params.lineItems,
       });
-      return { success: true };
+      return { success: true, isOfflineQueued: true };
     }
 
     try {
@@ -271,7 +271,11 @@ class TakeoffService {
           .upsert(sheetInserts, { onConflict: "document_id,sheet_index" })
           .select();
 
-        if (!sheetError && dbSheets) {
+        if (sheetError) {
+          throw new Error(`Failed to persist sheets: ${sheetError.message}`);
+        }
+
+        if (dbSheets) {
           dbSheets.forEach((dbS, idx) => {
             const localSheet = params.sheets[idx];
             if (localSheet) {
@@ -297,13 +301,20 @@ class TakeoffService {
         .select()
         .single();
 
-      if (!runError && runData) {
+      if (runError) {
+        throw new Error(`Failed to create takeoff run: ${runError.message}`);
+      }
+
+      if (runData) {
         takeoffRunId = runData.id;
         // Link document to takeoff run
-        await supabase.from("takeoff_run_documents").upsert({
+        const { error: linkError } = await supabase.from("takeoff_run_documents").upsert({
           takeoff_run_id: takeoffRunId,
           document_id: params.documentId,
         });
+        if (linkError) {
+          console.warn("Failed to link takeoff run document:", linkError.message);
+        }
       }
 
       // 3. Persist detections to Supabase 'detections' table
@@ -324,7 +335,10 @@ class TakeoffService {
             };
           });
 
-          await (supabase.from("detections") as any).insert(detectionInserts);
+          const { error: detError } = await (supabase.from("detections") as any).insert(detectionInserts);
+          if (detError) {
+            throw new Error(`Failed to insert detections: ${detError.message}`);
+          }
         }
       }
 
@@ -341,20 +355,27 @@ class TakeoffService {
           status: "proposed" as const,
         }));
 
-        await (supabase.from("line_items") as any).insert(lineItemInserts);
+        const { error: lineItemError } = await (supabase.from("line_items") as any).insert(lineItemInserts);
+        if (lineItemError) {
+          throw new Error(`Failed to insert line items: ${lineItemError.message}`);
+        }
       }
 
       // 5. Update document status in Supabase 'documents' table
-      await (supabase
+      const { error: docError } = await (supabase
         .from("documents") as any)
         .update({
           upload_status: "complete",
         })
         .eq("id", params.documentId);
 
+      if (docError) {
+        console.warn("Failed to update document upload_status on Supabase:", docError.message);
+      }
+
       return { success: true };
     } catch (err: any) {
-      console.warn("TakeoffService.persistProcessedDocumentResults remote error:", err);
+      console.warn("TakeoffService.persistProcessedDocumentResults error:", err);
       if (isNetworkOfflineError(err)) {
         offlineSyncService.enqueue("document_processed_batch", {
           projectId: params.projectId,
@@ -364,8 +385,9 @@ class TakeoffService {
           detections: params.detections,
           lineItems: params.lineItems,
         });
+        return { success: false, isOfflineQueued: true, error: err?.message || "Workstation offline, enqueued for retry" };
       }
-      return { success: false, error: err?.message || "Failed to persist document processing to Supabase" };
+      return { success: false, isOfflineQueued: false, error: err?.message || "Failed to persist document processing to Supabase" };
     }
   }
 }

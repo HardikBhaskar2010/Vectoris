@@ -242,21 +242,27 @@ class DataService {
       const { sessionId, messageId, status, user, reason, role } = mut.payload as any;
       if (sessionId && messageId) {
         if (status === "approved") {
-          await this.approveProposal({
+          const res = await this.approveProposal({
             sessionId,
             messageId,
             userId: user,
             userRole: role || "Editor",
             reason,
           });
+          if (!res.success) {
+            throw new Error(res.error || "Failed to approve proposal on replay");
+          }
         } else if (status === "rejected") {
-          await this.rejectProposal({
+          const res = await this.rejectProposal({
             sessionId,
             messageId,
             userId: user,
             userRole: role || "Editor",
             reason,
           });
+          if (!res.success) {
+            throw new Error(res.error || "Failed to reject proposal on replay");
+          }
         }
       }
       return true;
@@ -265,16 +271,19 @@ class DataService {
     offlineSyncService.registerExecutor("document_processed_batch", async (mut) => {
       const { projectId, documentId, sheets, detections, lineItems } = mut.payload as any;
       if (projectId && documentId) {
-        await takeoffService.persistProcessedDocumentResults({
+        const res = await takeoffService.persistProcessedDocumentResults({
           projectId,
           documentId,
           sheets: sheets || [],
           detections: detections || [],
           lineItems: lineItems || [],
         });
+        if (!res.success) {
+          throw new Error(res.error || "Failed to persist document processing batch to Supabase");
+        }
         return true;
       }
-      return true;
+      return false;
     });
   }
 
@@ -1202,8 +1211,19 @@ class DataService {
           detections: result.detections,
           lineItems: result.lineItems,
         })
+        .then((res) => {
+          if (!res.success && !res.isOfflineQueued) {
+            console.error(`Document results remote sync failed for [${documentId}]:`, res.error);
+            doc.error_message = `Sync warning: Local processing complete, but remote database sync failed: ${res.error}`;
+            saveToStorage("documents", this.documents);
+            this.notify();
+          }
+        })
         .catch((syncErr) => {
-          console.warn("Async Supabase sync for processed document failed:", syncErr);
+          console.error("Document sync encountered unexpected error:", syncErr);
+          doc.error_message = `Sync error: ${syncErr?.message || "Failed to sync document results"}`;
+          saveToStorage("documents", this.documents);
+          this.notify();
         });
 
       this.notify();
