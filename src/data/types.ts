@@ -190,9 +190,9 @@ export interface LineItem {
   category: LineItemCategory;
   quantity: number;
   unit: LineItemUnit;
-  source_document_id: string;
-  source_document_name: string;
-  source_sheet: string;
+  source_document_id?: string;
+  source_document_name?: string;
+  source_sheet?: string;
   source_coordinates?: Coordinates | null;
   spatial_confidence?: "grounded" | "unavailable";
   status: LineItemStatus;
@@ -290,12 +290,14 @@ export interface ActionProposal {
   source_sheet?: string;
   evidence_provenance?: string;
   action_type?: string;
+  type?: string;
   status: "pending" | "approved" | "rejected";
   committed_at?: string;
   committed_by?: string;
   rejection_reason?: string;
   created_at?: string;
   project_id?: string;
+  payload?: any;
 }
 
 export interface MetricHighlight {

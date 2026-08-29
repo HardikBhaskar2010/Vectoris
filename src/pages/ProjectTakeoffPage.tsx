@@ -95,8 +95,8 @@ export default function ProjectTakeoffPage() {
         const match =
           item.name.toLowerCase().includes(q) ||
           item.item_code.toLowerCase().includes(q) ||
-          item.description.toLowerCase().includes(q) ||
-          item.source_sheet.toLowerCase().includes(q);
+          (item.description && item.description.toLowerCase().includes(q)) ||
+          (item.source_sheet && item.source_sheet.toLowerCase().includes(q));
         if (!match) return false;
       }
       return true;
@@ -389,15 +389,15 @@ export default function ProjectTakeoffPage() {
                         <td className="pt-col-source">
                           <div className="pt-source-cell">
                             <a
-                              href={`/project/${projectId}/workspace?doc=${item.source_document_id}&sheet=${encodeURIComponent(item.source_sheet)}`}
+                              href={`/project/${projectId}/workspace?doc=${item.source_document_id || ""}&sheet=${encodeURIComponent(item.source_sheet || "")}`}
                               className="pt-source-link"
                               onClick={(e) => e.stopPropagation()}
-                              title={`Jump to Drawing Evidence on ${item.source_sheet}`}
+                              title={`Jump to Drawing Evidence on ${item.source_sheet || "Sheet"}`}
                             >
                               <IconDrawingPin aria-hidden="true" />
-                              <span>{item.source_sheet}</span>
+                              <span>{item.source_sheet || "Direct"}</span>
                             </a>
-                            <span className="pt-source-doc">{item.source_document_name}</span>
+                            <span className="pt-source-doc">{item.source_document_name || "Investigation"}</span>
                           </div>
                         </td>
 
@@ -649,7 +649,7 @@ export default function ProjectTakeoffPage() {
                   </div>
 
                   <Link
-                    to={`/project/${projectId}/workspace?doc=${selectedItem.source_document_id}&sheet=${encodeURIComponent(selectedItem.source_sheet)}`}
+                    to={`/project/${projectId}/workspace?doc=${selectedItem.source_document_id || ""}&sheet=${encodeURIComponent(selectedItem.source_sheet || "")}`}
                     className="btn btn--secondary btn--sm pt-open-workspace-btn"
                   >
                     <IconWorkspace /> Open Bounding Region in Workspace

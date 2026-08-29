@@ -1873,15 +1873,17 @@ class DataService {
     const readableTimestamp = "Just now";
 
     // 3. Extract quantity, unit, category, metadata
-    const rawQty = msg.action_proposal.quantity;
+    const p = msg.action_proposal;
+    const payload = p.payload || {};
+    const rawQty = p.quantity !== undefined ? p.quantity : payload.quantity;
     const qty = typeof rawQty === "number" ? rawQty : parseFloat(String(rawQty).replace(/[^\d.]/g, "")) || 1;
-    const unit = ((msg.action_proposal.unit || "NOS") as string).toUpperCase() as LineItem["unit"];
-    const category = ((msg.action_proposal.category || "Power Distribution") as string) as LineItem["category"];
-    const itemCode = msg.action_proposal.item_code || "PROP-01";
-    const itemName = msg.action_proposal.item_name || msg.action_proposal.title;
-    const sheet = msg.action_proposal.source_sheet || msg.evidence?.sheet || "E-104";
-    const docId = msg.evidence?.doc_id || "doc-1";
-    const docName = msg.evidence?.doc_name || "Drawing Package";
+    const unit = ((p.unit || payload.unit || "NOS") as string).toUpperCase() as LineItem["unit"];
+    const category = ((p.category || payload.category || "Power Distribution") as string) as LineItem["category"];
+    const itemCode = p.item_code || payload.itemCode || payload.item_code || "PROP-01";
+    const itemName = p.item_name || payload.name || p.title;
+    const sheet = p.source_sheet || msg.evidence?.sheet;
+    const docId = msg.evidence?.doc_id;
+    const docName = msg.evidence?.doc_name;
     const reason = params.reason || `Approved via Investigation Session: ${session.title}`;
 
     // 4. Create immutable audit/correction record
@@ -1922,16 +1924,16 @@ class DataService {
         project_id: projectId,
         item_code: itemCode,
         name: itemName,
-        description: msg.action_proposal.description,
+        description: p.description || payload.description,
         specification: "Verified via Vectoris AI Investigation Workshop",
         category,
         quantity: qty,
         unit,
-        source_document_id: docId,
-        source_document_name: docName,
-        source_sheet: sheet,
+        source_document_id: docId || undefined,
+        source_document_name: docName || undefined,
+        source_sheet: sheet || undefined,
         status: "approved",
-        detection_source: "ai_detection",
+        detection_source: "human_created",
         model_version: "v2.4-native",
         reviewed_by: committerName,
         reviewed_at: readableTimestamp,

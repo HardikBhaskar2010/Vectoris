@@ -21,6 +21,8 @@ import { runEvidenceProvenanceTests } from "./services/evidenceProvenance.test";
 import { runHumanInTheLoopTests } from "./ai/humanInTheLoop.test";
 import { runInvestigationChatTests } from "./services/investigationChat.test";
 import { runPersistenceHonestyTests } from "./services/persistenceHonesty.test";
+import { runE2EForensicAudit } from "./services/e2eForensicAudit.test";
+import { runPilotValidation } from "./services/pilotValidation.test";
 
 export async function runAllTests() {
 
@@ -153,6 +155,24 @@ export async function runAllTests() {
     passed++;
   } catch (err) {
     console.error("❌ Honest Persistence & Offline Semantics test failure:", err);
+    failed++;
+  }
+
+  // 14. E2E Forensic Reality Audit (10 Real-World Chains)
+  try {
+    await runE2EForensicAudit();
+    passed++;
+  } catch (err) {
+    console.error("❌ E2E Forensic Reality Audit failure:", err);
+    failed++;
+  }
+
+  // 15. Real-World Electrical Engineer Pilot Validation (12 Steps)
+  try {
+    await runPilotValidation();
+    passed++;
+  } catch (err) {
+    console.error("❌ Pilot Validation failure:", err);
     failed++;
   }
 

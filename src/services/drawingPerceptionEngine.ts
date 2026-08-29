@@ -180,7 +180,7 @@ export class DrawingPerceptionEngine {
 
     // Tag and schedule regex matchers
     const qtyRegex = /\b(\d+(\.\d+)?)\s*(NOS|EA|MTR|RM|M|KGS|SETS|LOT|UNITS?)\b/i;
-    const panelTagRegex = /\b(LP-[A-Z0-9]+|DB-[A-Z0-9]+|MCCB-[0-9]+[A-Z]?|\d+A\s+MCCB|\d+kVA\s+TR|SWG-[0-9]+|TR-[0-9]+|PAC-[0-9]+|LT-[0-9]+[A-Z]?|EM-[0-9]+[A-Z]?)\b/i;
+    const panelTagRegex = /\b(MSB-[A-Z0-9]+|MDB-[A-Z0-9]+|XFMR-[A-Z0-9]+|LP-[A-Z0-9]+|DB-[A-Z0-9]+|MCCB-[0-9]+[A-Z]?|\d+A\s+MCCB|\d+A\s+MAIN\s+[A-Z\s]+|\d+kVA\s+TR|SWG-[0-9]+|TR-[0-9]+|PAC-[0-9]+|LT-[0-9]+[A-Z]?|EM-[0-9]+[A-Z]?)\b/i;
 
     // 1. Scan for explicit structured items or schedule rows
     for (const line of lines) {
