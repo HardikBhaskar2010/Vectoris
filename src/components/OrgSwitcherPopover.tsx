@@ -36,16 +36,21 @@ export function OrgSwitcherPopover({ isOpen, onClose, anchorRef }: OrgSwitcherPo
   useEffect(() => {
     if (!isOpen) return;
 
-    organizationService.getUserOrganizations().then((list) => {
-      setOrgs(list);
-      const current = organizationService.getActiveOrganizationId();
-      if (!current && list.length > 0) {
-        organizationService.setActiveOrganizationId(list[0].id);
-        setActiveOrgId(list[0].id);
-      } else {
-        setActiveOrgId(current);
-      }
-    });
+    organizationService
+      .getUserOrganizations()
+      .then((list) => {
+        setOrgs(list);
+        const current = organizationService.getActiveOrganizationId();
+        if (!current && list.length > 0) {
+          organizationService.setActiveOrganizationId(list[0].id);
+          setActiveOrgId(list[0].id);
+        } else {
+          setActiveOrgId(current);
+        }
+      })
+      .catch((err) => {
+        console.warn("OrgSwitcherPopover getUserOrganizations error:", err);
+      });
   }, [isOpen]);
 
   // Dynamically calculate and track anchor position

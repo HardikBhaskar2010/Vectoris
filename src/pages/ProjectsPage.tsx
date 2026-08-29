@@ -97,15 +97,20 @@ export default function ProjectsPage() {
       payload.notes ? `Notes: ${payload.notes}` : "",
     ].filter(Boolean).join("\n");
 
-    const newProj = await dataService.createProjectAsync({
-      name: payload.name,
-      description: fullDescription || payload.description,
-      client: payload.client,
-      sector: payload.sector,
-      discipline: payload.discipline,
-    });
-    setModalOpen(false);
-    navigate(`/project/${newProj.id}/documents`);
+    try {
+      const newProj = await dataService.createProjectAsync({
+        name: payload.name,
+        description: fullDescription || payload.description,
+        client: payload.client,
+        sector: payload.sector,
+        discipline: payload.discipline,
+      });
+      setModalOpen(false);
+      navigate(`/project/${newProj.id}/documents`);
+    } catch (err: any) {
+      console.error("Failed to create project:", err);
+      alert(err?.message || "Failed to create project. Please check network connection and try again.");
+    }
   };
 
   return (
@@ -361,14 +366,14 @@ export default function ProjectsPage() {
 
               <button
                 type="button"
-                className="btn btn--secondary"
+                className="btn btn--sample-cta"
                 onClick={() => {
                   dataService.seedSampleProject();
                 }}
-                style={{ padding: "11px 20px", fontSize: "13.5px", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "8px" }}
+                style={{ padding: "11px 22px", fontSize: "13.5px", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "8px" }}
               >
-                <AnimatedZap size={15} />
-                Load Sample Hyperscale Project
+                <AnimatedZap size={15} color="var(--app-amber, #f59e0b)" />
+                <span>Load Sample Hyperscale Project</span>
               </button>
             </div>
           </div>

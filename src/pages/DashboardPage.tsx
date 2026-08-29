@@ -426,12 +426,12 @@ function DashboardEmpty({ onOpenCreate }: { onOpenCreate: () => void }) {
 
           <button
             type="button"
-            className="btn btn--secondary"
+            className="btn btn--sample-cta"
             onClick={handleSeedSample}
             disabled={isSeeding}
-            style={{ padding: "12px 20px", fontSize: "14px", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "8px" }}
+            style={{ padding: "12px 22px", fontSize: "14px", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "8px" }}
           >
-            <AnimatedZap size={15} />
+            <AnimatedZap size={16} color="var(--app-amber, #f59e0b)" />
             <span>{isSeeding ? "Loading Sample…" : "Load Sample Hyperscale Project"}</span>
           </button>
         </div>
@@ -439,7 +439,7 @@ function DashboardEmpty({ onOpenCreate }: { onOpenCreate: () => void }) {
 
       {/* 4-Step Interactive Workflow */}
       <div style={{ marginBottom: "36px" }} data-tour="dashboard-workflow">
-        <h2 style={{ fontSize: "0.875rem", fontWeight: 700, color: "var(--app-text-muted, #94a3b8)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "16px" }}>
+        <h2 style={{ fontSize: "0.875rem", fontWeight: 700, color: "var(--app-text-primary)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "16px" }}>
           The 4-Stage Vectoris Workflow
         </h2>
 
@@ -448,8 +448,8 @@ function DashboardEmpty({ onOpenCreate }: { onOpenCreate: () => void }) {
           <div
             onClick={onOpenCreate}
             style={{
-              background: "var(--app-surface-1, #18191c)",
-              border: "1px solid var(--accent-primary, #3b82f6)",
+              background: "var(--app-surface-1)",
+              border: "1.5px solid var(--accent-primary, #3b82f6)",
               borderRadius: "10px",
               padding: "20px",
               cursor: "pointer",
@@ -458,15 +458,15 @@ function DashboardEmpty({ onOpenCreate }: { onOpenCreate: () => void }) {
             }}
           >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
-              <span style={{ fontSize: "12px", fontWeight: 700, color: "#60a5fa", background: "rgba(59, 130, 246, 0.15)", padding: "2px 8px", borderRadius: "4px" }}>
+              <span style={{ fontSize: "11.5px", fontWeight: 700, color: "#2563eb", background: "rgba(59, 130, 246, 0.15)", border: "1px solid rgba(59, 130, 246, 0.3)", padding: "2px 8px", borderRadius: "4px" }}>
                 Stage 1 · Active
               </span>
-              <span style={{ fontSize: "12px", color: "#60a5fa", fontWeight: 600 }}>Start →</span>
+              <span style={{ fontSize: "12px", color: "var(--app-accent, #3b82f6)", fontWeight: 700 }}>Start →</span>
             </div>
-            <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--app-text-primary, #f8fafc)", marginBottom: "6px" }}>
+            <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--app-text-primary)", marginBottom: "6px" }}>
               1. Define Project
             </div>
-            <p style={{ fontSize: "12.5px", color: "var(--app-text-secondary, #cbd5e1)", lineHeight: "1.45", margin: 0 }}>
+            <p style={{ fontSize: "12.5px", color: "var(--app-text-secondary)", lineHeight: "1.5", margin: 0 }}>
               Set up project metadata, client identity, engineering discipline, and facility scope.
             </p>
           </div>
@@ -474,23 +474,38 @@ function DashboardEmpty({ onOpenCreate }: { onOpenCreate: () => void }) {
           {/* Step 2 */}
           <div
             style={{
-              background: "var(--app-surface-1, #18191c)",
-              border: "1px solid var(--app-border, rgba(255, 255, 255, 0.08))",
+              background: "var(--app-surface-1)",
+              border: "1px solid var(--app-border-strong)",
               borderRadius: "10px",
               padding: "20px",
-              opacity: 0.85,
             }}
           >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
-              <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--app-text-muted, #94a3b8)" }}>
+              <span style={{ fontSize: "11.5px", fontWeight: 700, color: "var(--app-text-primary)", background: "var(--app-surface-2)", border: "1px solid var(--app-border)", padding: "2px 8px", borderRadius: "4px" }}>
                 Stage 2
               </span>
-              <span style={{ fontSize: "11px", color: "var(--app-text-muted, #64748b)" }}>Awaiting Step 1</span>
+              <span
+                style={{
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  color: "var(--app-text-primary)",
+                  background: "var(--app-surface-2)",
+                  border: "1px solid var(--app-border-strong)",
+                  padding: "3px 9px",
+                  borderRadius: "12px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "5px",
+                }}
+              >
+                <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--app-text-secondary)", display: "inline-block" }} aria-hidden="true" />
+                <span>Awaiting Step 1</span>
+              </span>
             </div>
-            <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--app-text-primary, #f8fafc)", marginBottom: "6px" }}>
+            <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--app-text-primary)", marginBottom: "6px" }}>
               2. Ingest Drawings
             </div>
-            <p style={{ fontSize: "12.5px", color: "var(--app-text-secondary, #94a3b8)", lineHeight: "1.45", margin: 0 }}>
+            <p style={{ fontSize: "12.5px", color: "var(--app-text-secondary)", lineHeight: "1.5", margin: 0 }}>
               Upload multi-page PDFs or CAD files. Vectoris extracts vector streams and sheet classifications locally.
             </p>
           </div>
@@ -498,23 +513,38 @@ function DashboardEmpty({ onOpenCreate }: { onOpenCreate: () => void }) {
           {/* Step 3 */}
           <div
             style={{
-              background: "var(--app-surface-1, #18191c)",
-              border: "1px solid var(--app-border, rgba(255, 255, 255, 0.08))",
+              background: "var(--app-surface-1)",
+              border: "1px solid var(--app-border-strong)",
               borderRadius: "10px",
               padding: "20px",
-              opacity: 0.85,
             }}
           >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
-              <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--app-text-muted, #94a3b8)" }}>
+              <span style={{ fontSize: "11.5px", fontWeight: 700, color: "var(--app-text-primary)", background: "var(--app-surface-2)", border: "1px solid var(--app-border)", padding: "2px 8px", borderRadius: "4px" }}>
                 Stage 3
               </span>
-              <span style={{ fontSize: "11px", color: "var(--app-text-muted, #64748b)" }}>Awaiting Step 2</span>
+              <span
+                style={{
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  color: "var(--app-text-primary)",
+                  background: "var(--app-surface-2)",
+                  border: "1px solid var(--app-border-strong)",
+                  padding: "3px 9px",
+                  borderRadius: "12px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "5px",
+                }}
+              >
+                <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--app-text-secondary)", display: "inline-block" }} aria-hidden="true" />
+                <span>Awaiting Step 2</span>
+              </span>
             </div>
-            <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--app-text-primary, #f8fafc)", marginBottom: "6px" }}>
+            <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--app-text-primary)", marginBottom: "6px" }}>
               3. Review Takeoff
             </div>
-            <p style={{ fontSize: "12.5px", color: "var(--app-text-secondary, #94a3b8)", lineHeight: "1.45", margin: 0 }}>
+            <p style={{ fontSize: "12.5px", color: "var(--app-text-secondary)", lineHeight: "1.5", margin: 0 }}>
               Inspect bounding boxes on blueprints, verify quantities, and approve proposed items into the BOQ ledger.
             </p>
           </div>
@@ -522,23 +552,38 @@ function DashboardEmpty({ onOpenCreate }: { onOpenCreate: () => void }) {
           {/* Step 4 */}
           <div
             style={{
-              background: "var(--app-surface-1, #18191c)",
-              border: "1px solid var(--app-border, rgba(255, 255, 255, 0.08))",
+              background: "var(--app-surface-1)",
+              border: "1px solid var(--app-border-strong)",
               borderRadius: "10px",
               padding: "20px",
-              opacity: 0.85,
             }}
           >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
-              <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--app-text-muted, #94a3b8)" }}>
+              <span style={{ fontSize: "11.5px", fontWeight: 700, color: "var(--app-text-primary)", background: "var(--app-surface-2)", border: "1px solid var(--app-border)", padding: "2px 8px", borderRadius: "4px" }}>
                 Stage 4
               </span>
-              <span style={{ fontSize: "11px", color: "var(--app-text-muted, #64748b)" }}>Awaiting Step 3</span>
+              <span
+                style={{
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  color: "var(--app-text-primary)",
+                  background: "var(--app-surface-2)",
+                  border: "1px solid var(--app-border-strong)",
+                  padding: "3px 9px",
+                  borderRadius: "12px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "5px",
+                }}
+              >
+                <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--app-text-secondary)", display: "inline-block" }} aria-hidden="true" />
+                <span>Awaiting Step 3</span>
+              </span>
             </div>
-            <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--app-text-primary, #f8fafc)", marginBottom: "6px" }}>
+            <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--app-text-primary)", marginBottom: "6px" }}>
               4. Investigate & Plan
             </div>
-            <p style={{ fontSize: "12.5px", color: "var(--app-text-secondary, #94a3b8)", lineHeight: "1.45", margin: 0 }}>
+            <p style={{ fontSize: "12.5px", color: "var(--app-text-secondary)", lineHeight: "1.5", margin: 0 }}>
               Ask CAD queries in the Investigation Workshop and compile version-controlled Project Plans.
             </p>
           </div>

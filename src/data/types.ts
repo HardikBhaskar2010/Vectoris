@@ -196,6 +196,7 @@ export interface LineItem {
   source_coordinates?: Coordinates | null;
   spatial_confidence?: "grounded" | "unavailable";
   status: LineItemStatus;
+  sync_status?: "synced" | "offline_queued" | "error";
   detection_source: "ai_detection" | "human_created";
   model_version?: string;
   reviewed_by?: string;

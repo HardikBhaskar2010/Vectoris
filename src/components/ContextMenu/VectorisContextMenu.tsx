@@ -221,7 +221,9 @@ export function ContextMenuProvider({ children }: { children: ReactNode }) {
         const item = actionableItems[focusedIndex];
         if (!item.disabled && item.onClick && target) {
           closeContextMenu();
-          void item.onClick(target);
+          Promise.resolve(item.onClick(target)).catch((err) => {
+            console.error("Context menu action failed:", err);
+          });
         }
       }
     }
@@ -230,7 +232,9 @@ export function ContextMenuProvider({ children }: { children: ReactNode }) {
   const handleItemClick = (item: ContextMenuItem) => {
     if (item.disabled || !item.onClick || !target) return;
     closeContextMenu();
-    void item.onClick(target);
+    Promise.resolve(item.onClick(target)).catch((err) => {
+      console.error("Context menu action failed:", err);
+    });
   };
 
   return (

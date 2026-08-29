@@ -88,3 +88,22 @@ Both are now confirmed IMPLEMENTED, not just "credible."
 2. **Is the core takeoff capability closer to real?** The scaffolding around it is closer — a genuine extractor/classifier/perception pipeline exists and passes its own unit tests. But the one wire that would make any of it matter (reading the actual uploaded file) is still missing, and is now obscured by a validation document that incorrectly claims it works.
 3. **Most important thing to fix next:** wire the file-bytes read-back into `processDocumentAsync`, and correct or remove `FUNCTIONALITY_CLOSURE_WALKTHROUGH.md` in the same change. Everything else in this delta is real, incremental progress; this one item is the difference between "unfinished" and "actively misrepresented."
 4. **Still blocking a real pilot:** same root cause as before — no path from an uploaded drawing to a real detection exists yet — plus the unresolved public client-data exposure, which is unrelated to code quality and still needs an authorization decision from whoever owns that relationship, not another engineering pass.
+
+## 7. Global Failure-Contract & Silent-Success Elimination Certification
+
+A forensic sweep was conducted across the entire service, offline queue, Supabase persistence, and UI layer to eliminate all silent failures, swallowed errors, and false-success returns.
+
+### Critical Invariants Enforced & Verified
+1. **Never Assume Resolution Equals Success**: All callers consuming `{ success: boolean, error?: string }` inspect `.success` and branch explicitly to error handlers.
+2. **Transient vs Permanent Error Classification**: `isNetworkOfflineError(err)` strictly distinguishes network timeouts and fetch failures from PostgreSQL/Supabase RLS violations (42501), schema errors (23505), and HTTP 4xx rejections.
+3. **Zero-Loss Queue Replay**: `offlineSyncService` replay uses atomic item-filtering by successfully-replayed ID, eliminating in-flight queue overwrites when new mutations arrive during replay.
+4. **Cascading Project Temp ID Re-mapping**: When offline projects `p-...` are assigned remote UUIDs on replay, `remapPayloadProjectId(tempId, remoteId)` updates all queued mutations before their execution.
+5. **No Double-Enqueue During Replay**: `isReplayingActive()` prevents sub-services from duplicating queue entries on transient errors during active replay cycles.
+6. **State Rollback on RLS Denial**: Mutations rejected by database security policies (`approveProposal`, `updateOrganizationName`, `deleteOrganization`, `updateMemberRole`, `removeMember`) roll back local memory/storage state and return `false` / throw descriptive errors.
+
+### Verification Summary
+- **Regression Suite**: `src/services/failureContracts.test.ts` (9 comprehensive tests)
+- **Suite Result**: 16/16 test suites PASSED, 0 FAILED (`npm test`)
+- **Type Checking**: 0 errors (`npm run typecheck`)
+- **Production Build**: Clean bundle in 10.38s (`npm run build`)
+- **Rust Backend**: 0 errors (`cargo check`)

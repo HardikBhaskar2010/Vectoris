@@ -19,10 +19,16 @@ export function EngineStatusDialog({ isOpen, onClose }: EngineStatusDialogProps)
   useEffect(() => {
     if (isOpen) {
       setLoading(true);
-      engineService.getEngineDiagnostics().then((d) => {
-        setDiagnostics(d);
-        setLoading(false);
-      });
+      engineService
+        .getEngineDiagnostics()
+        .then((d) => {
+          setDiagnostics(d);
+          setLoading(false);
+        })
+        .catch((err) => {
+          console.warn("getEngineDiagnostics error:", err);
+          setLoading(false);
+        });
     }
   }, [isOpen]);
 

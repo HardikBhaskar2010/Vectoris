@@ -223,10 +223,15 @@ export default function ProjectOverviewPage() {
   );
 
   // Handle confirming AI-inferred project type
-  const handleConfirmType = () => {
+  const handleConfirmType = async () => {
     setIsVerifyingType(true);
-    dataService.updateProjectType(projectId, displayType, "verified");
-    setTimeout(() => setIsVerifyingType(false), 400);
+    try {
+      await dataService.updateProjectType(projectId, displayType, "verified");
+    } catch (err) {
+      console.error("Failed to verify project type:", err);
+    } finally {
+      setIsVerifyingType(false);
+    }
   };
 
   // Compute category breakdown from real line items
