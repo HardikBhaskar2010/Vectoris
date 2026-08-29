@@ -448,7 +448,7 @@ class OrganizationService {
     const cleanName = name.trim();
     if (!cleanName) return false;
 
-    // Update in local store
+    // Snapshot current state for rollback if remote fails
     const localOrgs = this.getLocalOrganizations();
     const updated = localOrgs.map((o) =>
       o.id === orgId ? { ...o, name: cleanName, updated_at: new Date().toISOString() } : o
@@ -459,12 +459,24 @@ class OrganizationService {
 
     if (isSupabaseConfigured()) {
       try {
-        await supabase
+        const { error } = await supabase
           .from("organizations")
           .update({ name: cleanName, updated_at: new Date().toISOString() })
           .eq("id", orgId);
+
+        if (error) {
+          console.error("updateOrganizationName Supabase error, rolling back:", error.message);
+          this.saveLocalOrganizations(localOrgs);
+          this.cachedOrgs = localOrgs;
+          this.notify();
+          return false;
+        }
       } catch (err) {
-        console.warn("updateOrganizationName remote update failed:", err);
+        console.error("updateOrganizationName remote exception, rolling back:", err);
+        this.saveLocalOrganizations(localOrgs);
+        this.cachedOrgs = localOrgs;
+        this.notify();
+        return false;
       }
     }
 
@@ -501,12 +513,24 @@ class OrganizationService {
 
     if (isSupabaseConfigured()) {
       try {
-        await supabase
+        const { error } = await supabase
           .from("organizations")
           .update({ deleted_at: new Date().toISOString() })
           .eq("id", orgId);
+
+        if (error) {
+          console.error("deleteOrganization Supabase error, rolling back:", error.message);
+          this.saveLocalOrganizations(localOrgs);
+          this.cachedOrgs = localOrgs;
+          this.notify();
+          return false;
+        }
       } catch (err) {
-        console.warn("deleteOrganization remote update failed:", err);
+        console.error("deleteOrganization remote exception, rolling back:", err);
+        this.saveLocalOrganizations(localOrgs);
+        this.cachedOrgs = localOrgs;
+        this.notify();
+        return false;
       }
     }
 
@@ -540,7 +564,7 @@ class OrganizationService {
       avatar_color: generateAvatarColor(cleanEmail),
     };
 
-    // Update in local store
+    // Snapshot and update in local store
     const localMembers = this.getLocalMembers(orgId);
     const updatedMembers = [...localMembers.filter((m) => m.email.toLowerCase() !== cleanEmail.toLowerCase()), newMember];
     this.saveLocalMembers(orgId, updatedMembers);
@@ -548,14 +572,24 @@ class OrganizationService {
 
     if (isSupabaseConfigured()) {
       try {
-        await supabase.from("org_members").insert({
+        const { error } = await supabase.from("org_members").insert({
           organization_id: orgId,
           user_id: syntheticUserId,
           role: params.role,
           joined_at: timestamp,
         });
-      } catch (err) {
-        console.warn("inviteMember Supabase insert warning:", err);
+
+        if (error) {
+          console.error("inviteMember Supabase insert error, rolling back:", error.message);
+          this.saveLocalMembers(orgId, localMembers);
+          this.notify();
+          throw new Error(`Failed to invite member: ${error.message}`);
+        }
+      } catch (err: any) {
+        console.error("inviteMember Supabase exception, rolling back:", err);
+        this.saveLocalMembers(orgId, localMembers);
+        this.notify();
+        throw new Error(err?.message || "Failed to invite member");
       }
     }
 
@@ -577,13 +611,23 @@ class OrganizationService {
 
     if (isSupabaseConfigured()) {
       try {
-        await supabase
+        const { error } = await supabase
           .from("org_members")
           .update({ role })
           .eq("organization_id", orgId)
           .eq("user_id", userId);
+
+        if (error) {
+          console.error("updateMemberRole Supabase error, rolling back:", error.message);
+          this.saveLocalMembers(orgId, local);
+          this.notify();
+          return false;
+        }
       } catch (err) {
-        console.warn("updateMemberRole Supabase error:", err);
+        console.error("updateMemberRole Supabase exception, rolling back:", err);
+        this.saveLocalMembers(orgId, local);
+        this.notify();
+        return false;
       }
     }
 
@@ -601,13 +645,23 @@ class OrganizationService {
 
     if (isSupabaseConfigured()) {
       try {
-        await supabase
+        const { error } = await supabase
           .from("org_members")
           .delete()
           .eq("organization_id", orgId)
           .eq("user_id", userId);
+
+        if (error) {
+          console.error("removeMember Supabase error, rolling back:", error.message);
+          this.saveLocalMembers(orgId, local);
+          this.notify();
+          return false;
+        }
       } catch (err) {
-        console.warn("removeMember Supabase error:", err);
+        console.error("removeMember Supabase exception, rolling back:", err);
+        this.saveLocalMembers(orgId, local);
+        this.notify();
+        return false;
       }
     }
 

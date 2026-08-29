@@ -391,6 +391,9 @@ export function ProjectCard({
                       setIsDeleting(true);
                       try {
                         await dataService.deleteProject(id);
+                      } catch (err: any) {
+                        console.error("Delete project failed:", err);
+                        alert(err?.message || "Failed to delete project. Please check permissions.");
                       } finally {
                         setIsDeleting(false);
                         setIsMenuOpen(false);

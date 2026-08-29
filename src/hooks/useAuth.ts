@@ -29,12 +29,18 @@ export function useAuth(): UseAuthReturn {
   useEffect(() => {
     let isMounted = true;
 
-    authService.getSession().then((initialSession) => {
-      if (!isMounted) return;
-      setSession(initialSession);
-      setUser(initialSession?.user ?? null);
-      setLoading(false);
-    });
+    authService
+      .getSession()
+      .then((initialSession) => {
+        if (!isMounted) return;
+        setSession(initialSession);
+        setUser(initialSession?.user ?? null);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.warn("useAuth getSession error:", err);
+        if (isMounted) setLoading(false);
+      });
 
     const unsubscribeRecovery = authService.onRecoveryStateChange((recoveryState) => {
       if (!isMounted) return;

@@ -166,7 +166,7 @@ class DataService {
         }
         return true;
       }
-      return true;
+      throw new Error("Invalid manual_line_item mutation payload");
     });
 
     offlineSyncService.registerExecutor("project_type", async (mut) => {
@@ -211,13 +211,14 @@ class DataService {
             activeOrgId = orgs[0].id;
           }
         }
-        if (activeOrgId) {
-          const remote = await projectService.createProject({
-            organizationId: activeOrgId,
-            ...payload,
-          });
-          this.swapTempProjectId(tempId, remote);
+        if (!activeOrgId) {
+          throw new Error("No active organization found for project creation replay");
         }
+        const remote = await projectService.createProject({
+          organizationId: activeOrgId,
+          ...payload,
+        });
+        this.swapTempProjectId(tempId, remote);
       }
       return true;
     });
@@ -283,7 +284,7 @@ class DataService {
         }
         return true;
       }
-      return false;
+      throw new Error("Missing required projectId or documentId in document_processed_batch");
     });
   }
 
@@ -443,6 +444,9 @@ class DataService {
     } else {
       this.projects.unshift({ ...remote, is_synced: true, sync_status: "synced" });
     }
+
+    // Cascade ID change to pending offline mutations in queue
+    offlineSyncService.remapPayloadProjectId(tempId, remote.id);
 
     // Cascade ID change to documents and line items
     this.documents.forEach((d) => {
@@ -1072,12 +1076,16 @@ class DataService {
           }
         })
         .catch((err) => {
-          console.warn("Supabase document persistence failed, queuing for offline replay:", err);
-          offlineSyncService.enqueue("manual_line_item", {
-            action: "create_documents",
-            projectId,
-            documents: newDocs,
-          });
+          if (isNetworkOfflineError(err)) {
+            console.warn("Supabase document persistence offline, queuing for offline replay:", err);
+            offlineSyncService.enqueue("manual_line_item", {
+              action: "create_documents",
+              projectId,
+              documents: newDocs,
+            });
+          } else {
+            console.error("Supabase document persistence permanent failure:", err);
+          }
         });
     }
 
@@ -1212,16 +1220,27 @@ class DataService {
           lineItems: result.lineItems,
         })
         .then((res) => {
-          if (!res.success && !res.isOfflineQueued) {
-            console.error(`Document results remote sync failed for [${documentId}]:`, res.error);
-            doc.error_message = `Sync warning: Local processing complete, but remote database sync failed: ${res.error}`;
+          if (!res.success) {
+            if (res.isOfflineQueued) {
+              doc.upload_status = "queued";
+              doc.error_message = undefined;
+            } else {
+              console.error(`Document results remote sync failed for [${documentId}]:`, res.error);
+              doc.upload_status = "error";
+              doc.error_message = `Remote database sync failed: ${res.error}`;
+            }
             saveToStorage("documents", this.documents);
             this.notify();
           }
         })
         .catch((syncErr) => {
           console.error("Document sync encountered unexpected error:", syncErr);
-          doc.error_message = `Sync error: ${syncErr?.message || "Failed to sync document results"}`;
+          if (isNetworkOfflineError(syncErr)) {
+            doc.upload_status = "queued";
+          } else {
+            doc.upload_status = "error";
+            doc.error_message = `Sync error: ${syncErr?.message || "Failed to sync document results"}`;
+          }
           saveToStorage("documents", this.documents);
           this.notify();
         });
@@ -1335,19 +1354,23 @@ class DataService {
           }
         })
         .catch((err) => {
-          console.warn("Supabase manual line item persistence failed, queuing for offline replay:", err);
-          offlineSyncService.enqueue("manual_line_item", {
-            action: "create_manual_line_item",
-            projectId,
-            item: {
-              id: newLineItem.id,
-              name: item.name,
-              itemCode: item.item_code,
-              category: item.category,
-              quantity: item.quantity,
-              unit: item.unit,
-            },
-          });
+          if (isNetworkOfflineError(err)) {
+            console.warn("Supabase manual line item persistence offline, queuing for offline replay:", err);
+            offlineSyncService.enqueue("manual_line_item", {
+              action: "create_manual_line_item",
+              projectId,
+              item: {
+                id: newLineItem.id,
+                name: item.name,
+                itemCode: item.item_code,
+                category: item.category,
+                quantity: item.quantity,
+                unit: item.unit,
+              },
+            });
+          } else {
+            console.error("Supabase manual line item persistence permanent failure:", err);
+          }
         });
     }
 
@@ -1428,14 +1451,18 @@ class DataService {
             reason,
           })
           .catch((err) => {
-            console.warn("Supabase approve_line_item RPC failed, queuing for offline replay:", err);
-            offlineSyncService.enqueue("line_item_status", {
-              lineItemId: id,
-              status: "approved",
-              humanValue: `${item.quantity} ${item.unit}`,
-              correctionType,
-              reason,
-            });
+            if (isNetworkOfflineError(err)) {
+              console.warn("Supabase approve_line_item RPC offline, queuing for offline replay:", err);
+              offlineSyncService.enqueue("line_item_status", {
+                lineItemId: id,
+                status: "approved",
+                humanValue: `${item.quantity} ${item.unit}`,
+                correctionType,
+                reason,
+              });
+            } else {
+              console.error("Supabase approve_line_item RPC permanent rejection:", err);
+            }
           });
       } else if (status === "rejected") {
         takeoffService
@@ -1445,13 +1472,17 @@ class DataService {
             reason: reason || "Rejected by user during review",
           })
           .catch((err) => {
-            console.warn("Supabase reject_line_item RPC failed, queuing for offline replay:", err);
-            offlineSyncService.enqueue("line_item_status", {
-              lineItemId: id,
-              status: "rejected",
-              correctionType,
-              reason: reason || "Rejected by user during review",
-            });
+            if (isNetworkOfflineError(err)) {
+              console.warn("Supabase reject_line_item RPC offline, queuing for offline replay:", err);
+              offlineSyncService.enqueue("line_item_status", {
+                lineItemId: id,
+                status: "rejected",
+                correctionType,
+                reason: reason || "Rejected by user during review",
+              });
+            } else {
+              console.error("Supabase reject_line_item RPC permanent rejection:", err);
+            }
           });
       }
     }
@@ -1523,14 +1554,18 @@ class DataService {
           reason,
         })
         .catch((err) => {
-          console.warn("Supabase approve_line_item RPC error, queuing offline:", err);
-          offlineSyncService.enqueue("line_item_status", {
-            lineItemId: id,
-            status: "approved",
-            humanValue: `${newQuantity} ${unit || prevUnit}`,
-            correctionType: "manual_override",
-            reason,
-          });
+          if (isNetworkOfflineError(err)) {
+            console.warn("Supabase approve_line_item RPC offline, queuing offline:", err);
+            offlineSyncService.enqueue("line_item_status", {
+              lineItemId: id,
+              status: "approved",
+              humanValue: `${newQuantity} ${unit || prevUnit}`,
+              correctionType: "manual_override",
+              reason,
+            });
+          } else {
+            console.error("Supabase approve_line_item RPC permanent rejection:", err);
+          }
         });
     }
   }
@@ -1605,6 +1640,53 @@ class DataService {
           (li) => li.project_id === projId && li.status === "approved"
         ).length;
         saveToStorage("takeoffSummaries", this.takeoffSummaries);
+      }
+
+      // Remote Supabase RPC sync if configured
+      if (isSupabaseConfigured() && !linkedItem.id.startsWith("li-mock") && !linkedItem.id.startsWith("li-")) {
+        if (status === "approved") {
+          takeoffService
+            .approveLineItem({
+              lineItemId: linkedItem.id,
+              humanValue: `${linkedItem.quantity} ${linkedItem.unit}`,
+              correctionType: "manual_override",
+              reason,
+            })
+            .catch((err) => {
+              if (isNetworkOfflineError(err)) {
+                console.warn("Supabase approve_line_item RPC offline from viewport, queuing offline:", err);
+                offlineSyncService.enqueue("line_item_status", {
+                  lineItemId: linkedItem.id,
+                  status: "approved",
+                  humanValue: `${linkedItem.quantity} ${linkedItem.unit}`,
+                  correctionType: "manual_override",
+                  reason,
+                });
+              } else {
+                console.error("Supabase approve_line_item RPC permanent rejection from viewport:", err);
+              }
+            });
+        } else if (status === "rejected") {
+          takeoffService
+            .rejectLineItem({
+              lineItemId: linkedItem.id,
+              correctionType: "manual_override",
+              reason: reason || "Rejected in drawing viewport",
+            })
+            .catch((err) => {
+              if (isNetworkOfflineError(err)) {
+                console.warn("Supabase reject_line_item RPC offline from viewport, queuing offline:", err);
+                offlineSyncService.enqueue("line_item_status", {
+                  lineItemId: linkedItem.id,
+                  status: "rejected",
+                  correctionType: "manual_override",
+                  reason: reason || "Rejected in drawing viewport",
+                });
+              } else {
+                console.error("Supabase reject_line_item RPC permanent rejection from viewport:", err);
+              }
+            });
+        }
       }
     }
 
@@ -2017,22 +2099,50 @@ class DataService {
 
     // 8. Remote Supabase persistence & offline sync queue
     if (isSupabaseConfigured() && !projectId.startsWith("p-") && !projectId.startsWith("p1")) {
-      takeoffService
-        .createManualLineItem({
+      try {
+        const remoteItem = await takeoffService.createManualLineItem({
           projectId,
           name: itemName,
           itemCode,
           category,
           quantity: qty,
           unit,
-        })
-        .catch((err) => {
-          console.warn("Supabase createManualLineItem error, enqueuing offline:", err);
+        });
+        if (remoteItem) {
+          lineItem.id = remoteItem.id;
+          saveToStorage("lineItems", this.lineItems);
+        }
+      } catch (err: any) {
+        if (isNetworkOfflineError(err)) {
+          console.warn("Supabase createManualLineItem offline, enqueuing for offline replay:", err);
           offlineSyncService.enqueue("manual_line_item", {
             projectId,
             lineItem: { name: itemName, item_code: itemCode, category, quantity: qty, unit },
           });
-        });
+          lineItem.sync_status = "offline_queued";
+          saveToStorage("lineItems", this.lineItems);
+        } else {
+          // Permanent database / security rejection (e.g. RLS 42501) - ROLLBACK optimistic state!
+          console.error("Supabase createManualLineItem permanent rejection:", err);
+          if (existingIndex >= 0) {
+            this.lineItems[existingIndex] = { ...this.lineItems[existingIndex], status: "proposed" };
+          } else {
+            this.lineItems = this.lineItems.filter((li) => li.id !== lineItem.id);
+          }
+          msg.action_proposal.status = "pending";
+          msg.action_proposal.committed_at = undefined;
+          msg.action_proposal.committed_by = undefined;
+
+          saveToStorage("lineItems", this.lineItems);
+          saveToStorage("sessions", this.sessions);
+          this.notify();
+
+          return {
+            success: false,
+            error: `Takeoff commitment rejected by database security policy: ${err?.message || "Permission denied"}`,
+          };
+        }
+      }
     }
 
     // 9. Notify all reactive subscribers
@@ -2097,17 +2207,17 @@ class DataService {
   }
 
   /**
-   * Synchronous / backward-compatible wrapper for proposal approval and rejection.
+   * Async / backward-compatible wrapper for proposal approval and rejection.
    */
-  public updateProposalStatus(
+  public async updateProposalStatus(
     sessionId: string,
     messageId: string,
     status: "approved" | "rejected",
     user: string = "Project User",
     reason?: string
-  ): void {
+  ): Promise<{ success: boolean; error?: string; lineItem?: LineItem }> {
     if (status === "approved") {
-      void this.approveProposal({
+      return await this.approveProposal({
         sessionId,
         messageId,
         userId: user,
@@ -2115,7 +2225,7 @@ class DataService {
         reason,
       });
     } else {
-      void this.rejectProposal({
+      return await this.rejectProposal({
         sessionId,
         messageId,
         userId: user,

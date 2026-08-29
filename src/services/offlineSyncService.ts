@@ -92,6 +92,8 @@ export function isNetworkOfflineError(err: unknown): boolean {
   return false;
 }
 
+export const MAX_OFFLINE_RETRIES = 5;
+
 class OfflineSyncService {
   private queue: QueuedMutation[] = [];
   private isReplaying = false;
@@ -117,6 +119,41 @@ class OfflineSyncService {
    */
   public setOnline(online: boolean | null): void {
     this.simulatedOnline = online;
+  }
+
+  /**
+   * Returns whether a queue replay cycle is currently active.
+   * Useful for downstream services to avoid double-enqueueing on error during replay.
+   */
+  public isReplayingActive(): boolean {
+    return this.isReplaying;
+  }
+
+  /**
+   * Rewrites temporary project IDs across queued mutation payloads when an offline-created
+   * project is assigned a real remote UUID upon successful creation.
+   */
+  public remapPayloadProjectId(tempId: string, remoteId: string): void {
+    let mutated = false;
+    for (const item of this.queue) {
+      if (item.payload) {
+        if (item.payload.projectId === tempId) {
+          item.payload.projectId = remoteId;
+          mutated = true;
+        }
+        if (item.payload.project_id === tempId) {
+          item.payload.project_id = remoteId;
+          mutated = true;
+        }
+        if (item.payload.tempId === tempId) {
+          item.payload.tempId = remoteId;
+          mutated = true;
+        }
+      }
+    }
+    if (mutated) {
+      this.saveQueue();
+    }
   }
 
   /**
@@ -211,6 +248,8 @@ class OfflineSyncService {
 
   /**
    * Replays pending mutations sequentially against registered remote Supabase executors.
+   * Uses atomic ID tracking to guarantee in-flight mutations enqueued during async execution
+   * are never overwritten or dropped.
    */
   public async replayPendingMutations(
     customHandler?: (mutation: QueuedMutation) => Promise<boolean>
@@ -225,48 +264,46 @@ class OfflineSyncService {
     let replayed = 0;
     let failed = 0;
 
-    const remaining: QueuedMutation[] = [];
+    const successfulIds = new Set<string>();
+    // Take a snapshot of items to process in this cycle
+    const itemsToProcess = this.queue.filter((q) => q.status === "pending" || q.status === "failed");
 
-    for (const item of this.queue) {
-      if (item.status === "pending" || item.status === "failed") {
-        item.status = "replaying";
-        item.retryCount += 1;
+    for (const item of itemsToProcess) {
+      item.status = "replaying";
+      item.retryCount += 1;
 
-        try {
-          let success = false;
-          if (customHandler) {
-            success = await customHandler(item);
+      try {
+        let success = false;
+        if (customHandler) {
+          success = await customHandler(item);
+        } else {
+          const executor = this.executors.get(item.type);
+          if (executor) {
+            success = await executor(item);
           } else {
-            const executor = this.executors.get(item.type);
-            if (executor) {
-              success = await executor(item);
-            } else {
-              throw new Error(`No mutation executor registered for type [${item.type}]`);
-            }
+            throw new Error(`No mutation executor registered for type [${item.type}]`);
           }
-
-          if (success) {
-            replayed += 1;
-            console.log(`✅ Successfully replayed mutation [${item.type}] id=${item.id}`);
-          } else {
-            item.status = "failed";
-            item.lastError = "Executor returned false without throwing";
-            remaining.push(item);
-            failed += 1;
-          }
-        } catch (err: any) {
-          item.status = "failed";
-          item.lastError = err?.message || String(err);
-          remaining.push(item);
-          failed += 1;
-          console.warn(`❌ Replay error for mutation [${item.type}] id=${item.id}:`, err);
         }
-      } else {
-        remaining.push(item);
+
+        if (success) {
+          successfulIds.add(item.id);
+          replayed += 1;
+          console.log(`✅ Successfully replayed mutation [${item.type}] id=${item.id}`);
+        } else {
+          item.status = "failed";
+          item.lastError = "Executor returned false without throwing";
+          failed += 1;
+        }
+      } catch (err: any) {
+        item.status = "failed";
+        item.lastError = err?.message || String(err);
+        failed += 1;
+        console.warn(`❌ Replay error for mutation [${item.type}] id=${item.id}:`, err);
       }
     }
 
-    this.queue = remaining;
+    // Atomic filter: remove only successfully replayed mutations, preserving any concurrently added items
+    this.queue = this.queue.filter((item) => !successfulIds.has(item.id));
     this.saveQueue();
     this.isReplaying = false;
 

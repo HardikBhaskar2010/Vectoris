@@ -411,6 +411,7 @@ export default function ProjectPlanPage() {
   };
 
   const handleApproveProposal = async (sessionId: string, messageId: string) => {
+    setActionError(null);
     try {
       const res = await dataService.approveProposal({
         sessionId,
@@ -420,22 +421,30 @@ export default function ProjectPlanPage() {
       });
       if (res.success) {
         await dataService.fetchProjectPlan(projectId);
+      } else {
+        setActionError(res.error || "Failed to approve takeoff proposal.");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to approve proposal:", err);
+      setActionError(err?.message || "Failed to approve proposal.");
     }
   };
 
   const handleRejectProposal = async (sessionId: string, messageId: string) => {
+    setActionError(null);
     try {
-      await dataService.rejectProposal({
+      const res = await dataService.rejectProposal({
         sessionId,
         messageId,
         userRole: "editor",
         reason: "Rejected from Project Plan Investigation Panel",
       });
-    } catch (err) {
+      if (!res.success) {
+        setActionError(res.error || "Failed to reject proposal.");
+      }
+    } catch (err: any) {
       console.error("Failed to reject proposal:", err);
+      setActionError(err?.message || "Failed to reject proposal.");
     }
   };
 

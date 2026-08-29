@@ -235,17 +235,19 @@ class TakeoffService {
     }
 
     if (!offlineSyncService.isOnline()) {
-      offlineSyncService.enqueue("document_processed_batch", {
-        projectId: params.projectId,
-        documentId: params.documentId,
-        sheetCount: params.sheets.length,
-        detectionCount: params.detections.length,
-        lineItemCount: params.lineItems.length,
-        sheets: params.sheets,
-        detections: params.detections,
-        lineItems: params.lineItems,
-      });
-      return { success: true, isOfflineQueued: true };
+      if (!offlineSyncService.isReplayingActive()) {
+        offlineSyncService.enqueue("document_processed_batch", {
+          projectId: params.projectId,
+          documentId: params.documentId,
+          sheetCount: params.sheets.length,
+          detectionCount: params.detections.length,
+          lineItemCount: params.lineItems.length,
+          sheets: params.sheets,
+          detections: params.detections,
+          lineItems: params.lineItems,
+        });
+      }
+      return { success: false, isOfflineQueued: true, error: "Workstation is offline; queued for automatic synchronization." };
     }
 
     try {
@@ -255,13 +257,25 @@ class TakeoffService {
 
       const userId = user?.id || "00000000-0000-0000-0000-000000000000";
 
+      // Map local sheet classification types to valid PostgreSQL enum sheet_classification variants:
+      // ('floor_plan', 'schedule', 'single_line', 'legend', 'notes')
+      const mapClassification = (t?: string): "floor_plan" | "schedule" | "single_line" | "legend" | "notes" => {
+        if (!t) return "floor_plan";
+        const lower = t.toLowerCase();
+        if (lower.includes("single_line") || lower.includes("sld") || lower.includes("power_distribution")) return "single_line";
+        if (lower.includes("schedule") || lower.includes("panel")) return "schedule";
+        if (lower.includes("legend")) return "legend";
+        if (lower.includes("notes")) return "notes";
+        return "floor_plan";
+      };
+
       // 1. Persist sheets to Supabase 'sheets' table
       const sheetIdMap = new Map<string, string>(); // local sheet id -> db sheet id
       if (params.sheets.length > 0) {
         const sheetInserts = params.sheets.map((s, idx) => ({
           document_id: params.documentId,
           sheet_index: idx + 1,
-          classification: (s.type === "raster_scan" ? "power_distribution" : (s.type as any)) || "power_distribution",
+          classification: mapClassification(s.type || (s as any).category),
           page_width: 1000,
           page_height: 1000,
         }));
@@ -377,14 +391,18 @@ class TakeoffService {
     } catch (err: any) {
       console.warn("TakeoffService.persistProcessedDocumentResults error:", err);
       if (isNetworkOfflineError(err)) {
-        offlineSyncService.enqueue("document_processed_batch", {
-          projectId: params.projectId,
-          documentId: params.documentId,
-          sheetCount: params.sheets.length,
-          sheets: params.sheets,
-          detections: params.detections,
-          lineItems: params.lineItems,
-        });
+        if (!offlineSyncService.isReplayingActive()) {
+          offlineSyncService.enqueue("document_processed_batch", {
+            projectId: params.projectId,
+            documentId: params.documentId,
+            sheetCount: params.sheets.length,
+            detectionCount: params.detections.length,
+            lineItemCount: params.lineItems.length,
+            sheets: params.sheets,
+            detections: params.detections,
+            lineItems: params.lineItems,
+          });
+        }
         return { success: false, isOfflineQueued: true, error: err?.message || "Workstation offline, enqueued for retry" };
       }
       return { success: false, isOfflineQueued: false, error: err?.message || "Failed to persist document processing to Supabase" };

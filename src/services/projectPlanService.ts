@@ -438,7 +438,9 @@ class ProjectPlanService {
       // If workstation is offline, enqueue mutation and create local draft marked not synced
       if (!offlineSyncService.isOnline()) {
         const draftId = this.createLocalDraft(params, false);
-        offlineSyncService.enqueue("project_plan_draft", params as any);
+        if (!offlineSyncService.isReplayingActive()) {
+          offlineSyncService.enqueue("project_plan_draft", params as any);
+        }
         return draftId;
       }
 
@@ -453,7 +455,9 @@ class ProjectPlanService {
         if (error) {
           if (isNetworkOfflineError(error)) {
             const draftId = this.createLocalDraft(params, false);
-            offlineSyncService.enqueue("project_plan_draft", params as any);
+            if (!offlineSyncService.isReplayingActive()) {
+              offlineSyncService.enqueue("project_plan_draft", params as any);
+            }
             return draftId;
           }
           // REMOTE_FAILURE: Surface explicit error without fake local success
@@ -469,7 +473,9 @@ class ProjectPlanService {
       } catch (err: any) {
         if (isNetworkOfflineError(err)) {
           const draftId = this.createLocalDraft(params, false);
-          offlineSyncService.enqueue("project_plan_draft", params as any);
+          if (!offlineSyncService.isReplayingActive()) {
+            offlineSyncService.enqueue("project_plan_draft", params as any);
+          }
           return draftId;
         }
         // Surface explicit error
@@ -494,10 +500,12 @@ class ProjectPlanService {
   ): Promise<void> {
     if (isSupabaseConfigured() && !draftVersionId.startsWith("ppv-") && !draftVersionId.startsWith("ppv")) {
       if (!offlineSyncService.isOnline()) {
-        offlineSyncService.enqueue("project_plan_accept", {
-          draftVersionId,
-          resolutions,
-        });
+        if (!offlineSyncService.isReplayingActive()) {
+          offlineSyncService.enqueue("project_plan_accept", {
+            draftVersionId,
+            resolutions,
+          });
+        }
         this.acceptLocalDraft(draftVersionId, resolutions, false);
         return;
       }
@@ -510,10 +518,12 @@ class ProjectPlanService {
 
         if (error) {
           if (isNetworkOfflineError(error)) {
-            offlineSyncService.enqueue("project_plan_accept", {
-              draftVersionId,
-              resolutions,
-            });
+            if (!offlineSyncService.isReplayingActive()) {
+              offlineSyncService.enqueue("project_plan_accept", {
+                draftVersionId,
+                resolutions,
+              });
+            }
             this.acceptLocalDraft(draftVersionId, resolutions, false);
             return;
           }
@@ -527,10 +537,12 @@ class ProjectPlanService {
         return;
       } catch (err: any) {
         if (isNetworkOfflineError(err)) {
-          offlineSyncService.enqueue("project_plan_accept", {
-            draftVersionId,
-            resolutions,
-          });
+          if (!offlineSyncService.isReplayingActive()) {
+            offlineSyncService.enqueue("project_plan_accept", {
+              draftVersionId,
+              resolutions,
+            });
+          }
           this.acceptLocalDraft(draftVersionId, resolutions, false);
           return;
         }
@@ -552,10 +564,12 @@ class ProjectPlanService {
   public async rejectDraft(draftVersionId: string, reason?: string): Promise<void> {
     if (isSupabaseConfigured() && !draftVersionId.startsWith("ppv-") && !draftVersionId.startsWith("ppv")) {
       if (!offlineSyncService.isOnline()) {
-        offlineSyncService.enqueue("project_plan_reject", {
-          draftVersionId,
-          reason,
-        });
+        if (!offlineSyncService.isReplayingActive()) {
+          offlineSyncService.enqueue("project_plan_reject", {
+            draftVersionId,
+            reason,
+          });
+        }
         this.rejectLocalDraft(draftVersionId, false);
         return;
       }
@@ -568,10 +582,12 @@ class ProjectPlanService {
 
         if (error) {
           if (isNetworkOfflineError(error)) {
-            offlineSyncService.enqueue("project_plan_reject", {
-              draftVersionId,
-              reason,
-            });
+            if (!offlineSyncService.isReplayingActive()) {
+              offlineSyncService.enqueue("project_plan_reject", {
+                draftVersionId,
+                reason,
+              });
+            }
             this.rejectLocalDraft(draftVersionId, false);
             return;
           }
@@ -585,10 +601,12 @@ class ProjectPlanService {
         return;
       } catch (err: any) {
         if (isNetworkOfflineError(err)) {
-          offlineSyncService.enqueue("project_plan_reject", {
-            draftVersionId,
-            reason,
-          });
+          if (!offlineSyncService.isReplayingActive()) {
+            offlineSyncService.enqueue("project_plan_reject", {
+              draftVersionId,
+              reason,
+            });
+          }
           this.rejectLocalDraft(draftVersionId, false);
           return;
         }
