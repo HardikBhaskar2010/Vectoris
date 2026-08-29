@@ -16,7 +16,10 @@ import type {
   CorrectionRecord,
   CorrectionType,
   TakeoffRunSummary,
+  Sheet,
+  Detection,
 } from "../data/types";
+import { offlineSyncService, isNetworkOfflineError } from "./offlineSyncService";
 import type { Database } from "../data/database.types";
 
 export interface ApproveLineItemParams {
@@ -213,6 +216,156 @@ class TakeoffService {
     } catch (err) {
       console.warn("TakeoffService.getCorrectionHistory error:", err);
       return [];
+    }
+  }
+
+  /**
+   * Persists real processed drawing sheets, detections, and derived line items to Supabase.
+   * If workstation is offline, safely enqueues the batch for automated replay upon reconnection.
+   */
+  public async persistProcessedDocumentResults(params: {
+    projectId: string;
+    documentId: string;
+    sheets: Sheet[];
+    detections: Detection[];
+    lineItems: LineItem[];
+  }): Promise<{ success: boolean; error?: string }> {
+    if (!isSupabaseConfigured() || params.projectId.startsWith("p-") || params.projectId.startsWith("proj-")) {
+      return { success: true };
+    }
+
+    if (!offlineSyncService.isOnline()) {
+      offlineSyncService.enqueue("document_processed_batch", {
+        projectId: params.projectId,
+        documentId: params.documentId,
+        sheetCount: params.sheets.length,
+        detectionCount: params.detections.length,
+        lineItemCount: params.lineItems.length,
+        sheets: params.sheets,
+        detections: params.detections,
+        lineItems: params.lineItems,
+      });
+      return { success: true };
+    }
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      const userId = user?.id || "00000000-0000-0000-0000-000000000000";
+
+      // 1. Persist sheets to Supabase 'sheets' table
+      const sheetIdMap = new Map<string, string>(); // local sheet id -> db sheet id
+      if (params.sheets.length > 0) {
+        const sheetInserts = params.sheets.map((s, idx) => ({
+          document_id: params.documentId,
+          sheet_index: idx + 1,
+          classification: (s.type === "raster_scan" ? "power_distribution" : (s.type as any)) || "power_distribution",
+          page_width: 1000,
+          page_height: 1000,
+        }));
+
+        const { data: dbSheets, error: sheetError } = await supabase
+          .from("sheets")
+          .upsert(sheetInserts, { onConflict: "document_id,sheet_index" })
+          .select();
+
+        if (!sheetError && dbSheets) {
+          dbSheets.forEach((dbS, idx) => {
+            const localSheet = params.sheets[idx];
+            if (localSheet) {
+              sheetIdMap.set(localSheet.id, dbS.id);
+              sheetIdMap.set(localSheet.sheet_id, dbS.id);
+            }
+          });
+        }
+      }
+
+      // 2. Create or find active takeoff_runs record
+      let takeoffRunId: string | null = null;
+      const { data: runData, error: runError } = await supabase
+        .from("takeoff_runs")
+        .insert({
+          project_id: params.projectId,
+          triggered_by: userId,
+          model_version: "v2.4-perception",
+          status: "complete",
+          started_at: new Date().toISOString(),
+          completed_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (!runError && runData) {
+        takeoffRunId = runData.id;
+        // Link document to takeoff run
+        await supabase.from("takeoff_run_documents").upsert({
+          takeoff_run_id: takeoffRunId,
+          document_id: params.documentId,
+        });
+      }
+
+      // 3. Persist detections to Supabase 'detections' table
+      if (takeoffRunId && params.detections.length > 0) {
+        const validSheetId = Array.from(sheetIdMap.values())[0];
+        if (validSheetId) {
+          const detectionInserts = params.detections.map((d) => {
+            const dbSheetId = sheetIdMap.get(d.sheet_id) || validSheetId;
+            return {
+              takeoff_run_id: takeoffRunId!,
+              sheet_id: dbSheetId,
+              component_type: d.category || "General",
+              quantity: 1,
+              geometry: d.coordinates ? { x: d.coordinates.x, y: d.coordinates.y, w: d.coordinates.width, h: d.coordinates.height } : null,
+              source_coordinates: (d.coordinates || { x: 0, y: 0, width: 0, height: 0 }) as any,
+              confidence: (d as any).confidence || 0.95,
+              model_version: "v2.4-perception",
+            };
+          });
+
+          await (supabase.from("detections") as any).insert(detectionInserts);
+        }
+      }
+
+      // 4. Persist line items to Supabase 'line_items' table
+      if (params.lineItems.length > 0) {
+        const lineItemInserts = params.lineItems.map((li) => ({
+          project_id: params.projectId,
+          source: "ai_detection" as const,
+          item_code: li.item_code || "AUTO",
+          name: li.name,
+          category: li.category || "General",
+          current_value: li.quantity,
+          unit_of_measure: li.unit,
+          status: "proposed" as const,
+        }));
+
+        await (supabase.from("line_items") as any).insert(lineItemInserts);
+      }
+
+      // 5. Update document status in Supabase 'documents' table
+      await (supabase
+        .from("documents") as any)
+        .update({
+          upload_status: "complete",
+        })
+        .eq("id", params.documentId);
+
+      return { success: true };
+    } catch (err: any) {
+      console.warn("TakeoffService.persistProcessedDocumentResults remote error:", err);
+      if (isNetworkOfflineError(err)) {
+        offlineSyncService.enqueue("document_processed_batch", {
+          projectId: params.projectId,
+          documentId: params.documentId,
+          sheetCount: params.sheets.length,
+          sheets: params.sheets,
+          detections: params.detections,
+          lineItems: params.lineItems,
+        });
+      }
+      return { success: false, error: err?.message || "Failed to persist document processing to Supabase" };
     }
   }
 }

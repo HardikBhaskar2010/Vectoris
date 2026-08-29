@@ -89,7 +89,7 @@ export default function ProjectsPage() {
   const clientCount = useMemo(() => new Set(projectItems.map((p) => p.client.split("·")[0].trim())).size, [projectItems]);
   const isFilteredEmpty = !isZeroProjects && pageState === "data" && filtered.length === 0;
 
-  const handleCreateProject = (payload: CreateProjectPayload) => {
+  const handleCreateProject = async (payload: CreateProjectPayload) => {
     const fullDescription = [
       payload.description,
       payload.reference ? `Ref: ${payload.reference}` : "",
@@ -97,7 +97,7 @@ export default function ProjectsPage() {
       payload.notes ? `Notes: ${payload.notes}` : "",
     ].filter(Boolean).join("\n");
 
-    const newProj = dataService.createProject({
+    const newProj = await dataService.createProjectAsync({
       name: payload.name,
       description: fullDescription || payload.description,
       client: payload.client,

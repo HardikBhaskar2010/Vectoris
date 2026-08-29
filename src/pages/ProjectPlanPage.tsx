@@ -380,33 +380,63 @@ export default function ProjectPlanPage() {
     }
   };
 
+  const [isChatSending, setIsChatSending] = useState(false);
+
   // Send message in Investigation Workshop panel
   const handleSendMessage = async (textToSend?: string) => {
     const text = textToSend || chatInput;
-    if (!text.trim()) return;
+    if (!text.trim() || isChatSending) return;
     setChatInput("");
+    setIsChatSending(true);
 
     try {
       let sessionId = planSession?.id;
       if (!sessionId) {
-        sessionId = await projectPlanService.startPlanInvestigation(
-          projectId,
-          `${project?.name || "Project"} — Plan Investigation`
-        );
+        const newSession = dataService.createSession({
+          project_id: projectId,
+          title: `${project?.name || "Project"} — Plan Investigation`,
+        });
+        sessionId = newSession.id;
         setActiveSessionId(sessionId);
       }
 
-      await agentRuntime.runInvestigation({
-        sessionId,
-        inquiry: text,
-        projectId,
-        userRole: "editor",
-      });
+      await dataService.sendUserMessage(sessionId, text, "editor");
 
-      // Refresh data
+      // Refresh project plan data in case plan mutations occurred
       await dataService.fetchProjectPlan(projectId);
     } catch (err: any) {
-      console.error("Chat error:", err);
+      console.error("Plan investigation chat error:", err);
+    } finally {
+      setIsChatSending(false);
+    }
+  };
+
+  const handleApproveProposal = async (sessionId: string, messageId: string) => {
+    try {
+      const res = await dataService.approveProposal({
+        sessionId,
+        messageId,
+        userRole: "editor",
+        reason: "Approved from Project Plan Investigation Panel",
+      });
+      if (res.success) {
+        await dataService.fetchProjectPlan(projectId);
+      }
+    } catch (err) {
+      console.error("Failed to approve proposal:", err);
+    }
+  };
+
+  const handleRejectProposal = async (sessionId: string, messageId: string) => {
+    try {
+      await dataService.rejectProposal({
+        sessionId,
+        messageId,
+        userRole: "editor",
+        reason: "Rejected from Project Plan Investigation Panel",
+      });
+    } catch (err) {
+      console.error("Failed to reject proposal:", err);
     }
   };
 
@@ -788,6 +818,31 @@ export default function ProjectPlanPage() {
                       <div className="plan-chat-msg__role">
                         {msg.role === "assistant" ? "Vectoris AI" : "Engineer"}
                       </div>
+
+                      {/* Tool execution steps / safe trace summary */}
+                      {msg.tool_steps && msg.tool_steps.length > 0 && (
+                        <div className="plan-chat-tools font-mono" style={{ fontSize: "11px", color: "var(--app-text-muted)", marginBottom: "6px" }}>
+                          {msg.tool_steps.map((st, si) => (
+                            <div key={si} style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                              <span style={{ color: "var(--app-primary)" }}>⚡ {st.name || st.label}:</span>
+                              <span>{st.output || st.label}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Key Metric Highlights */}
+                      {msg.metric_highlights && msg.metric_highlights.length > 0 && (
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "6px", margin: "8px 0" }}>
+                          {msg.metric_highlights.map((mh, mi) => (
+                            <div key={mi} style={{ padding: "6px 8px", background: "var(--app-bg-surface)", border: "1px solid var(--app-border)", borderRadius: "4px" }}>
+                              <div style={{ fontWeight: 600, fontSize: "12px", fontFamily: "var(--font-mono)" }}>{mh.value}</div>
+                              <div style={{ fontSize: "10px", color: "var(--app-text-muted)" }}>{mh.label}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
                       <div className="plan-chat-msg__text">{msg.content}</div>
 
                       {/* Evidence link preview */}
@@ -795,6 +850,70 @@ export default function ProjectPlanPage() {
                         <div className="plan-chat-evidence">
                           <span className="plan-chat-evidence__label">Evidence Grounding:</span>
                           <p>{msg.evidence.doc_name} — {msg.evidence.sheet || "Sheet"} {msg.evidence.region ? `(${msg.evidence.region})` : ""}</p>
+                          {msg.evidence.coordinates && (
+                            <span style={{ fontSize: "10px", color: "var(--app-text-muted)", fontFamily: "var(--font-mono)" }}>
+                              Coords: {msg.evidence.coordinates}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Action Proposal Card */}
+                      {msg.action_proposal && (
+                        <div
+                          style={{
+                            margin: "8px 0",
+                            padding: "8px 10px",
+                            border: `1px solid ${
+                              msg.action_proposal.status === "approved"
+                                ? "var(--app-success, #22c55e)"
+                                : msg.action_proposal.status === "rejected"
+                                ? "var(--app-danger, #ef4444)"
+                                : "var(--app-amber, #f59e0b)"
+                            }`,
+                            borderRadius: "6px",
+                            background: "var(--app-bg-surface)",
+                          }}
+                        >
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                            <span style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--app-amber, #f59e0b)" }}>
+                              {msg.action_proposal.status === "approved"
+                                ? "✓ Committed to Takeoff"
+                                : msg.action_proposal.status === "rejected"
+                                ? "✕ Proposal Rejected"
+                                : "⚡ AI Action Proposal (Pending)"}
+                            </span>
+                            <span style={{ fontSize: "10px", fontFamily: "var(--font-mono)" }}>
+                              {msg.action_proposal.item_code}
+                            </span>
+                          </div>
+
+                          <div style={{ fontSize: "12px", fontWeight: 600, marginBottom: "2px" }}>
+                            {msg.action_proposal.item_name || msg.action_proposal.title}
+                          </div>
+
+                          <div style={{ fontSize: "11px", color: "var(--app-text-muted)", marginBottom: "6px" }}>
+                            Qty: <strong>{msg.action_proposal.quantity} {msg.action_proposal.unit}</strong> · Category: {msg.action_proposal.category || "General"}
+                          </div>
+
+                          {msg.action_proposal.status === "pending" && planSession && (
+                            <div style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
+                              <button
+                                className="btn btn--primary btn--xs"
+                                style={{ fontSize: "11px", padding: "3px 8px" }}
+                                onClick={() => handleApproveProposal(planSession.id, msg.id)}
+                              >
+                                Approve &amp; Commit
+                              </button>
+                              <button
+                                className="btn btn--secondary btn--xs"
+                                style={{ fontSize: "11px", padding: "3px 8px" }}
+                                onClick={() => handleRejectProposal(planSession.id, msg.id)}
+                              >
+                                Reject
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -803,6 +922,13 @@ export default function ProjectPlanPage() {
                   <div className="plan-investigation-empty">
                     <IconPlan />
                     <p>Ask questions about plan grounding, risk citations, or milestone dependencies.</p>
+                  </div>
+                )}
+
+                {isChatSending && (
+                  <div className="plan-chat-msg plan-chat-msg--assistant" style={{ opacity: 0.7 }}>
+                    <div className="plan-chat-msg__role">Vectoris AI</div>
+                    <div className="plan-chat-msg__text">Investigating plan evidence and drawing models...</div>
                   </div>
                 )}
               </div>

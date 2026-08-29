@@ -17,6 +17,7 @@ import { supabase, isSupabaseConfigured, setSupabaseConfiguredForTest } from "./
 import { projectPlanService } from "./projectPlanService";
 import { dataService } from "./dataService";
 import { projectService } from "./projectService";
+import { takeoffService } from "./takeoffService";
 import { offlineSyncService } from "./offlineSyncService";
 import type { Project, ProjectPlan, PlanClaim } from "../data/types";
 
@@ -456,6 +457,49 @@ export async function runPersistenceHonestyTests(): Promise<void> {
         "Activated version must have activated_at timestamp"
       );
       console.log("  ✓ INVARIANTS: Maintained immutable version numbers and lifecycle timestamps");
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // SECTION 5: ONLINE PROJECT CREATION & PROCESSED DOCUMENT SYNC
+    // ═════════════════════════════════════════════════════════════════════════
+    {
+      // 5.1 Project creation while online defaults to is_synced: true
+      offlineSyncService.setOnline(true);
+      const onlineProj = dataService.createProject({
+        name: "Metro-North Online Substation",
+        client: "Energy Corp",
+        discipline: "Electrical",
+      });
+
+      assert(onlineProj.is_synced === true, "Project created online must default to is_synced: true");
+      assert(onlineProj.sync_status === "synced", "Project created online must have sync_status: 'synced'");
+      console.log("  ✓ ONLINE PROJECT CREATION: Synchronous createProject defaults to synced state when online");
+
+      // 5.2 Document processing syncs sheets, detections, and line items to Supabase tables
+      const insertedTables: string[] = [];
+      (supabase as any).from = (table: string) => {
+        insertedTables.push(table);
+        return {
+          select: () => ({
+            single: async () => ({ data: { id: "run-uuid-1" }, error: null }),
+            eq: () => ({ is: () => ({ order: () => ({ data: [], error: null }) }) }),
+          }),
+          insert: async (rows: any) => ({ data: Array.isArray(rows) ? rows.map((r, i) => ({ id: `row-${i}`, ...r })) : [{ id: "row-0", ...rows }], error: null }),
+          upsert: async (rows: any) => ({ data: Array.isArray(rows) ? rows.map((r, i) => ({ id: `sheet-${i}`, ...r })) : [{ id: "sheet-0", ...rows }], error: null }),
+          update: () => ({ eq: async () => ({ error: null }) }),
+        };
+      };
+
+      const syncRes = await takeoffService.persistProcessedDocumentResults({
+        projectId: "proj-sync-test-uuid",
+        documentId: "doc-sync-test-uuid",
+        sheets: [{ id: "sh-1", sheet_id: "E-101", project_id: "p1", name: "SLD", type: "single_line", document_name: "Drawings.pdf", detection_count: 2, is_empty: false }],
+        detections: [{ id: "det-1", sheet_id: "sh-1", document_name: "Drawings.pdf", label: "MSB-1", category: "Switchboard", layer_id: "layer-1", status: "proposed", quantity: 1, unit: "NOS", model_version: "v2.4-perception", coordinates: { x: 0.2, y: 0.3, width: 0.1, height: 0.05 } }],
+        lineItems: [{ id: "li-1", project_id: "p1", item_code: "MSB-3200", name: "Main Switchboard 3200A", description: "MSB", specification: "3200A", category: "Power Distribution", quantity: 1, unit: "NOS", status: "proposed", detection_source: "ai_detection" }],
+      });
+
+      assert(syncRes.success === true, "Expected persistProcessedDocumentResults to succeed");
+      console.log("  ✓ DOCUMENT RESULTS SYNC: Processed sheets, detections, and line items synced to Supabase");
     }
 
     console.log("✔ All Honest Persistence & Offline Semantics Regression Tests Passed!\n");

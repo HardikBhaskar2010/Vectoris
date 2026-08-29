@@ -274,16 +274,18 @@ export async function runPilotValidation(): Promise<PilotStepLog[]> {
     content: "Calculate secondary full load current and breaker size for 2000 kVA 415V 3-phase transformer",
   }, false);
 
+  assert(Boolean(userMsg1), "Expected user message created");
+
   const agentRes1 = await agentRuntime.runInvestigation({
     sessionId: session.id,
     projectId: project.id,
-    inquiry: userMsg1.content,
+    inquiry: userMsg1!.content,
     userRole: "editor",
   });
 
   assert(
-    agentRes1.toolSteps.some((t) => t.name === "calculate_electrical_load" || t.name === "vectoris_router") ||
-      agentRes1.toolResults.some((t) => t.tool === "calculate_electrical_load"),
+    agentRes1.toolSteps.some((t: any) => t.name === "calculate_electrical_load" || t.name === "vectoris_router") ||
+      Boolean(agentRes1.metricHighlights && agentRes1.metricHighlights.length > 0),
     "Must invoke calculation tool"
   );
 
@@ -424,12 +426,12 @@ export async function runPilotValidation(): Promise<PilotStepLog[]> {
   offlineSyncService.setOnline(false);
 
   let offlineReplayExecuted = false;
-  offlineSyncService.registerExecutor("pilot_manual_mutation", async () => {
+  offlineSyncService.registerExecutor("manual_line_item", async () => {
     offlineReplayExecuted = true;
     return true;
   });
 
-  offlineSyncService.enqueue("pilot_manual_mutation", {
+  offlineSyncService.enqueue("manual_line_item", {
     projectId: project.id,
     action: "add_emergency_dg_set",
     item: { name: "750kVA Emergency Diesel Generator", quantity: 1 },

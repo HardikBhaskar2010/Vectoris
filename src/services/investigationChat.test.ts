@@ -245,10 +245,40 @@ export async function runInvestigationChatTests() {
   }
   console.log("  ✓ RBAC boundary enforced: Viewer role prohibited from takeoff mutations");
 
+  // ── 10. Project Plan Page Investigation Workshop Flow ───────────────────────
+  const planSession = dataService.createSession({
+    project_id: "p1",
+    title: "Plan Investigation — Milestone Dependencies",
+    initialMessage: "",
+  });
+
+  const planResponse = await dataService.sendUserMessage(
+    planSession.id,
+    "Explain the reasoning behind Milestone 2 and 3 and check transformer loads",
+    "editor"
+  );
+
+  assert(Boolean(planResponse), "Expected assistant turn returned from project plan chat");
+  const storedPlanSession = dataService.getSession(planSession.id);
+  assert(
+    storedPlanSession?.messages.length === 2,
+    "Expected both user and assistant turns persisted in project plan session"
+  );
+  assert(
+    storedPlanSession?.messages[0].role === "user",
+    "First turn must be user inquiry"
+  );
+  assert(
+    storedPlanSession?.messages[1].role === "assistant",
+    "Second turn must be assistant response with safe execution trace"
+  );
+  console.log("  ✓ Project Plan page chat flow persists user & assistant turns with safe traces");
+
   // Cleanup test sessions
   dataService.deleteSession(generalSession.id);
   dataService.deleteSession(projectSession.id);
   dataService.deleteSession(viewerSession.id);
+  dataService.deleteSession(planSession.id);
 
   console.log("✔ All Investigation Workshop Chat Lifecycle & Persistence Tests Passed!");
 }

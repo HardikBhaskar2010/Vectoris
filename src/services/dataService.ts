@@ -261,6 +261,21 @@ class DataService {
       }
       return true;
     });
+
+    offlineSyncService.registerExecutor("document_processed_batch", async (mut) => {
+      const { projectId, documentId, sheets, detections, lineItems } = mut.payload as any;
+      if (projectId && documentId) {
+        await takeoffService.persistProcessedDocumentResults({
+          projectId,
+          documentId,
+          sheets: sheets || [],
+          detections: detections || [],
+          lineItems: lineItems || [],
+        });
+        return true;
+      }
+      return true;
+    });
   }
 
   private initAuthSync(): void {
@@ -459,7 +474,9 @@ class DataService {
     options?: { isSynced?: boolean; syncStatus?: "synced" | "offline_queued" | "error" }
   ): Project {
     const id = generateId("p");
-    const isSynced = options?.isSynced ?? (!isSupabaseConfigured());
+    const isConfigured = isSupabaseConfigured();
+    const isOnline = offlineSyncService.isOnline();
+    const isSynced = options?.isSynced ?? (!isConfigured || isOnline);
     const syncStatus = options?.syncStatus ?? (isSynced ? "synced" : "offline_queued");
 
     const newProject: Project = {
@@ -491,8 +508,13 @@ class DataService {
     this.notify();
 
     // Background persistence only if configured, online, and not already queued explicitly
-    if (isSupabaseConfigured() && isSynced && offlineSyncService.isOnline()) {
+    if (isConfigured && isSynced && isOnline) {
       this.persistProjectToSupabase(newProject, data);
+    } else if (isConfigured && !isOnline && syncStatus === "offline_queued") {
+      offlineSyncService.enqueue("project_create", {
+        tempId: newProject.id,
+        payload: data,
+      });
     }
 
     return newProject;
@@ -1170,6 +1192,19 @@ class DataService {
         model_version: "v2.4-perception",
       };
       saveToStorage("takeoffSummaries", this.takeoffSummaries);
+
+      // Async persist processed sheets, detections, and line items to Supabase
+      takeoffService
+        .persistProcessedDocumentResults({
+          projectId,
+          documentId,
+          sheets: result.sheets,
+          detections: result.detections,
+          lineItems: result.lineItems,
+        })
+        .catch((syncErr) => {
+          console.warn("Async Supabase sync for processed document failed:", syncErr);
+        });
 
       this.notify();
     } catch (err: any) {

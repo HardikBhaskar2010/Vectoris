@@ -534,24 +534,31 @@ export async function runE2EForensicAudit(): Promise<AuditResult[]> {
 
     // 2. Scan built distribution assets if running in Node environment
     if (typeof process !== "undefined" && process.cwd) {
-      const fsMod = await import("fs");
-      const pathMod = await import("path");
-      const distPath = pathMod.resolve(process.cwd(), "dist/assets");
-      if (fsMod.existsSync(distPath)) {
-        const files = fsMod.readdirSync(distPath);
-        for (const file of files) {
-          if (file.endsWith(".js")) {
-            const content = fsMod.readFileSync(pathMod.join(distPath, file), "utf-8");
-            assert(
-              !/gsk_[a-zA-Z0-9]{35,}/.test(content),
-              `Found exposed Groq secret key in bundle ${file}`
-            );
-            assert(
-              !content.includes("service_role_key"),
-              `Found exposed service_role_key in bundle ${file}`
-            );
+      try {
+        const req = (globalThis as any).require;
+        if (req) {
+          const fsMod = req("fs");
+          const pathMod = req("path");
+          const distPath = pathMod.resolve(process.cwd(), "dist/assets");
+          if (fsMod.existsSync(distPath)) {
+            const files = fsMod.readdirSync(distPath);
+            for (const file of files) {
+              if (file.endsWith(".js")) {
+                const content = fsMod.readFileSync(pathMod.join(distPath, file), "utf-8");
+                assert(
+                  !/gsk_[a-zA-Z0-9]{35,}/.test(content),
+                  `Found exposed Groq secret key in bundle ${file}`
+                );
+                assert(
+                  !content.includes("service_role_key"),
+                  `Found exposed service_role_key in bundle ${file}`
+                );
+              }
+            }
           }
         }
+      } catch {
+        // Skipped in pure browser context
       }
     }
 

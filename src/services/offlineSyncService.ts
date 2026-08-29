@@ -22,7 +22,8 @@ export interface QueuedMutation {
     | "project_update"
     | "project_delete"
     | "project_plan_accept"
-    | "project_plan_reject";
+    | "project_plan_reject"
+    | "document_processed_batch";
   payload: Record<string, unknown>;
   timestamp: string;
   retryCount: number;

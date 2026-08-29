@@ -200,7 +200,7 @@ export function CreateProjectModal({ isOpen, onClose, onCreate }: CreateProjectM
           payload.notes ? `Notes: ${payload.notes}` : "",
         ].filter(Boolean).join("\n");
 
-        const newProj = dataService.createProject({
+        const newProj = await dataService.createProjectAsync({
           name: payload.name,
           description: fullDesc || payload.description,
           client: payload.client,
