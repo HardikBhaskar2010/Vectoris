@@ -5,7 +5,7 @@
  * to produce genuine evidence-backed Detections and Takeoff Line Items with normalized coordinates.
  */
 
-import type { Detection, LineItem, Sheet } from "../data/types";
+import type { Coordinates, Detection, LineItem, Sheet } from "../data/types";
 import type { ExtractedPage } from "./pdfExtractor";
 import type { ClassificationResult } from "./sheetClassifier";
 import { generateId } from "./idService";
@@ -34,6 +34,26 @@ export class DrawingPerceptionEngine {
     const detections: Detection[] = [];
     const lineItems: LineItem[] = [];
 
+    // Honest raster / scanned drawing check: 0 text items produces 0 fabricated takeoffs
+    if (page.lines.length === 0 || classification.drawingType === "raster_scan") {
+      const emptySheet: Sheet = {
+        id: sheetDbId,
+        project_id: projectId,
+        sheet_id: sheetId,
+        name: sheetName,
+        type: "raster_scan",
+        detection_count: 0,
+        document_name: documentName,
+        is_empty: true,
+      };
+
+      return {
+        sheet: emptySheet,
+        detections: [],
+        lineItems: [],
+      };
+    }
+
     // Parse schedules and lines
     const parsedEntries = this.extractComponentTagsAndSchedules(page.lines, classification);
 
@@ -42,9 +62,29 @@ export class DrawingPerceptionEngine {
       const detectionId = generateId("det");
       const lineItemId = generateId("li");
 
-      // Compute geometric position on sheet (normalized 0.0 - 1.0)
-      const rowNormalizedY = Math.min(0.85, 0.15 + (i * 0.07) % 0.7);
-      const colNormalizedX = i % 2 === 0 ? 0.2 : 0.55;
+      // Resolve genuine geometric position from extracted text items if present.
+      // If coordinates cannot be derived from geometry/text, explicitly set null and "unavailable".
+      let itemCoordinates: Coordinates | null = null;
+      let spatialConfidence: "grounded" | "unavailable" = "unavailable";
+
+      if (page.textItems && page.textItems.length > 0) {
+        const matchedItem = page.textItems.find(
+          (ti) =>
+            (entry.itemCode && ti.text.toUpperCase().includes(entry.itemCode.toUpperCase())) ||
+            (entry.name && (ti.text.toUpperCase().includes(entry.name.toUpperCase()) || entry.name.toUpperCase().includes(ti.text.toUpperCase()))) ||
+            (entry.specification && (ti.text.toUpperCase().includes(entry.specification.toUpperCase()) || entry.specification.toUpperCase().includes(ti.text.toUpperCase())))
+        );
+
+        if (matchedItem) {
+          itemCoordinates = {
+            x: matchedItem.normalizedCoordinates.x,
+            y: matchedItem.normalizedCoordinates.y,
+            width: matchedItem.normalizedCoordinates.width,
+            height: matchedItem.normalizedCoordinates.height,
+          };
+          spatialConfidence = "grounded";
+        }
+      }
 
       let layerId = "layer-pf";
       if (entry.category === "Lighting & Fixtures") layerId = "layer-lt";
@@ -63,12 +103,9 @@ export class DrawingPerceptionEngine {
         unit: entry.unit,
         status: "proposed",
         model_version: "v2.4-perception",
-        coordinates: {
-          x: Math.round(colNormalizedX * 1000) / 1000,
-          y: Math.round(rowNormalizedY * 1000) / 1000,
-          width: Math.round(0.08 * 1000) / 1000,
-          height: Math.round(0.05 * 1000) / 1000,
-        },
+        coordinates: itemCoordinates,
+        spatial_confidence: spatialConfidence,
+        spatialConfidence: spatialConfidence,
       };
 
       detections.push(detection);
@@ -86,6 +123,8 @@ export class DrawingPerceptionEngine {
         source_document_id: documentId,
         source_document_name: documentName,
         source_sheet: sheetId,
+        source_coordinates: itemCoordinates,
+        spatial_confidence: spatialConfidence,
         status: "proposed",
         detection_source: "ai_detection",
         model_version: "v2.4-perception",
@@ -141,7 +180,7 @@ export class DrawingPerceptionEngine {
 
     // Tag and schedule regex matchers
     const qtyRegex = /\b(\d+(\.\d+)?)\s*(NOS|EA|MTR|RM|M|KGS|SETS|LOT|UNITS?)\b/i;
-    const panelTagRegex = /\b(LP-[A-Z0-9]+|DB-[A-Z0-9]+|MCCB-[0-9]+A?|SWG-[0-9]+|TR-[0-9]+|PAC-[0-9]+|LT-[0-9]+[A-Z]?|EM-[0-9]+[A-Z]?)\b/i;
+    const panelTagRegex = /\b(LP-[A-Z0-9]+|DB-[A-Z0-9]+|MCCB-[0-9]+[A-Z]?|\d+A\s+MCCB|\d+kVA\s+TR|SWG-[0-9]+|TR-[0-9]+|PAC-[0-9]+|LT-[0-9]+[A-Z]?|EM-[0-9]+[A-Z]?)\b/i;
 
     // 1. Scan for explicit structured items or schedule rows
     for (const line of lines) {
@@ -181,3 +220,4 @@ export class DrawingPerceptionEngine {
 }
 
 export const drawingPerceptionEngine = new DrawingPerceptionEngine();
+

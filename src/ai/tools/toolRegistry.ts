@@ -473,20 +473,26 @@ class ToolRegistry {
         if (!pId) {
           return { success: false, error_code: "not_found", message: "No project scope specified." };
         }
-        const sheets = dataService.getSheets(pId);
         const rawSheet = (args.sheetNumber || args.sheet_number || args.sheet_id || args.sheet || "") as string;
         const sheetNum = rawSheet.toLowerCase().trim();
-        const sheet = sheetNum
-          ? sheets.find(
-              (s) => s.sheet_id.toLowerCase() === sheetNum || s.name.toLowerCase().includes(sheetNum)
-            ) || sheets[0]
-          : sheets[0];
+        if (!sheetNum) {
+          return {
+            success: false,
+            error_code: "validation_failed",
+            message: "Missing required parameter 'sheetNumber'.",
+          };
+        }
+
+        const sheets = dataService.getSheets(pId);
+        const sheet = sheets.find(
+          (s) => s.sheet_id.toLowerCase() === sheetNum || s.name.toLowerCase().includes(sheetNum)
+        );
 
         if (!sheet) {
           return {
             success: false,
             error_code: "not_found",
-            message: `Sheet '${rawSheet || "default"}' not found in project drawings.`,
+            message: `Drawing sheet '${rawSheet}' not found in project drawings.`,
           };
         }
 
@@ -501,8 +507,11 @@ class ToolRegistry {
           : detections;
 
         const evidenceList: EvidenceReference[] = matched.slice(0, 8).map((d) => ({
+          document_name: d.document_name,
           sheet_number: sheet.sheet_id,
-          coordinates: d.coordinates,
+          coordinates: d.coordinates || undefined,
+          spatial_confidence: d.coordinates ? "grounded" : "unavailable",
+          line_item_id: d.line_item_id,
           provenance_note: `Detection [${d.label}] on Sheet ${sheet.sheet_id} (${d.category}, qty ${d.quantity})`,
         }));
 
@@ -520,7 +529,8 @@ class ToolRegistry {
               quantity: d.quantity,
               status: d.status,
               model_version: d.model_version,
-              coordinates: d.coordinates,
+              coordinates: d.coordinates || null,
+              spatial_confidence: d.coordinates ? "grounded" : "unavailable",
             })),
           },
           evidence: evidenceList,
@@ -584,8 +594,11 @@ class ToolRegistry {
           },
           evidence: filtered.slice(0, 10).map((i) => ({
             line_item_id: i.id,
+            document_id: i.source_document_id,
+            document_name: i.source_document_name,
             sheet_number: i.source_sheet,
-            coordinates: i.source_coordinates,
+            coordinates: i.source_coordinates || undefined,
+            spatial_confidence: i.source_coordinates ? "grounded" : "unavailable",
             provenance_note: `Line Item [${i.item_code}]: ${i.quantity} ${i.unit} (${i.status}) from Sheet ${i.source_sheet}`,
           })),
         };
@@ -631,8 +644,11 @@ class ToolRegistry {
           evidence: [
             {
               line_item_id: item.id,
+              document_id: item.source_document_id,
+              document_name: item.source_document_name,
               sheet_number: item.source_sheet,
-              coordinates: item.source_coordinates,
+              coordinates: item.source_coordinates || undefined,
+              spatial_confidence: item.source_coordinates ? "grounded" : "unavailable",
               provenance_note: `Line Item: ${item.name} (${item.quantity} ${item.unit}) on Sheet ${item.source_sheet}`,
             },
           ],
@@ -703,14 +719,23 @@ class ToolRegistry {
           };
         }
 
+        const name = (args.name || args.title || "Proposed Equipment Item") as string;
+        const sourceSheet = (args.sourceSheet || args.source_sheet || args.sheet_id || args.sheet || "E-104") as string;
+        const rawQty = args.quantity !== undefined ? args.quantity : 1;
+        const quantity = typeof rawQty === "number" ? rawQty : parseFloat(String(rawQty).replace(/[^\d.]/g, "")) || 1;
+        const unit = ((args.unit || "EA") as string).toUpperCase() as LineItem["unit"];
+        const category = ((args.category || "Power Distribution") as string) as LineItem["category"];
+        const itemCode = (args.itemCode || args.item_code || "PROP-01") as string;
+        const description = (args.description || args.specification || `User-requested takeoff addition for ${name} on Sheet ${sourceSheet}`) as string;
+
         const proposal = {
-          item_code: (args.itemCode as string) || "PROP-ITEM",
-          name: args.name as string,
-          category: (args.category as LineItem["category"]) || "Power Distribution",
-          quantity: Number(args.quantity),
-          unit: (args.unit as LineItem["unit"]) || "EA",
-          source_sheet: args.sourceSheet as string,
-          description: (args.description as string) || (args.name as string),
+          item_code: itemCode,
+          name,
+          category,
+          quantity,
+          unit,
+          source_sheet: sourceSheet,
+          description,
         };
 
         return {

@@ -29,6 +29,7 @@ import type { ProjectItem, ProjectStatus } from "../components/ProjectCard";
 
 import { useProjects, dataService } from "../services/dataService";
 import type { CreateProjectPayload } from "../components/CreateProjectModal";
+import { AnimatedZap, AnimatedFolderPlus, AnimatedLayers, AnimatedCheckCircle } from "../components/icons/AnimatedIcons";
 
 type FilterStatus = "all" | "processing" | "review" | "completed";
 type ViewMode    = "grid" | "list";
@@ -84,7 +85,9 @@ export default function ProjectsPage() {
     });
   }, [pageState, projectItems, filterStatus, sector, search]);
 
-  const isFilteredEmpty = pageState === "data" && projectItems.length > 0 && filtered.length === 0;
+  const isZeroProjects = (pageState === "data" && projectItems.length === 0) || pageState === "empty";
+  const clientCount = useMemo(() => new Set(projectItems.map((p) => p.client.split("·")[0].trim())).size, [projectItems]);
+  const isFilteredEmpty = !isZeroProjects && pageState === "data" && filtered.length === 0;
 
   const handleCreateProject = (payload: CreateProjectPayload) => {
     const fullDescription = [
@@ -113,9 +116,9 @@ export default function ProjectsPage() {
           <div className="projects-page__header-text">
             <h1 className="projects-page__title">Engineering Projects</h1>
             <p className="projects-page__subtitle">
-              {pageState === "data"
-                ? `${projectItems.length} projects across ${new Set(projectItems.map((p) => p.client.split("·")[0].trim())).size} clients`
-                : "Manage, analyze, and track drawing takeoff across all active facilities."}
+              {isZeroProjects
+                ? "Your projects act as working contexts for engineering drawings, takeoff verification, AI investigation, and execution planning."
+                : `${projectItems.length} active project${projectItems.length > 1 ? "s" : ""} across ${clientCount} client${clientCount > 1 ? "s" : ""}`}
             </p>
           </div>
           <div className="projects-page__header-actions">
@@ -131,8 +134,8 @@ export default function ProjectsPage() {
           </div>
         </div>
 
-        {/* ── Toolbar ──────────────────────────────────────────────────── */}
-        {pageState === "data" && (
+        {/* ── Toolbar (Only shown when projects exist) ─────────────────── */}
+        {!isZeroProjects && pageState === "data" && (
           <div className="projects-page__toolbar">
             {/* Status filter — sliding pill tabs */}
             <div className="projects-filter-tabs" role="tablist" aria-label="Filter by status">
@@ -243,26 +246,131 @@ export default function ProjectsPage() {
           </div>
         )}
 
-        {/* Empty — no projects yet */}
-        {pageState === "empty" && (
-          <div className="projects-empty-state">
-            <div className="projects-empty-state__icon" aria-hidden="true">
-              <EmptyProjectsIllustration />
+        {/* Zero Projects — Intelligent Engineering Workspace Initializer */}
+        {isZeroProjects && (
+          <div
+            className="projects-empty-workspace"
+            style={{
+              maxWidth: "840px",
+              margin: "32px auto",
+              padding: "36px 32px",
+              background: "var(--app-surface-1, #18191c)",
+              border: "1px solid var(--app-border, rgba(255, 255, 255, 0.1))",
+              borderRadius: "12px",
+              boxShadow: "0 8px 32px rgba(0, 0, 0, 0.24)",
+            }}
+          >
+            <div style={{ textAlign: "center", marginBottom: "28px" }}>
+              <div
+                style={{
+                  width: "56px",
+                  height: "56px",
+                  borderRadius: "14px",
+                  background: "rgba(59, 130, 246, 0.12)",
+                  border: "1px solid rgba(59, 130, 246, 0.3)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#60a5fa",
+                  margin: "0 auto 16px auto",
+                }}
+              >
+                <IconBlueprint aria-hidden="true" />
+              </div>
+
+              <h2 style={{ fontSize: "1.45rem", fontWeight: 700, color: "var(--app-text-primary, #f8fafc)", margin: "0 0 8px 0" }}>
+                Start with an engineering drawing package
+              </h2>
+              <p style={{ fontSize: "0.95rem", color: "var(--app-text-secondary, #94a3b8)", maxWidth: "560px", margin: "0 auto", lineHeight: "1.55" }}>
+                Vectoris organizes your drawing sets into isolated project workspaces for vector decompression, automated component perception, and verified takeoff schedules.
+              </p>
             </div>
-            <h2 className="projects-empty-state__heading">No projects yet</h2>
-            <p className="projects-empty-state__body">
-              Create your first project and bring your engineering data together.
-              Add drawings, requirements, takeoffs, BOQs, and supporting documents —
-              Vectoris will organize the project context for you.
-            </p>
-            <button
-              type="button"
-              className="btn btn--primary"
-              onClick={() => setModalOpen(true)}
+
+            {/* 3 Structured Workflow Steps */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                gap: "14px",
+                marginBottom: "32px",
+              }}
             >
-              <IconPlus aria-hidden="true" />
-              Create First Project
-            </button>
+              <div
+                style={{
+                  padding: "16px",
+                  borderRadius: "8px",
+                  background: "rgba(255, 255, 255, 0.02)",
+                  border: "1px solid var(--app-border, rgba(255, 255, 255, 0.07))",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                  <span style={{ width: "22px", height: "22px", borderRadius: "50%", background: "rgba(59, 130, 246, 0.2)", color: "#60a5fa", fontSize: "12px", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>1</span>
+                  <strong style={{ fontSize: "13.5px", color: "var(--app-text-primary, #f8fafc)" }}>Initialize Container</strong>
+                </div>
+                <p style={{ fontSize: "12.5px", color: "var(--app-text-secondary, #94a3b8)", margin: 0, lineHeight: "1.45" }}>
+                  Define project name, client, and engineering discipline (Data Center, Industrial, Commercial).
+                </p>
+              </div>
+
+              <div
+                style={{
+                  padding: "16px",
+                  borderRadius: "8px",
+                  background: "rgba(255, 255, 255, 0.02)",
+                  border: "1px solid var(--app-border, rgba(255, 255, 255, 0.07))",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                  <span style={{ width: "22px", height: "22px", borderRadius: "50%", background: "rgba(59, 130, 246, 0.2)", color: "#60a5fa", fontSize: "12px", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>2</span>
+                  <strong style={{ fontSize: "13.5px", color: "var(--app-text-primary, #f8fafc)" }}>Ingest Drawings</strong>
+                </div>
+                <p style={{ fontSize: "12.5px", color: "var(--app-text-secondary, #94a3b8)", margin: 0, lineHeight: "1.45" }}>
+                  Upload multi-page electrical PDFs or AutoCAD DWG/DXF drawings for on-device vector analysis.
+                </p>
+              </div>
+
+              <div
+                style={{
+                  padding: "16px",
+                  borderRadius: "8px",
+                  background: "rgba(255, 255, 255, 0.02)",
+                  border: "1px solid var(--app-border, rgba(255, 255, 255, 0.07))",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                  <span style={{ width: "22px", height: "22px", borderRadius: "50%", background: "rgba(59, 130, 246, 0.2)", color: "#60a5fa", fontSize: "12px", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>3</span>
+                  <strong style={{ fontSize: "13.5px", color: "var(--app-text-primary, #f8fafc)" }}>Verify &amp; Plan</strong>
+                </div>
+                <p style={{ fontSize: "12.5px", color: "var(--app-text-secondary, #94a3b8)", margin: 0, lineHeight: "1.45" }}>
+                  Inspect detected symbols on the CAD canvas and compile grounded project execution plans.
+                </p>
+              </div>
+            </div>
+
+            {/* Dual Interactive Actions */}
+            <div style={{ display: "flex", justifyContent: "center", gap: "12px", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="btn btn--primary"
+                onClick={() => setModalOpen(true)}
+                style={{ padding: "11px 22px", fontSize: "13.5px", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "8px" }}
+              >
+                <IconPlus aria-hidden="true" />
+                Create First Project
+              </button>
+
+              <button
+                type="button"
+                className="btn btn--secondary"
+                onClick={() => {
+                  dataService.seedSampleProject();
+                }}
+                style={{ padding: "11px 20px", fontSize: "13.5px", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "8px" }}
+              >
+                <AnimatedZap size={15} />
+                Load Sample Hyperscale Project
+              </button>
+            </div>
           </div>
         )}
 
@@ -304,7 +412,7 @@ export default function ProjectsPage() {
         )}
 
         {/* Data — Grid */}
-        {pageState === "data" && viewMode === "grid" && filtered.length > 0 && (
+        {!isZeroProjects && pageState === "data" && viewMode === "grid" && filtered.length > 0 && (
           <div className="projects-grid" role="list">
             {filtered.map((project, i) => (
               <div key={project.id} role="listitem">
@@ -322,7 +430,7 @@ export default function ProjectsPage() {
         )}
 
         {/* Data — List */}
-        {pageState === "data" && viewMode === "list" && filtered.length > 0 && (
+        {!isZeroProjects && pageState === "data" && viewMode === "list" && filtered.length > 0 && (
           <div className="projects-list-wrap">
             <table className="projects-table" aria-label="Projects list">
               <thead>
@@ -422,22 +530,12 @@ function IconErrorCloud() {
   );
 }
 
-function EmptyProjectsIllustration() {
+function IconBlueprint(props: { className?: string; "aria-hidden"?: boolean | "true" | "false" }) {
   return (
-    <svg width="120" height="96" viewBox="0 0 120 96" fill="none" aria-hidden="true">
-      {/* Grid background dots */}
-      {[20, 40, 60, 80, 100].map((x) =>
-        [16, 32, 48, 64, 80].map((y) => (
-          <circle key={`${x}-${y}`} cx={x} cy={y} r="1.2" fill="currentColor" opacity="0.12"/>
-        ))
-      )}
-      {/* Blueprint frame */}
-      <rect x="24" y="20" width="72" height="56" rx="4" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 3" opacity="0.3"/>
-      {/* Inner cross */}
-      <path d="M60 28v40M44 48h32" stroke="currentColor" strokeWidth="1.2" strokeDasharray="3 2" opacity="0.4"/>
-      {/* Center circle — folder/project icon */}
-      <circle cx="60" cy="48" r="14" stroke="currentColor" strokeWidth="1.5" opacity="0.6"/>
-      <path d="M54 48h12M60 42v12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.7"/>
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <polygon points="12 2 2 7 12 12 22 7 12 2" />
+      <polyline points="2 17 12 22 22 17" />
+      <polyline points="2 12 12 17 22 12" />
     </svg>
   );
 }

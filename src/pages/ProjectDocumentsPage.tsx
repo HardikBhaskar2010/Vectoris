@@ -14,12 +14,13 @@
  */
 
 import { useState, type ReactNode } from "react";
-import { useRouter } from "../router";
+import { Link, useRouter } from "../router";
 import { ProjectShell } from "../components/ProjectShell";
 import type { ProjectMeta } from "../components/ProjectShell";
 import { useDocuments, useProject, dataService } from "../services/dataService";
 import { fileDialogService } from "../services/fileDialogService";
 import type { ProjectDocument, ProcessingState, DocumentFormat } from "../data/types";
+import { AnimatedArrowRight, AnimatedRotateCcw, AnimatedUpload } from "../components/icons/AnimatedIcons";
 
 // ── Status Configuration ──────────────────────────────────────────────────────
 
@@ -211,8 +212,24 @@ export default function ProjectDocumentsPage() {
 
           {documents.length === 0 ? (
             <div style={{ padding: "48px 24px", textAlign: "center", color: "var(--text-secondary)" }}>
-              <p style={{ fontSize: 15, fontWeight: 500, marginBottom: 8 }}>No documents in this project yet.</p>
-              <p style={{ fontSize: 13 }}>Click "Upload Files" or drop PDF/CAD drawings above to add documents.</p>
+              <div style={{ width: "44px", height: "44px", borderRadius: "50%", background: "rgba(59, 130, 246, 0.1)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px auto", color: "#3b82f6" }}>
+                <IconUpload aria-hidden="true" />
+              </div>
+              <p style={{ fontSize: "16px", fontWeight: 700, color: "var(--app-text-primary, #f8fafc)", marginBottom: "8px" }}>
+                No drawings uploaded to this project yet
+              </p>
+              <p style={{ fontSize: "13px", color: "var(--app-text-secondary, #94a3b8)", maxWidth: "480px", margin: "0 auto 18px auto", lineHeight: "1.5" }}>
+                Upload engineering drawing packages (PDF, AutoCAD DWG/DXF) to trigger on-device vector stream extraction, sheet classification, and automated takeoff line item derivation.
+              </p>
+              <button
+                type="button"
+                className="btn btn--primary btn--sm"
+                onClick={handleSelectFiles}
+                disabled={isUploading}
+              >
+                <IconUpload />
+                {isUploading ? "Opening File Picker…" : "Select Drawing Files"}
+              </button>
             </div>
           ) : (
             <ul className="pd-doc-list" aria-label="Project documents">
@@ -328,27 +345,29 @@ function DocumentRow({ doc, projectId }: { doc: ProjectDocument; projectId: stri
       {/* Actions */}
       <div className="pd-doc-actions">
         {isReady && (
-          <a
-            href={`/project/${projectId}/workspace?doc=${doc.id}`}
-            className="btn btn--ghost btn--xs"
-            title="Open in Workspace"
+          <Link
+            to={`/project/${projectId}/workspace?doc=${doc.id}`}
+            className="btn btn--secondary btn--xs"
+            title="Inspect in CAD Blueprint Viewport"
+            style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}
           >
-            Open
-          </a>
+            <span>Inspect CAD</span>
+            <AnimatedArrowRight size={12} />
+          </Link>
         )}
         {isError && (
           <button
             type="button"
-            className="btn btn--ghost btn--xs pd-retry-btn"
+            className="btn btn--secondary btn--xs pd-retry-btn"
+            style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}
             onClick={() => {
-              doc.upload_status = "queued";
-              doc.error_message = undefined;
-              dataService.processDocumentAsync(projectId, doc.id).catch((err) =>
+              dataService.retryDocumentProcessing(projectId, doc.id).catch((err) =>
                 console.warn("Retry document processing failed:", err)
               );
             }}
           >
-            Retry
+            <AnimatedRotateCcw size={12} />
+            <span>Retry Processing</span>
           </button>
         )}
         <button

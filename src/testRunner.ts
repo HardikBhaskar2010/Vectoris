@@ -14,8 +14,16 @@ import { runToolRegistryTests } from "./ai/tools/toolRegistry.test";
 import { runAgentRuntimeTests } from "./ai/runtime/agentRuntime.test";
 import { runDocumentPipelineTests } from "./services/documentPipeline.test";
 import { runOfflineSyncTests } from "./services/offlineSync.test";
+import { runDataServiceUXTests } from "./services/dataServiceUX.test";
+import { runOrganizationServiceTests } from "./services/organizationService.test";
+import { runSecurityBoundaryTests } from "./services/securityBoundary.test";
+import { runEvidenceProvenanceTests } from "./services/evidenceProvenance.test";
+import { runHumanInTheLoopTests } from "./ai/humanInTheLoop.test";
+import { runInvestigationChatTests } from "./services/investigationChat.test";
+import { runPersistenceHonestyTests } from "./services/persistenceHonesty.test";
 
 export async function runAllTests() {
+
   console.log("==================================================");
   console.log("VECTORIS COMPREHENSIVE TEST SUITE EXECUTION");
   console.log("==================================================");
@@ -77,7 +85,79 @@ export async function runAllTests() {
     failed++;
   }
 
+  // 7. UX Interactivity & DataService Tests
+  try {
+    await runDataServiceUXTests();
+    passed++;
+  } catch (err) {
+    console.error("❌ DataService UX test failure:", err);
+    failed++;
+  }
+
+  // 8. Organization & Multi-Tenant Workspace Tests
+  try {
+    const orgPass = await runOrganizationServiceTests();
+    if (orgPass) {
+      passed++;
+    } else {
+      failed++;
+    }
+  } catch (err) {
+    console.error("❌ Organization & Workspace test failure:", err);
+    failed++;
+  }
+
+  // 9. Security Boundary & Zero Client Secrets Tests
+  try {
+    const secPass = await runSecurityBoundaryTests();
+    if (secPass) {
+      passed++;
+    } else {
+      failed++;
+    }
+  } catch (err) {
+    console.error("❌ Security Boundary test failure:", err);
+    failed++;
+  }
+
+  // 10. Evidence & Geometry Provenance Tests
+  try {
+    await runEvidenceProvenanceTests();
+    passed++;
+  } catch (err) {
+    console.error("❌ Evidence & Geometry Provenance test failure:", err);
+    failed++;
+  }
+
+  // 11. Human-In-The-Loop AI Mutation Workflow Tests
+  try {
+    await runHumanInTheLoopTests();
+    passed++;
+  } catch (err) {
+    console.error("❌ Human-In-The-Loop test failure:", err);
+    failed++;
+  }
+
+  // 12. Investigation Workshop Chat Lifecycle & Durability Tests
+  try {
+    await runInvestigationChatTests();
+    passed++;
+  } catch (err) {
+    console.error("❌ Investigation Workshop Chat test failure:", err);
+    failed++;
+  }
+
+  // 13. Honest Persistence & Offline Semantics Tests (Domain 2)
+  try {
+    await runPersistenceHonestyTests();
+    passed++;
+  } catch (err) {
+    console.error("❌ Honest Persistence & Offline Semantics test failure:", err);
+    failed++;
+  }
+
   console.log("==================================================");
+
   console.log(`TEST SUMMARY: ${passed} PASSED, ${failed} FAILED`);
   console.log("==================================================");
 

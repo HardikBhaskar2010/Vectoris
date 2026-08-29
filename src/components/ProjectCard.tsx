@@ -14,7 +14,10 @@
  * Avatar stack: aria-label with all member names.
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "../router";
+import { dataService } from "../services/dataService";
+import { AnimatedActivity, AnimatedFolder, AnimatedLayers, AnimatedTrash } from "./icons/AnimatedIcons";
 
 export type ProjectSector =
   | "data-center"
@@ -53,6 +56,10 @@ export function ProjectCard({
   staggerIndex = 0,
   onClick,
 }: ProjectCardProps) {
+  const { navigate } = useRouter();
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const {
     id,
     name,
@@ -69,7 +76,20 @@ export function ProjectCard({
 
   const tiltWrapRef = useRef<HTMLDivElement>(null);
   const tiltCardRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const MAX_TILT = 12; // degrees — tasteful lean per Emil philosophy
+
+  // Close menu on outside click
+  useEffect(() => {
+    if (!isMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isMenuOpen]);
 
   // t-tilt JS orchestration — bound to the OUTER wrapper (never transforms)
   useEffect(() => {
@@ -243,14 +263,147 @@ export function ProjectCard({
               <p className="project-card__client font-mono">{client}</p>
             </div>
           </div>
-          <button
-            type="button"
-            className="project-card__menu-btn"
-            aria-label={`Options for ${name}`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <IconMoreHoriz />
-          </button>
+          <div style={{ position: "relative" }} ref={menuRef}>
+            <button
+              type="button"
+              className="project-card__menu-btn"
+              aria-label={`Options for ${name}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsMenuOpen((prev) => !prev);
+              }}
+            >
+              <IconMoreHoriz />
+            </button>
+
+            {isMenuOpen && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "100%",
+                  right: 0,
+                  marginTop: "6px",
+                  background: "var(--app-surface-1, #1e2024)",
+                  border: "1px solid var(--app-border, rgba(255, 255, 255, 0.12))",
+                  borderRadius: "8px",
+                  boxShadow: "0 10px 25px rgba(0, 0, 0, 0.4)",
+                  minWidth: "180px",
+                  zIndex: 50,
+                  overflow: "hidden",
+                  padding: "4px",
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  style={{
+                    width: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    padding: "8px 10px",
+                    background: "transparent",
+                    border: "none",
+                    color: "var(--app-text-primary, #f8fafc)",
+                    fontSize: "12.5px",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    textAlign: "left",
+                  }}
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    navigate(`/project/${id}`);
+                  }}
+                >
+                  <AnimatedActivity size={14} style={{ color: "var(--accent-primary, #3b82f6)" }} />
+                  <span>Project Overview</span>
+                </button>
+                <button
+                  type="button"
+                  style={{
+                    width: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    padding: "8px 10px",
+                    background: "transparent",
+                    border: "none",
+                    color: "var(--app-text-primary, #f8fafc)",
+                    fontSize: "12.5px",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    textAlign: "left",
+                  }}
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    navigate(`/project/${id}/documents`);
+                  }}
+                >
+                  <AnimatedFolder size={14} style={{ color: "#38bdf8" }} />
+                  <span>Drawing Package</span>
+                </button>
+                <button
+                  type="button"
+                  style={{
+                    width: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    padding: "8px 10px",
+                    background: "transparent",
+                    border: "none",
+                    color: "var(--app-text-primary, #f8fafc)",
+                    fontSize: "12.5px",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    textAlign: "left",
+                  }}
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    navigate(`/project/${id}/takeoff`);
+                  }}
+                >
+                  <AnimatedLayers size={14} style={{ color: "#10b981" }} />
+                  <span>Takeoff Ledger</span>
+                </button>
+
+                <div style={{ height: "1px", background: "var(--app-border, rgba(255, 255, 255, 0.08))", margin: "4px 0" }} />
+
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  style={{
+                    width: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    padding: "8px 10px",
+                    background: "transparent",
+                    border: "none",
+                    color: "#ef4444",
+                    fontSize: "12.5px",
+                    borderRadius: "6px",
+                    cursor: isDeleting ? "not-allowed" : "pointer",
+                    textAlign: "left",
+                  }}
+                  onClick={async () => {
+                    if (window.confirm(`Are you sure you want to delete project "${name}"? All associated drawing sheets and takeoff line items will be removed.`)) {
+                      setIsDeleting(true);
+                      try {
+                        await dataService.deleteProject(id);
+                      } finally {
+                        setIsDeleting(false);
+                        setIsMenuOpen(false);
+                      }
+                    }
+                  }}
+                >
+                  <AnimatedTrash size={14} />
+                  <span>{isDeleting ? "Deleting..." : "Delete Project"}</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Status + Sheet count */}

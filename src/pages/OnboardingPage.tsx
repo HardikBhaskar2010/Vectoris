@@ -555,58 +555,44 @@ export function OnboardingPage() {
                   </span>
                 </div>
 
-                {/* Initial Role Selection */}
+                {/* Initial Role Status */}
                 <div className="onboarding-field" style={{ marginBottom: "28px" }}>
                   <label className="onboarding-label" style={{ marginBottom: "6px" }}>
                     Your Administrative Role
                   </label>
-                  <span className="onboarding-hint" style={{ marginBottom: "10px", marginTop: 0 }}>
-                    Governs workspace permissions and project approval authority.
-                  </span>
-
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "8px" }}>
-                    {ROLES.map((r) => {
-                      const isSelected = selectedRole === r.role;
-                      return (
-                        <button
-                          key={r.role}
-                          type="button"
-                          onClick={() => setSelectedRole(r.role)}
-                          className={`discipline-option-card ${isSelected ? "discipline-option-card--active" : ""}`}
-                          style={{ padding: "10px 14px" }}
-                          aria-pressed={isSelected}
-                        >
-                          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                            <span
-                              style={{
-                                display: "inline-block",
-                                padding: "3px 8px",
-                                borderRadius: "4px",
-                                background: `${r.badgeColor}18`,
-                                color: r.badgeColor,
-                                fontSize: "11px",
-                                fontWeight: 700,
-                                textTransform: "uppercase",
-                                letterSpacing: "0.04em",
-                                border: `1px solid ${r.badgeColor}35`,
-                              }}
-                            >
-                              {r.role}
-                            </span>
-                            <div>
-                              <div style={{ fontSize: "13px", fontWeight: 600 }}>{r.label}</div>
-                              <div style={{ fontSize: "11.5px", color: "var(--app-text-secondary)", marginTop: "1px" }}>
-                                {r.description}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className={`selection-radio-dot ${isSelected ? "selection-radio-dot--active" : ""}`}>
-                            {isSelected && <div className="selection-radio-dot__inner" />}
-                          </div>
-                        </button>
-                      );
-                    })}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: "12px",
+                      padding: "12px 14px",
+                      borderRadius: "8px",
+                      background: "rgba(139, 92, 246, 0.08)",
+                      border: "1px solid rgba(139, 92, 246, 0.25)",
+                    }}
+                  >
+                    <span
+                      style={{
+                        padding: "3px 8px",
+                        borderRadius: "4px",
+                        background: "#8b5cf618",
+                        color: "#8b5cf6",
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.04em",
+                        border: "1px solid #8b5cf635",
+                        marginTop: "2px",
+                      }}
+                    >
+                      Owner
+                    </span>
+                    <div>
+                      <div style={{ fontSize: "13px", fontWeight: 600 }}>Workspace Owner / Principal</div>
+                      <div style={{ fontSize: "11.5px", color: "var(--app-text-secondary)", marginTop: "2px", lineHeight: "1.4" }}>
+                        As the organization creator, you receive full administrative privileges, team seat management, and drawing takeoff export authority.
+                      </div>
+                    </div>
                   </div>
                 </div>
               </>

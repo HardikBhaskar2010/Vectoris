@@ -9,6 +9,7 @@
  */
 
 import { supabase, isSupabaseConfigured } from "./supabaseClient";
+import { offlineSyncService, isNetworkOfflineError } from "./offlineSyncService";
 import type {
   ProjectPlan,
   PlanVersion,
@@ -51,9 +52,52 @@ export interface CreateDraftParams {
 
 const LOCAL_STORE_KEY = "vectoris.store.v1.projectPlans.";
 
+const memoryPlans = new Map<string, string>();
+
+function getStorageItem(key: string): string | null {
+  if (typeof window !== "undefined" && window.localStorage) {
+    try {
+      const val = window.localStorage.getItem(key);
+      if (val) return val;
+    } catch {
+      // fallback
+    }
+  }
+  return memoryPlans.get(key) || null;
+}
+
+function setStorageItem(key: string, value: string): void {
+  if (typeof window !== "undefined" && window.localStorage) {
+    try {
+      window.localStorage.setItem(key, value);
+    } catch {
+      // fallback
+    }
+  }
+  memoryPlans.set(key, value);
+}
+
+function getAllPlanKeys(): string[] {
+  const keys = new Set<string>();
+  if (typeof window !== "undefined" && window.localStorage) {
+    try {
+      for (let i = 0; i < window.localStorage.length; i++) {
+        const k = window.localStorage.key(i);
+        if (k && k.startsWith(LOCAL_STORE_KEY)) keys.add(k);
+      }
+    } catch {
+      // fallback
+    }
+  }
+  for (const k of memoryPlans.keys()) {
+    if (k.startsWith(LOCAL_STORE_KEY)) keys.add(k);
+  }
+  return Array.from(keys);
+}
+
 function loadLocalPlan(projectId: string): ProjectPlan | null {
   try {
-    const raw = window.localStorage.getItem(LOCAL_STORE_KEY + projectId);
+    const raw = getStorageItem(LOCAL_STORE_KEY + projectId);
     if (raw) return JSON.parse(raw);
   } catch (err) {
     console.warn("Error loading local project plan:", err);
@@ -63,7 +107,7 @@ function loadLocalPlan(projectId: string): ProjectPlan | null {
 
 function saveLocalPlan(projectId: string, plan: ProjectPlan): void {
   try {
-    window.localStorage.setItem(LOCAL_STORE_KEY + projectId, JSON.stringify(plan));
+    setStorageItem(LOCAL_STORE_KEY + projectId, JSON.stringify(plan));
   } catch (err) {
     console.warn("Error saving local project plan:", err);
   }
@@ -74,7 +118,12 @@ class ProjectPlanService {
    * Fetches the Project Plan for a given project, including active and draft versions.
    */
   public async getProjectPlan(projectId: string): Promise<ProjectPlan | null> {
-    if (!isSupabaseConfigured()) {
+    if (
+      !isSupabaseConfigured() ||
+      projectId.startsWith("p-") ||
+      projectId.startsWith("p1") ||
+      projectId.startsWith("p2")
+    ) {
       return loadLocalPlan(projectId);
     }
 
@@ -86,6 +135,9 @@ class ProjectPlanService {
         .maybeSingle();
 
       if (planError) {
+        if (isNetworkOfflineError(planError)) {
+          return loadLocalPlan(projectId);
+        }
         console.warn("Failed to fetch project plan:", planError.message);
         return loadLocalPlan(projectId);
       }
@@ -147,6 +199,8 @@ class ProjectPlanService {
         activated_at: v.activated_at,
         superseded_at: v.superseded_at,
         claims: claimsByVersion.get(v.id) || [],
+        is_synced: true,
+        sync_status: "synced",
       }));
 
       const activeVersion = versions.find((v) => v.status === "active") || null;
@@ -160,11 +214,16 @@ class ProjectPlanService {
         active_version: activeVersion,
         draft_version: draftVersion,
         version_history: versions,
+        is_synced: true,
+        sync_status: "synced",
       };
 
       saveLocalPlan(projectId, plan);
       return plan;
     } catch (err) {
+      if (isNetworkOfflineError(err)) {
+        return loadLocalPlan(projectId);
+      }
       console.warn("Exception in getProjectPlan:", err);
       return loadLocalPlan(projectId);
     }
@@ -232,29 +291,10 @@ class ProjectPlanService {
   }
 
   /**
-   * Creates a new Project Plan draft snapshot via guarded RPC.
+   * Creates a local plan draft representation in localStorage.
    */
-  public async createDraft(params: CreateDraftParams): Promise<string> {
-    const { projectId, documentIds = [], claims, lineage = [] } = params;
-
-    if (isSupabaseConfigured()) {
-      try {
-        const { data, error } = await supabase.rpc("create_project_plan_draft", {
-          p_project_id: projectId,
-          p_document_ids: documentIds,
-          p_claims: claims as any,
-          p_lineage: lineage as any,
-        });
-
-        if (!error && data) {
-          return data as string;
-        }
-      } catch (rpcErr) {
-        console.warn("Supabase create_project_plan_draft RPC unavailable, saving locally:", rpcErr);
-      }
-    }
-
-    // Local fallback simulation
+  public createLocalDraft(params: CreateDraftParams, isSynced: boolean = true): string {
+    const { projectId, claims } = params;
     let plan = loadLocalPlan(projectId);
     if (!plan) {
       plan = {
@@ -293,41 +333,33 @@ class ProjectPlanService {
       plan_id: plan.id,
       version_number: versionNumber,
       status: "draft",
-      created_by: "Hardik Bhaskar",
+      created_by: "Project Engineer",
       created_at: new Date().toISOString(),
       claims: draftClaims,
+      is_synced: isSynced,
+      sync_status: isSynced ? "synced" : "offline_queued",
     };
 
     plan.draft_version = draftVersion;
     plan.version_history = [draftVersion, ...(plan.version_history || [])];
+    plan.is_synced = isSynced;
+    plan.sync_status = isSynced ? "synced" : "offline_queued";
     saveLocalPlan(projectId, plan);
     return draftId;
   }
 
   /**
-   * Accepts a draft version and atomically resolves conflicts and activates the new version.
+   * Activates a local plan draft in isomorphic storage.
    */
-  public async acceptDraft(
+  public acceptLocalDraft(
     draftVersionId: string,
-    resolutions: DecisionResolution[] = []
-  ): Promise<void> {
-    if (isSupabaseConfigured()) {
-      try {
-        const { error } = await supabase.rpc("accept_project_plan_draft", {
-          p_draft_version_id: draftVersionId,
-          p_decision_resolutions: resolutions as any,
-        });
-        if (!error) return;
-      } catch (rpcErr) {
-        console.warn("Supabase accept_project_plan_draft RPC unavailable, activating locally:", rpcErr);
-      }
-    }
-
-    // Local fallback activation
-    for (const key of Object.keys(window.localStorage)) {
-      if (key.startsWith(LOCAL_STORE_KEY)) {
-        const raw = window.localStorage.getItem(key);
-        if (raw) {
+    resolutions: DecisionResolution[] = [],
+    isSynced: boolean = true
+  ): void {
+    for (const key of getAllPlanKeys()) {
+      const raw = getStorageItem(key);
+      if (raw) {
+        try {
           const plan: ProjectPlan = JSON.parse(raw);
           if (plan.draft_version?.id === draftVersionId) {
             const prevActive = plan.active_version;
@@ -335,58 +367,280 @@ class ProjectPlanService {
               prevActive.status = "superseded";
               prevActive.superseded_at = new Date().toISOString();
             }
-            const activated = { ...plan.draft_version };
-            activated.status = "active";
-            activated.activated_at = new Date().toISOString();
+            const activated: PlanVersion = {
+              ...plan.draft_version,
+              status: "active",
+              activated_at: new Date().toISOString(),
+              is_synced: isSynced,
+              sync_status: isSynced ? "synced" : "offline_queued",
+            };
             plan.active_version = activated;
             plan.draft_version = null;
             plan.updated_at = new Date().toISOString();
+            plan.is_synced = isSynced;
+            plan.sync_status = isSynced ? "synced" : "offline_queued";
             plan.version_history = (plan.version_history || []).map((v) =>
               v.id === activated.id ? activated : v.id === prevActive?.id ? prevActive : v
             );
-            window.localStorage.setItem(key, JSON.stringify(plan));
+            setStorageItem(key, JSON.stringify(plan));
             return;
           }
+        } catch {
+          // ignore corrupted entry
         }
       }
     }
   }
 
   /**
-   * Rejects a draft version, setting its status to superseded without Decision mutations.
+   * Rejects a local plan draft in isomorphic storage.
    */
-  public async rejectDraft(draftVersionId: string, reason?: string): Promise<void> {
-    if (!isSupabaseConfigured()) {
-      for (const key of Object.keys(window.localStorage)) {
-        if (key.startsWith(LOCAL_STORE_KEY)) {
-          const raw = window.localStorage.getItem(key);
-          if (raw) {
-            const plan: ProjectPlan = JSON.parse(raw);
-            if (plan.draft_version?.id === draftVersionId) {
-              const rejected = { ...plan.draft_version };
-              rejected.status = "superseded";
-              rejected.superseded_at = new Date().toISOString();
-              plan.draft_version = null;
-              plan.version_history = (plan.version_history || []).map((v) =>
-                v.id === rejected.id ? rejected : v
-              );
-              window.localStorage.setItem(key, JSON.stringify(plan));
-              return;
-            }
+  public rejectLocalDraft(draftVersionId: string, isSynced: boolean = true): void {
+    for (const key of getAllPlanKeys()) {
+      const raw = getStorageItem(key);
+      if (raw) {
+        try {
+          const plan: ProjectPlan = JSON.parse(raw);
+          if (plan.draft_version?.id === draftVersionId) {
+            const rejected: PlanVersion = {
+              ...plan.draft_version,
+              status: "superseded",
+              superseded_at: new Date().toISOString(),
+              is_synced: isSynced,
+              sync_status: isSynced ? "synced" : "offline_queued",
+            };
+            plan.draft_version = null;
+            plan.updated_at = new Date().toISOString();
+            plan.version_history = (plan.version_history || []).map((v) =>
+              v.id === rejected.id ? rejected : v
+            );
+            setStorageItem(key, JSON.stringify(plan));
+            return;
           }
+        } catch {
+          // ignore corrupted entry
         }
       }
-      return;
+    }
+  }
+
+  /**
+   * Creates a new Project Plan draft snapshot via guarded RPC with honest persistence semantics.
+   *
+   * - REMOTE_SUCCESS: Returns true Supabase version ID and updates local cache.
+   * - OFFLINE_QUEUED: When workstation is offline/unreachable, creates local draft marked "Not synced" and enqueues mutation.
+   * - REMOTE_FAILURE: When Supabase returns an RLS denial or constraint error, throws explicit error without fake fallback.
+   */
+  public async createDraft(params: CreateDraftParams): Promise<string> {
+    const { projectId, documentIds = [], claims, lineage = [] } = params;
+
+    if (isSupabaseConfigured() && !projectId.startsWith("p-") && !projectId.startsWith("p1") && !projectId.startsWith("p2")) {
+      // If workstation is offline, enqueue mutation and create local draft marked not synced
+      if (!offlineSyncService.isOnline()) {
+        const draftId = this.createLocalDraft(params, false);
+        offlineSyncService.enqueue("project_plan_draft", params as any);
+        return draftId;
+      }
+
+      try {
+        const { data, error } = await supabase.rpc("create_project_plan_draft", {
+          p_project_id: projectId,
+          p_document_ids: documentIds,
+          p_claims: claims as any,
+          p_lineage: lineage as any,
+        });
+
+        if (error) {
+          if (isNetworkOfflineError(error)) {
+            const draftId = this.createLocalDraft(params, false);
+            offlineSyncService.enqueue("project_plan_draft", params as any);
+            return draftId;
+          }
+          // REMOTE_FAILURE: Surface explicit error without fake local success
+          console.error("Supabase create_project_plan_draft RPC failed:", error.message);
+          throw new Error(error.message || "Failed to create project plan draft in Supabase");
+        }
+
+        if (data) {
+          // REMOTE_SUCCESS: Refresh and return authoritative database UUID
+          await this.getProjectPlan(projectId);
+          return data as string;
+        }
+      } catch (err: any) {
+        if (isNetworkOfflineError(err)) {
+          const draftId = this.createLocalDraft(params, false);
+          offlineSyncService.enqueue("project_plan_draft", params as any);
+          return draftId;
+        }
+        // Surface explicit error
+        throw err;
+      }
     }
 
-    const { error } = await supabase.rpc("reject_project_plan_draft", {
-      p_draft_version_id: draftVersionId,
-      p_reason: reason || undefined,
-    });
+    // Pure local workspace mode
+    return this.createLocalDraft(params, true);
+  }
 
-    if (error) {
-      throw new Error(`Failed to reject plan draft: ${error.message}`);
+  /**
+   * Accepts a draft version and atomically resolves conflicts and activates the new version.
+   *
+   * - REMOTE_SUCCESS: Activates draft in Supabase and updates local cache.
+   * - OFFLINE_QUEUED: When workstation is offline, enqueues mutation and updates local optimistic state.
+   * - REMOTE_FAILURE: When Supabase rejects (e.g. unresolved Decision conflict), throws explicit error.
+   */
+  public async acceptDraft(
+    draftVersionId: string,
+    resolutions: DecisionResolution[] = []
+  ): Promise<void> {
+    if (isSupabaseConfigured() && !draftVersionId.startsWith("ppv-") && !draftVersionId.startsWith("ppv")) {
+      if (!offlineSyncService.isOnline()) {
+        offlineSyncService.enqueue("project_plan_accept", {
+          draftVersionId,
+          resolutions,
+        });
+        this.acceptLocalDraft(draftVersionId, resolutions, false);
+        return;
+      }
+
+      try {
+        const { error } = await supabase.rpc("accept_project_plan_draft", {
+          p_draft_version_id: draftVersionId,
+          p_decision_resolutions: resolutions as any,
+        });
+
+        if (error) {
+          if (isNetworkOfflineError(error)) {
+            offlineSyncService.enqueue("project_plan_accept", {
+              draftVersionId,
+              resolutions,
+            });
+            this.acceptLocalDraft(draftVersionId, resolutions, false);
+            return;
+          }
+          // REMOTE_FAILURE: Surface explicit error
+          console.error("Supabase accept_project_plan_draft RPC failed:", error.message);
+          throw new Error(error.message || "Failed to accept project plan draft in Supabase");
+        }
+
+        // REMOTE_SUCCESS
+        this.acceptLocalDraft(draftVersionId, resolutions, true);
+        return;
+      } catch (err: any) {
+        if (isNetworkOfflineError(err)) {
+          offlineSyncService.enqueue("project_plan_accept", {
+            draftVersionId,
+            resolutions,
+          });
+          this.acceptLocalDraft(draftVersionId, resolutions, false);
+          return;
+        }
+        throw err;
+      }
     }
+
+    // Pure local workspace mode
+    this.acceptLocalDraft(draftVersionId, resolutions, true);
+  }
+
+  /**
+   * Rejects a draft version, setting its status to superseded without Decision mutations.
+   *
+   * - REMOTE_SUCCESS: Supersedes draft in Supabase.
+   * - OFFLINE_QUEUED: Enqueues mutation when offline.
+   * - REMOTE_FAILURE: Throws explicit error on remote failure.
+   */
+  public async rejectDraft(draftVersionId: string, reason?: string): Promise<void> {
+    if (isSupabaseConfigured() && !draftVersionId.startsWith("ppv-") && !draftVersionId.startsWith("ppv")) {
+      if (!offlineSyncService.isOnline()) {
+        offlineSyncService.enqueue("project_plan_reject", {
+          draftVersionId,
+          reason,
+        });
+        this.rejectLocalDraft(draftVersionId, false);
+        return;
+      }
+
+      try {
+        const { error } = await supabase.rpc("reject_project_plan_draft", {
+          p_draft_version_id: draftVersionId,
+          p_reason: reason || undefined,
+        });
+
+        if (error) {
+          if (isNetworkOfflineError(error)) {
+            offlineSyncService.enqueue("project_plan_reject", {
+              draftVersionId,
+              reason,
+            });
+            this.rejectLocalDraft(draftVersionId, false);
+            return;
+          }
+          // REMOTE_FAILURE
+          console.error("Supabase reject_project_plan_draft RPC failed:", error.message);
+          throw new Error(error.message || "Failed to reject plan draft");
+        }
+
+        // REMOTE_SUCCESS
+        this.rejectLocalDraft(draftVersionId, true);
+        return;
+      } catch (err: any) {
+        if (isNetworkOfflineError(err)) {
+          offlineSyncService.enqueue("project_plan_reject", {
+            draftVersionId,
+            reason,
+          });
+          this.rejectLocalDraft(draftVersionId, false);
+          return;
+        }
+        throw err;
+      }
+    }
+
+    // Pure local workspace mode
+    this.rejectLocalDraft(draftVersionId, true);
+  }
+
+  /**
+   * Submits or appends a claim to an active or draft plan version.
+   */
+  public async submitClaim(
+    projectId: string,
+    claim: {
+      claim_id?: string;
+      section: ClaimSection;
+      content: string;
+      grounding: ClaimGrounding;
+      evidence_links?: PlanClaim["evidence_links"];
+      inference_rationale?: string | null;
+      unresolved_reason?: string | null;
+    }
+  ): Promise<string> {
+    const plan = await this.getProjectPlan(projectId);
+    const draft = plan?.draft_version;
+    const existingClaims = draft ? draft.claims : plan?.active_version ? plan.active_version.claims : [];
+    const updatedClaims = [
+      ...existingClaims.filter((c) => c.claim_id !== claim.claim_id),
+      claim,
+    ];
+
+    if (!draft) {
+      return this.createDraft({
+        projectId,
+        claims: updatedClaims as any,
+      });
+    }
+
+    // If open draft exists, re-create or update
+    draft.claims = updatedClaims as any;
+    saveLocalPlan(projectId, plan!);
+    return draft.id;
+  }
+
+  /**
+   * Alias for createDraft to publish a new draft revision snapshot.
+   */
+  public async publishDraftRevision(params: CreateDraftParams): Promise<string> {
+    return this.createDraft(params);
   }
 
   /**

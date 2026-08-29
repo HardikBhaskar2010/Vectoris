@@ -20,7 +20,7 @@
  *   Project → Document → Sheet → Coordinates → Model Version → Correction History
  */
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Link, useRouter } from "../router";
 import { ProjectShell } from "../components/ProjectShell";
 import type { ProjectMeta } from "../components/ProjectShell";
@@ -30,6 +30,7 @@ import {
   useLineItems,
   dataService,
 } from "../services/dataService";
+import { AnimatedPencil, AnimatedCheckCircle, AnimatedArrowRight, AnimatedSparkles } from "../components/icons/AnimatedIcons";
 
 const CATEGORIES = ["All", "Lighting", "Cable Tray", "Power Distribution", "Conduit", "Equipment"] as const;
 const STATUS_TABS = [
@@ -51,8 +52,21 @@ export default function ProjectTakeoffPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [isEditingQty, setIsEditingQty] = useState(false);
+  const [editQty, setEditQty] = useState<number>(0);
+  const [editUnit, setEditUnit] = useState<string>("");
+  const [editReason, setEditReason] = useState<string>("");
 
   const selectedItem = items.find((i) => i.id === selectedItemId) || null;
+
+  useEffect(() => {
+    if (selectedItem) {
+      setEditQty(selectedItem.quantity);
+      setEditUnit(selectedItem.unit);
+      setEditReason("");
+      setIsEditingQty(false);
+    }
+  }, [selectedItemId]);
 
   const projectMeta: ProjectMeta = {
     id: projectId,
@@ -249,6 +263,43 @@ export default function ProjectTakeoffPage() {
           </div>
         </div>
 
+        {/* ── Takeoff Completion Milestone Banner ─────────────── */}
+        {stats.total > 0 && stats.proposed === 0 && stats.approved > 0 && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "16px",
+              padding: "14px 20px",
+              background: "rgba(16, 185, 129, 0.08)",
+              border: "1px solid rgba(16, 185, 129, 0.3)",
+              borderRadius: "8px",
+              marginBottom: "16px",
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <AnimatedCheckCircle size={18} />
+              <div>
+                <strong style={{ fontSize: "13.5px", color: "#10b981" }}>Takeoff Review Reconciled</strong>
+                <span style={{ fontSize: "13px", color: "var(--app-text-secondary, #cbd5e1)", marginLeft: "8px" }}>
+                  All candidate items have been verified. You can now compile the Project Plan or export BOQ schedules.
+                </span>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              <Link to={`/project/${projectId}/plan`} className="btn btn--primary btn--sm" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                <span>Continue to Project Plan</span>
+                <AnimatedArrowRight size={13} />
+              </Link>
+              <Link to={`/project/${projectId}/reports`} className="btn btn--secondary btn--sm">
+                Export BOQ
+              </Link>
+            </div>
+          </div>
+        )}
+
         {/* ── Main Table View & Traceability Drawer ─────────────── */}
         <div className={`pt-layout${selectedItem ? " pt-layout--split" : ""}`}>
 
@@ -270,14 +321,26 @@ export default function ProjectTakeoffPage() {
                 {filteredItems.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="pt-empty-cell">
-                      <div className="pt-empty-state">
+                      <div className="pt-empty-state" style={{ padding: "48px 24px" }}>
                         <IconEmptyTable aria-hidden="true" />
-                        <p className="pt-empty-title">No line items match criteria</p>
-                        <p className="pt-empty-desc">
+                        <p className="pt-empty-title" style={{ fontSize: "16px", fontWeight: 700, margin: "12px 0 6px 0" }}>
+                          {searchQuery ? "No line items match criteria" : "No takeoff items in this project yet"}
+                        </p>
+                        <p className="pt-empty-desc" style={{ maxWidth: "460px", margin: "0 auto 20px auto" }}>
                           {searchQuery
                             ? `No items found for "${searchQuery}". Try clearing your search query.`
-                            : "No items in this category and status combination."}
+                            : "Upload drawing packages in the Documents tab to trigger automated perception, or manually add items to the ledger."}
                         </p>
+                        {!searchQuery && (
+                          <div style={{ display: "flex", justifyContent: "center", gap: "10px" }}>
+                            <Link to={`/project/${projectId}/documents`} className="btn btn--primary btn--sm">
+                              <IconUpload /> Upload Drawings
+                            </Link>
+                            <button type="button" className="btn btn--secondary btn--sm" onClick={() => setShowAddModal(true)}>
+                              <IconPlus /> Add Manual Item
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -462,7 +525,7 @@ export default function ProjectTakeoffPage() {
                     )}
                   </div>
 
-                  <div className="pt-drawer-status-actions">
+                  <div className="pt-drawer-status-actions" style={{ flexWrap: "wrap", gap: "8px" }}>
                     {selectedItem.status !== "approved" && (
                       <button
                         type="button"
@@ -472,6 +535,21 @@ export default function ProjectTakeoffPage() {
                         <IconCheck /> Verify Item
                       </button>
                     )}
+                    <button
+                      type="button"
+                      className="btn btn--secondary btn--sm"
+                      onClick={() => setIsEditingQty((prev) => !prev)}
+                      style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                    >
+                      {isEditingQty ? (
+                        "Cancel Edit"
+                      ) : (
+                        <>
+                          <AnimatedPencil size={13} />
+                          <span>Correct Quantity</span>
+                        </>
+                      )}
+                    </button>
                     {selectedItem.status !== "rejected" && (
                       <button
                         type="button"
@@ -482,6 +560,58 @@ export default function ProjectTakeoffPage() {
                       </button>
                     )}
                   </div>
+
+                  {isEditingQty && (
+                    <div style={{ marginTop: "14px", padding: "14px", borderRadius: "8px", background: "var(--app-surface-2, rgba(255,255,255,0.04))", border: "1px solid var(--app-border, rgba(255,255,255,0.1))" }}>
+                      <div style={{ fontSize: "12px", fontWeight: 700, marginBottom: "8px", color: "var(--app-text-primary, #f8fafc)" }}>
+                        Manual Engineering Correction
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "8px" }}>
+                        <div>
+                          <label style={{ fontSize: "11px", color: "var(--app-text-muted)" }}>Quantity</label>
+                          <input
+                            type="number"
+                            value={editQty}
+                            onChange={(e) => setEditQty(Number(e.target.value))}
+                            className="pt-search-input"
+                            style={{ width: "100%", marginTop: "2px" }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: "11px", color: "var(--app-text-muted)" }}>Unit</label>
+                          <input
+                            type="text"
+                            value={editUnit}
+                            onChange={(e) => setEditUnit(e.target.value)}
+                            className="pt-search-input"
+                            style={{ width: "100%", marginTop: "2px" }}
+                          />
+                        </div>
+                      </div>
+                      <div style={{ marginBottom: "10px" }}>
+                        <label style={{ fontSize: "11px", color: "var(--app-text-muted)" }}>Correction Reason</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Adjusted based on single-line diagram note 4"
+                          value={editReason}
+                          onChange={(e) => setEditReason(e.target.value)}
+                          className="pt-search-input"
+                          style={{ width: "100%", marginTop: "2px" }}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn--primary btn--sm"
+                        style={{ width: "100%" }}
+                        onClick={() => {
+                          dataService.correctLineItem(selectedItem.id, editQty, editUnit, editReason || "Manual engineering correction");
+                          setIsEditingQty(false);
+                        }}
+                      >
+                        Save Correction &amp; Verify
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Provenance & Traceability */}
@@ -665,6 +795,15 @@ function IconEmptyTable() {
     <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true">
       <rect x="6" y="8" width="28" height="24" rx="3" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 3"/>
       <path d="M6 16h28M16 16v16" stroke="currentColor" strokeWidth="1.5"/>
+    </svg>
+  );
+}
+
+function IconUpload(props: { className?: string; "aria-hidden"?: boolean | "true" | "false" }) {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true" {...props}>
+      <path d="M7.5 1.5v8M4.5 4.5l3-3 3 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M2.5 10.5v2h10v-2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
     </svg>
   );
 }

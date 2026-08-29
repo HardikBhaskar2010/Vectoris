@@ -24,11 +24,13 @@ import { dataService, useAllDocuments, useEngineStatus } from "../services/dataS
 import { UpdatePanel } from "../components/UpdatePanel";
 import { useAuth } from "../hooks/useAuth";
 import { authService } from "../services/authService";
-import { organizationService, type OrganizationWithRole, type DbOrgMember } from "../services/organizationService";
+import { organizationService, type OrganizationWithRole, type WorkspaceMember } from "../services/organizationService";
 import type { OrgRole } from "../data/database.types";
 import { InviteMemberModal } from "../components/InviteMemberModal";
+import { CreateWorkspaceModal } from "../components/CreateWorkspaceModal";
 import { useRouter } from "../router";
 import { tourService } from "../services/tourService";
+import { AnimatedCheck, AnimatedArrowRight, AnimatedTrash, AnimatedFolderPlus } from "../components/icons/AnimatedIcons";
 
 type PageState = "loading" | "error" | "permission" | "backend" | "data";
 type ThemePreference = "system" | "dark" | "light";
@@ -237,8 +239,9 @@ export default function SettingsPage() {
   const [isEditingOrgName, setIsEditingOrgName] = useState(false);
   const [editOrgNameVal, setEditOrgNameVal] = useState("");
   const [orgNameSaving, setOrgNameSaving] = useState(false);
-  const [orgMembers, setOrgMembers] = useState<DbOrgMember[]>([]);
+  const [orgMembers, setOrgMembers] = useState<WorkspaceMember[]>([]);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [isCreateWorkspaceModalOpen, setIsCreateWorkspaceModalOpen] = useState(false);
   const [memberActionMsg, setMemberActionMsg] = useState<string | null>(null);
 
   // Load organizations and members
@@ -252,8 +255,8 @@ export default function SettingsPage() {
         setActiveOrgName(found.name);
         setEditOrgNameVal(found.name);
       } else {
-        setActiveOrgName("Vectoris Engineering Labs (Dev)");
-        setEditOrgNameVal("Vectoris Engineering Labs (Dev)");
+        setActiveOrgName("Vectoris Engineering Labs");
+        setEditOrgNameVal("Vectoris Engineering Labs");
       }
 
       if (currentId) {
@@ -289,6 +292,8 @@ export default function SettingsPage() {
       const updated = await organizationService.getUserOrganizations();
       setUserOrgs(updated);
       await dataService.refreshFromSupabase();
+      setMemberActionMsg(`Workspace renamed to "${editOrgNameVal.trim()}".`);
+      window.setTimeout(() => setMemberActionMsg(null), 3000);
     }
     setOrgNameSaving(false);
   };
@@ -306,6 +311,31 @@ export default function SettingsPage() {
     await dataService.refreshFromSupabase();
   };
 
+  const handleDeleteWorkspace = async (orgId: string, name: string) => {
+    if (!window.confirm(`Are you sure you want to permanently delete workspace "${name}"? All associated team memberships and project access rules will be deleted.`)) {
+      return;
+    }
+    const ok = await organizationService.deleteOrganization(orgId);
+    if (ok) {
+      const updated = await organizationService.getUserOrganizations();
+      setUserOrgs(updated);
+      const newActive = organizationService.getActiveOrganizationId();
+      setActiveOrgId(newActive);
+      if (newActive) {
+        const found = updated.find((o) => o.id === newActive);
+        if (found) {
+          setActiveOrgName(found.name);
+          setEditOrgNameVal(found.name);
+        }
+        const members = await organizationService.getOrgMembers(newActive);
+        setOrgMembers(members);
+      }
+      await dataService.refreshFromSupabase();
+      setMemberActionMsg(`Workspace "${name}" was deleted.`);
+      window.setTimeout(() => setMemberActionMsg(null), 3000);
+    }
+  };
+
   const handleRoleChange = async (userId: string, newRole: OrgRole) => {
     if (!activeOrgId) return;
     const ok = await organizationService.updateMemberRole(activeOrgId, userId, newRole);
@@ -318,12 +348,24 @@ export default function SettingsPage() {
     }
   };
 
-  const handleRemoveMember = async (userId: string) => {
+  const handleRemoveMember = async (userId: string, memberName: string) => {
     if (!activeOrgId) return;
+    if (!window.confirm(`Are you sure you want to remove ${memberName} from this workspace? They will lose access to all drawings and takeoff ledgers.`)) {
+      return;
+    }
     const ok = await organizationService.removeMember(activeOrgId, userId);
     if (ok) {
       setOrgMembers((prev) => prev.filter((m) => m.user_id !== userId));
-      setMemberActionMsg("Member removed from workspace.");
+      setMemberActionMsg(`${memberName} was removed from the workspace.`);
+      window.setTimeout(() => setMemberActionMsg(null), 3000);
+    }
+  };
+
+  const handleResendInvite = async (userId: string, email: string) => {
+    if (!activeOrgId) return;
+    const ok = await organizationService.resendInvitation(activeOrgId, userId);
+    if (ok) {
+      setMemberActionMsg(`Invitation re-dispatched to ${email}.`);
       window.setTimeout(() => setMemberActionMsg(null), 3000);
     }
   };
@@ -732,6 +774,14 @@ export default function SettingsPage() {
                             type="text"
                             value={editOrgNameVal}
                             onChange={(e) => setEditOrgNameVal(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleSaveOrgName();
+                              if (e.key === "Escape") {
+                                setIsEditingOrgName(false);
+                                setEditOrgNameVal(activeOrgName);
+                              }
+                            }}
+                            autoFocus
                             style={{
                               padding: "6px 10px",
                               fontSize: "14px",
@@ -767,19 +817,41 @@ export default function SettingsPage() {
                             type="button"
                             className="btn btn--ghost"
                             style={{ padding: "4px 8px", fontSize: "11px" }}
-                            onClick={() => setIsEditingOrgName(true)}
+                            onClick={() => {
+                              setIsEditingOrgName(true);
+                              setEditOrgNameVal(activeOrgName);
+                            }}
                           >
                             Rename
                           </button>
+                          {userOrgs.length > 1 && (
+                            <button
+                              type="button"
+                              className="btn btn--ghost"
+                              style={{ padding: "4px 8px", fontSize: "11px", color: "var(--color-danger, #ef4444)" }}
+                              onClick={() => activeOrgId && handleDeleteWorkspace(activeOrgId, activeOrgName)}
+                            >
+                              Delete Workspace
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
 
-                    <div style={{ display: "flex", gap: "8px" }}>
+                    <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                      <button
+                        type="button"
+                        className="btn btn--secondary"
+                        style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12.5px" }}
+                        onClick={() => setIsCreateWorkspaceModalOpen(true)}
+                      >
+                        <AnimatedFolderPlus size={14} />
+                        <span>New Workspace</span>
+                      </button>
                       <button
                         type="button"
                         className="btn btn--primary"
-                        style={{ display: "flex", alignItems: "center", gap: "6px" }}
+                        style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12.5px" }}
                         onClick={() => setIsInviteModalOpen(true)}
                       >
                         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
@@ -791,37 +863,58 @@ export default function SettingsPage() {
                   </div>
 
                   {/* Switch Org Selector Chips */}
-                  {userOrgs.length > 1 && (
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "20px", flexWrap: "wrap" }}>
-                      <span style={{ fontSize: "12px", color: "var(--app-text-muted, #94a3b8)" }}>Switch Workspace:</span>
-                      {userOrgs.map((org) => (
-                        <button
-                          key={org.id}
-                          type="button"
-                          onClick={() => handleSwitchOrg(org.id)}
-                          style={{
-                            padding: "4px 10px",
-                            borderRadius: "16px",
-                            fontSize: "12px",
-                            border: org.id === activeOrgId ? "1.5px solid var(--accent-primary, #3b82f6)" : "1px solid var(--app-border)",
-                            background: org.id === activeOrgId ? "rgba(59, 130, 246, 0.15)" : "var(--app-surface-2)",
-                            color: "inherit",
-                            cursor: "pointer",
-                            fontWeight: org.id === activeOrgId ? 600 : 400,
-                          }}
-                        >
-                          {org.name} ({org.role})
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "20px", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: "12px", color: "var(--app-text-muted, #94a3b8)" }}>Switch Workspace:</span>
+                    {userOrgs.map((org) => (
+                      <button
+                        key={org.id}
+                        type="button"
+                        onClick={() => handleSwitchOrg(org.id)}
+                        style={{
+                          padding: "4px 10px",
+                          borderRadius: "16px",
+                          fontSize: "12px",
+                          border: org.id === activeOrgId ? "1.5px solid var(--accent-primary, #3b82f6)" : "1px solid var(--app-border)",
+                          background: org.id === activeOrgId ? "rgba(59, 130, 246, 0.15)" : "var(--app-surface-2)",
+                          color: "inherit",
+                          cursor: "pointer",
+                          fontWeight: org.id === activeOrgId ? 600 : 400,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                        }}
+                      >
+                        <span>{org.name}</span>
+                        <span style={{ fontSize: "10px", opacity: 0.75, textTransform: "capitalize" }}>({org.role})</span>
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setIsCreateWorkspaceModalOpen(true)}
+                      style={{
+                        padding: "4px 8px",
+                        borderRadius: "16px",
+                        fontSize: "11.5px",
+                        border: "1px dashed var(--app-border)",
+                        background: "transparent",
+                        color: "var(--app-text-muted, #94a3b8)",
+                        cursor: "pointer",
+                      }}
+                    >
+                      + Add Workspace
+                    </button>
+                  </div>
 
                   {/* Workspace Stats Row */}
                   <div className="settings-grid-3col" style={{ marginBottom: "24px" }}>
                     <div className="settings-stat-card">
                       <span className="settings-stat-card__label">Active Seat Count</span>
-                      <strong className="settings-stat-card__val">{Math.max(orgMembers.length, 2)} Members</strong>
-                      <span className="settings-stat-card__sub">Multi-seat workspace</span>
+                      <strong className="settings-stat-card__val">{orgMembers.length} {orgMembers.length === 1 ? "Member" : "Members"}</strong>
+                      <span className="settings-stat-card__sub">
+                        {orgMembers.filter((m) => m.status === "invited").length > 0
+                          ? `${orgMembers.filter((m) => m.status === "active").length} active · ${orgMembers.filter((m) => m.status === "invited").length} invited`
+                          : "Multi-seat workspace"}
+                      </span>
                     </div>
                     <div className="settings-stat-card">
                       <span className="settings-stat-card__label">Tenant Isolation</span>
@@ -830,8 +923,12 @@ export default function SettingsPage() {
                     </div>
                     <div className="settings-stat-card">
                       <span className="settings-stat-card__label">Associated Projects</span>
-                      <strong className="settings-stat-card__val">{allProjects.length} Projects</strong>
-                      <span className="settings-stat-card__sub">GB 300 &amp; Emerson PAC</span>
+                      <strong className="settings-stat-card__val">{allProjects.length} {allProjects.length === 1 ? "Project" : "Projects"}</strong>
+                      <span className="settings-stat-card__sub">
+                        {allProjects.length > 0
+                          ? allProjects.map((p) => p.name).slice(0, 2).join(" & ") + (allProjects.length > 2 ? ` +${allProjects.length - 2} more` : "")
+                          : "No projects in workspace"}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -840,7 +937,7 @@ export default function SettingsPage() {
                 <div style={{ padding: "0 32px 32px 32px" }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
                     <h4 style={{ fontSize: "0.95rem", fontWeight: 600, margin: 0 }}>
-                      Workspace Members ({Math.max(orgMembers.length, 2)})
+                      Workspace Members ({orgMembers.length})
                     </h4>
                     <span style={{ fontSize: "11px", color: "var(--app-text-muted, #94a3b8)" }}>
                       Live Postgres `org_members`
@@ -859,111 +956,76 @@ export default function SettingsPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {/* Primary Active User */}
-                        <tr>
-                          <td>
-                            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                              <div
-                                style={{
-                                  width: "32px",
-                                  height: "32px",
-                                  borderRadius: "6px",
-                                  background: "var(--accent-primary, #7d4047)",
-                                  color: "#fff",
-                                  display: "flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  fontSize: "12px",
-                                  fontWeight: 600,
-                                }}
-                              >
-                                {editFullName
-                                  ? editFullName.split(" ").map((n: string) => n[0]).join("").substring(0, 2).toUpperCase()
-                                  : (user?.email ? user.email.substring(0, 2).toUpperCase() : "HB")}
-                              </div>
-                              <div>
-                                <strong>{editFullName || user?.user_metadata?.full_name || (user?.email ? user.email.split("@")[0] : "Lead Estimator")}</strong>
-                                <div style={{ fontSize: "11px", color: "var(--app-text-muted, #94a3b8)" }}>
-                                  {user?.email || "estimator@vectoris-dev.internal"}
-                                </div>
-                              </div>
-                            </div>
-                          </td>
-                          <td>
-                            <select
-                              value={userOrgs.find((o) => o.id === activeOrgId)?.role || "owner"}
-                              disabled
-                              style={{
-                                padding: "4px 8px",
-                                fontSize: "12px",
-                                borderRadius: "4px",
-                                border: "1px solid var(--app-border)",
-                                background: "var(--app-surface-2)",
-                                color: "inherit",
-                                textTransform: "capitalize",
-                              }}
-                            >
-                              <option value="owner">Owner (Primary)</option>
-                              <option value="admin">Organization Admin</option>
-                              <option value="manager">Project Manager</option>
-                              <option value="editor">Lead Estimator / Reviewer</option>
-                            </select>
-                          </td>
-                          <td>
-                            <span style={{ fontSize: "12px" }}>Full Workspace Scope</span>
-                          </td>
-                          <td>
-                            <span className="settings-chip settings-chip--available">Active</span>
-                          </td>
-                          <td style={{ textAlign: "right", fontSize: "11px", color: "var(--app-text-muted)" }}>
-                            You (Current User)
-                          </td>
-                        </tr>
+                        {orgMembers.map((m) => {
+                          const isCurrentUser = m.user_id === user?.id || m.email === user?.email || m.role === "owner";
+                          const initials = (m.name || m.email)
+                            .split(" ")
+                            .map((n) => n[0])
+                            .join("")
+                            .substring(0, 2)
+                            .toUpperCase();
 
-                        {/* Additional Dynamic Members */}
-                        {orgMembers
-                          .filter((m) => m.user_id !== "11111111-1111-1111-1111-111111111111")
-                          .map((m) => {
-                            const nameDisplay = m.user_id.startsWith("user-")
-                              ? "Invited Engineer"
-                              : m.user_id === "22222222-2222-2222-2222-222222222222"
-                              ? "External Auditor"
-                              : "Project Collaborator";
-                            const emailDisplay = m.user_id.startsWith("user-")
-                              ? `${m.user_id}@apexeng.internal`
-                              : m.user_id === "22222222-2222-2222-2222-222222222222"
-                              ? "auditor@isolated-tenant.internal"
-                              : "collaborator@apexeng.internal";
+                          const scopeDescription =
+                            m.role === "owner"
+                              ? "Full Workspace Scope"
+                              : m.role === "admin"
+                              ? "Organization Admin"
+                              : m.role === "manager"
+                              ? "Project Manager"
+                              : m.role === "editor"
+                              ? "Lead Estimator / Reviewer"
+                              : "Read-only Access";
 
-                            return (
-                              <tr key={m.id || m.user_id}>
-                                <td>
-                                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                                    <div
-                                      style={{
-                                        width: "32px",
-                                        height: "32px",
-                                        borderRadius: "6px",
-                                        background: m.role === "admin" ? "#8b5cf6" : m.role === "editor" ? "#10b981" : "#f59e0b",
-                                        color: "#fff",
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                        fontSize: "12px",
-                                        fontWeight: 600,
-                                      }}
-                                    >
-                                      {nameDisplay[0]}
-                                    </div>
-                                    <div>
-                                      <strong>{nameDisplay}</strong>
-                                      <div style={{ fontSize: "11px", color: "var(--app-text-muted, #94a3b8)" }}>
-                                        {emailDisplay}
-                                      </div>
+                          return (
+                            <tr key={m.id || m.user_id}>
+                              <td>
+                                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                  <div
+                                    style={{
+                                      width: "32px",
+                                      height: "32px",
+                                      borderRadius: "6px",
+                                      background: m.avatar_color || (m.role === "owner" ? "#7d4047" : m.role === "admin" ? "#8b5cf6" : "#3b82f6"),
+                                      color: "#fff",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      fontSize: "12px",
+                                      fontWeight: 600,
+                                    }}
+                                  >
+                                    {initials}
+                                  </div>
+                                  <div>
+                                    <strong>{m.name || m.email.split("@")[0]}</strong>
+                                    <div style={{ fontSize: "11px", color: "var(--app-text-muted, #94a3b8)" }}>
+                                      {m.email}
                                     </div>
                                   </div>
-                                </td>
-                                <td>
+                                </div>
+                              </td>
+                              <td>
+                                {isCurrentUser ? (
+                                  <select
+                                    value={m.role}
+                                    disabled
+                                    style={{
+                                      padding: "4px 8px",
+                                      fontSize: "12px",
+                                      borderRadius: "4px",
+                                      border: "1px solid var(--app-border)",
+                                      background: "var(--app-surface-2)",
+                                      color: "inherit",
+                                      textTransform: "capitalize",
+                                    }}
+                                  >
+                                    <option value="owner">Owner (Primary)</option>
+                                    <option value="admin">Organization Admin</option>
+                                    <option value="manager">Project Manager</option>
+                                    <option value="editor">Lead Estimator / Reviewer</option>
+                                    <option value="viewer">Viewer</option>
+                                  </select>
+                                ) : (
                                   <select
                                     value={m.role}
                                     onChange={(e) => handleRoleChange(m.user_id, e.target.value as OrgRole)}
@@ -977,21 +1039,69 @@ export default function SettingsPage() {
                                     }}
                                   >
                                     <option value="admin">Admin</option>
-                                    <option value="manager">Manager</option>
-                                    <option value="editor">Reviewer / Editor</option>
+                                    <option value="manager">Project Manager</option>
+                                    <option value="editor">Lead Estimator / Reviewer</option>
                                     <option value="viewer">Viewer</option>
                                   </select>
-                                </td>
-                                <td>
-                                  <span style={{ fontSize: "12px", textTransform: "capitalize" }}>{m.role} Permissions</span>
-                                </td>
-                                <td>
+                                )}
+                              </td>
+                              <td>
+                                <span style={{ fontSize: "12px" }}>{scopeDescription}</span>
+                              </td>
+                              <td>
+                                {m.status === "invited" ? (
+                                  <span
+                                    className="settings-chip"
+                                    style={{
+                                      background: "rgba(245, 158, 11, 0.15)",
+                                      color: "#f59e0b",
+                                      border: "1px solid rgba(245, 158, 11, 0.3)",
+                                    }}
+                                  >
+                                    Invited
+                                  </span>
+                                ) : (
                                   <span className="settings-chip settings-chip--available">Active</span>
-                                </td>
-                                <td style={{ textAlign: "right" }}>
+                                )}
+                              </td>
+                              <td style={{ textAlign: "right" }}>
+                                {isCurrentUser ? (
+                                  <span style={{ fontSize: "11px", color: "var(--app-text-muted)" }}>
+                                    You (Current User)
+                                  </span>
+                                ) : m.status === "invited" ? (
+                                  <div style={{ display: "inline-flex", gap: "8px", alignItems: "center" }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleResendInvite(m.user_id, m.email)}
+                                      style={{
+                                        background: "transparent",
+                                        border: "none",
+                                        color: "var(--accent-primary, #3b82f6)",
+                                        fontSize: "12px",
+                                        cursor: "pointer",
+                                      }}
+                                    >
+                                      Resend
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveMember(m.user_id, m.name || m.email)}
+                                      style={{
+                                        background: "transparent",
+                                        border: "none",
+                                        color: "var(--color-danger, #ef4444)",
+                                        fontSize: "12px",
+                                        cursor: "pointer",
+                                      }}
+                                    >
+                                      Revoke
+                                    </button>
+                                  </div>
+                                ) : (
                                   <button
                                     type="button"
-                                    onClick={() => handleRemoveMember(m.user_id)}
+                                    onClick={() => handleRemoveMember(m.user_id, m.name || m.email)}
                                     style={{
                                       background: "transparent",
                                       border: "none",
@@ -1002,10 +1112,11 @@ export default function SettingsPage() {
                                   >
                                     Remove
                                   </button>
-                                </td>
-                              </tr>
-                            );
-                          })}
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -1029,38 +1140,38 @@ export default function SettingsPage() {
                         <tbody>
                           <tr>
                             <td>Blueprint Ingestion &amp; CAD Geometry</td>
-                            <td>✓ Yes</td>
-                            <td>✓ Yes</td>
-                            <td>✓ Yes</td>
-                            <td>— Read-only</td>
+                            <td><span style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "#10b981" }}><AnimatedCheck size={12} /> Yes</span></td>
+                            <td><span style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "#10b981" }}><AnimatedCheck size={12} /> Yes</span></td>
+                            <td><span style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "#10b981" }}><AnimatedCheck size={12} /> Yes</span></td>
+                            <td style={{ color: "var(--app-text-muted, #94a3b8)" }}>Read-only</td>
                           </tr>
                           <tr>
                             <td>AI Takeoff Proposal Generation</td>
-                            <td>✓ Yes</td>
-                            <td>✓ Yes</td>
-                            <td>✓ Yes</td>
-                            <td>— No</td>
+                            <td><span style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "#10b981" }}><AnimatedCheck size={12} /> Yes</span></td>
+                            <td><span style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "#10b981" }}><AnimatedCheck size={12} /> Yes</span></td>
+                            <td><span style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "#10b981" }}><AnimatedCheck size={12} /> Yes</span></td>
+                            <td style={{ color: "var(--app-text-muted, #94a3b8)" }}>No</td>
                           </tr>
                           <tr>
                             <td>Approve / Reject Line Items</td>
-                            <td>✓ Yes</td>
-                            <td>✓ Yes</td>
-                            <td>✓ Yes</td>
-                            <td>— No</td>
+                            <td><span style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "#10b981" }}><AnimatedCheck size={12} /> Yes</span></td>
+                            <td><span style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "#10b981" }}><AnimatedCheck size={12} /> Yes</span></td>
+                            <td><span style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "#10b981" }}><AnimatedCheck size={12} /> Yes</span></td>
+                            <td style={{ color: "var(--app-text-muted, #94a3b8)" }}>No</td>
                           </tr>
                           <tr>
                             <td>Team Member Invites &amp; Seat Admin</td>
-                            <td>✓ Yes</td>
-                            <td>✓ Yes</td>
-                            <td>— No</td>
-                            <td>— No</td>
+                            <td><span style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "#10b981" }}><AnimatedCheck size={12} /> Yes</span></td>
+                            <td><span style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "#10b981" }}><AnimatedCheck size={12} /> Yes</span></td>
+                            <td style={{ color: "var(--app-text-muted, #94a3b8)" }}>No</td>
+                            <td style={{ color: "var(--app-text-muted, #94a3b8)" }}>No</td>
                           </tr>
                           <tr>
                             <td>Export Verified BOQ Spreadsheets</td>
-                            <td>✓ Yes</td>
-                            <td>✓ Yes</td>
-                            <td>✓ Yes</td>
-                            <td>✓ Yes</td>
+                            <td><span style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "#10b981" }}><AnimatedCheck size={12} /> Yes</span></td>
+                            <td><span style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "#10b981" }}><AnimatedCheck size={12} /> Yes</span></td>
+                            <td><span style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "#10b981" }}><AnimatedCheck size={12} /> Yes</span></td>
+                            <td><span style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "#10b981" }}><AnimatedCheck size={12} /> Yes</span></td>
                           </tr>
                         </tbody>
                       </table>
@@ -1071,11 +1182,23 @@ export default function SettingsPage() {
                 <InviteMemberModal
                   isOpen={isInviteModalOpen}
                   onClose={() => setIsInviteModalOpen(false)}
-                  orgId={activeOrgId || "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}
+                  orgId={activeOrgId || "org-vectoris-labs"}
                   orgName={activeOrgName}
                   onMemberInvited={(newMember) => {
-                    setOrgMembers((prev) => [...prev, newMember]);
-                    setMemberActionMsg("New team member successfully registered.");
+                    setOrgMembers((prev) => [...prev.filter((m) => m.user_id !== newMember.user_id), newMember]);
+                    setMemberActionMsg(`Invitation registered for ${newMember.email}.`);
+                    window.setTimeout(() => setMemberActionMsg(null), 3000);
+                  }}
+                />
+
+                <CreateWorkspaceModal
+                  isOpen={isCreateWorkspaceModalOpen}
+                  onClose={() => setIsCreateWorkspaceModalOpen(false)}
+                  onWorkspaceCreated={async (newOrgId) => {
+                    await handleSwitchOrg(newOrgId);
+                    const orgs = await organizationService.getUserOrganizations();
+                    setUserOrgs(orgs);
+                    setMemberActionMsg("New workspace created and active.");
                     window.setTimeout(() => setMemberActionMsg(null), 3000);
                   }}
                 />
@@ -1854,10 +1977,11 @@ export default function SettingsPage() {
                     <button
                       type="button"
                       className="btn btn--ghost"
-                      style={{ fontSize: "12px" }}
+                      style={{ fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "4px" }}
                       onClick={() => setActiveTab("account")}
                     >
-                      Manage Password →
+                      <span>Manage Password</span>
+                      <AnimatedArrowRight size={13} />
                     </button>
                   </SettingsRow>
                 </div>
@@ -1910,11 +2034,7 @@ export default function SettingsPage() {
                       type="button"
                       className="btn btn--primary btn--sm"
                       onClick={() => {
-                        tourService.resetTour();
-                        navigate("/dashboard");
-                        window.setTimeout(() => {
-                          tourService.startTour(true);
-                        }, 300);
+                        tourService.restartTour(navigate);
                       }}
                     >
                       Restart Tour

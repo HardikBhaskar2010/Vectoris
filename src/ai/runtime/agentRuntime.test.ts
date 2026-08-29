@@ -99,6 +99,7 @@ export async function runAgentRuntimeTests() {
 }
 
 // Auto-run if executed directly
-if (typeof window === "undefined") {
+const isDirectRuntimeTest = typeof globalThis !== "undefined" && (globalThis as any).process?.argv?.[1]?.includes("agentRuntime.test");
+if (isDirectRuntimeTest) {
   void runAgentRuntimeTests();
 }

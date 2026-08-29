@@ -113,7 +113,8 @@ export async function runAuthTests() {
   console.log("All Vectoris Auth unit tests passed successfully!");
 }
 
-// Auto-run if executed in node
-if (typeof window === "undefined") {
+// Auto-run if executed in node directly
+const isDirectAuthTest = typeof globalThis !== "undefined" && (globalThis as any).process?.argv?.[1]?.includes("auth.test");
+if (isDirectAuthTest) {
   void runAuthTests();
 }

@@ -15,6 +15,7 @@ import { App } from "./app/App";
 import "./styles/global.css";
 import "./styles/projectPlan.css";
 import "./styles/contextMenu.css";
+import "./styles/animated-icons.css";
 
 createRoot(document.getElementById("root") as HTMLElement).render(
   <StrictMode>

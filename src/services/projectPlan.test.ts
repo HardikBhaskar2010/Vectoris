@@ -144,6 +144,7 @@ export function runProjectPlanTests() {
 }
 
 // Auto-run if executed directly
-if (typeof window === "undefined") {
+const isDirectProjectPlanTest = typeof globalThis !== "undefined" && (globalThis as any).process?.argv?.[1]?.includes("projectPlan.test");
+if (isDirectProjectPlanTest) {
   runProjectPlanTests();
 }

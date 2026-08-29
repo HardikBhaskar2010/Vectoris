@@ -22,9 +22,10 @@ import { AppShell } from "../components/AppShell";
 import { KPICard } from "../components/KPICard";
 import { BlueprintViewport } from "../components/BlueprintViewport";
 import { CreateProjectModal } from "../components/CreateProjectModal";
-import { useProjects, useAllDocuments, useLineItems } from "../services/dataService";
+import { useProjects, useAllDocuments, useLineItems, useAllLineItems, dataService } from "../services/dataService";
 import { tourService } from "../services/tourService";
 import { useAuth } from "../hooks/useAuth";
+import { AnimatedZap } from "../components/icons/AnimatedIcons";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type PageState = "loading" | "empty" | "error" | "data";
@@ -69,6 +70,7 @@ export function DashboardPage() {
   const { user } = useAuth();
   const projects = useProjects();
   const documents = useAllDocuments();
+  const allLineItems = useAllLineItems();
   const [pageState, setPageState] = useState<PageState>("data");
 
   const primaryProjectId = projects[0]?.id || "33333333-3333-3333-3333-333333333333";
@@ -107,6 +109,14 @@ export function DashboardPage() {
     return documents.reduce((sum, d) => sum + (d.sheet_count || 0), 0);
   }, [documents]);
 
+  const totalProposed = useMemo(() => {
+    return allLineItems.filter((i) => i.status === "proposed").length;
+  }, [allLineItems]);
+
+  const totalVerified = useMemo(() => {
+    return allLineItems.filter((i) => i.status === "approved").length;
+  }, [allLineItems]);
+
   const kpis = useMemo(() => [
     {
       label: "Active Projects",
@@ -126,21 +136,21 @@ export function DashboardPage() {
     },
     {
       label: "Takeoff Items",
-      value: projects.length > 0 ? (projects.reduce((acc, p) => acc + (p.sheets * 12), 0) || 0) : 0,
-      trend: projects.length > 0 ? "Geometry detections mapped" : "0 pending takeoff runs",
-      trendType: "neutral" as const,
+      value: allLineItems.length > 0 ? allLineItems.length : (projects.length > 0 ? projects.reduce((acc, p) => acc + p.sheets, 0) : 0),
+      trend: totalProposed > 0 ? `${totalProposed} proposed items need review` : "All quantities reconciled",
+      trendType: totalProposed > 0 ? ("warning" as const) : ("positive" as const),
       accent: true,
       icon: <IconCable />,
     },
     {
       label: "Verified Line Items",
-      value: projects.length > 0 ? (projects.reduce((acc, p) => acc + Math.round(p.progress * 3), 0) || 0) : 0,
-      trend: "BOQ export stream",
-      trendType: "neutral" as const,
+      value: totalVerified,
+      trend: totalVerified > 0 ? "Ready for BOQ schedule export" : "Awaiting takeoff verification",
+      trendType: totalVerified > 0 ? ("positive" as const) : ("neutral" as const),
       accent: false,
       icon: <IconReceipt />,
     },
-  ], [projects, totalSheets]);
+  ], [projects, totalSheets, allLineItems, totalProposed, totalVerified]);
 
   const activeProjects = useMemo(() => {
     return projects.slice(0, 3).map((p) => ({
@@ -371,24 +381,196 @@ function DashboardSkeleton() {
   );
 }
 
-// ── Empty State — no projects yet ────────────────────────────────────────────
+// ── Empty State — intelligent workstation first-run hub ──────────────────────
 function DashboardEmpty({ onOpenCreate }: { onOpenCreate: () => void }) {
+  const [isSeeding, setIsSeeding] = useState(false);
+
+  const handleSeedSample = () => {
+    setIsSeeding(true);
+    try {
+      dataService.seedSampleProject();
+    } finally {
+      setIsSeeding(false);
+    }
+  };
+
   return (
-    <div className="dashboard-empty" role="main" aria-label="No projects yet">
-      <div className="dashboard-empty__icon" aria-hidden="true">
-        <IconEmptyBlueprint />
+    <div className="dashboard-empty-hub" role="main" aria-label="Vectoris Workstation Initializer" style={{ maxWidth: "1100px", margin: "0 auto", padding: "32px 16px" }}>
+      {/* Top Identity Hero */}
+      <div style={{ textAlign: "center", marginBottom: "36px" }}>
+        <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "4px 12px", borderRadius: "20px", background: "rgba(59, 130, 246, 0.1)", border: "1px solid rgba(59, 130, 246, 0.25)", marginBottom: "16px" }}>
+          <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#3b82f6" }} aria-hidden="true" />
+          <span style={{ fontSize: "12px", fontWeight: 700, color: "#60a5fa", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            Local-First CAD Perception Engine · Ready
+          </span>
+        </div>
+        <h1 style={{ fontSize: "2rem", fontWeight: 800, color: "var(--app-text-primary, #f8fafc)", letterSpacing: "-0.02em", margin: "0 0 10px 0" }}>
+          Engineering Intelligence Workstation
+        </h1>
+        <p style={{ fontSize: "1rem", color: "var(--app-text-secondary, #94a3b8)", maxWidth: "620px", margin: "0 auto", lineHeight: "1.5" }}>
+          Vectoris extracts vector geometries, electrical components, and single-line feeder runs directly from drawing sets with zero data fabrication.
+        </p>
+
+        {/* Dual Primary Actions */}
+        <div style={{ display: "flex", justifyContent: "center", gap: "12px", marginTop: "24px", flexWrap: "wrap" }} data-tour="dashboard-empty-cta">
+          <button
+            type="button"
+            className="btn btn--primary"
+            onClick={onOpenCreate}
+            data-tour="dashboard-primary-action"
+            style={{ padding: "12px 24px", fontSize: "14px", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "8px" }}
+          >
+            <IconPlus aria-hidden="true" />
+            <span>Create First Project</span>
+          </button>
+
+          <button
+            type="button"
+            className="btn btn--secondary"
+            onClick={handleSeedSample}
+            disabled={isSeeding}
+            style={{ padding: "12px 20px", fontSize: "14px", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "8px" }}
+          >
+            <AnimatedZap size={15} />
+            <span>{isSeeding ? "Loading Sample…" : "Load Sample Hyperscale Project"}</span>
+          </button>
+        </div>
       </div>
-      <h1 className="dashboard-empty__title">No projects yet</h1>
-      <p className="dashboard-empty__body">
-        Create your first project and upload a drawing package to start an AI-assisted takeoff.
-      </p>
-      <button type="button" className="btn btn--primary" onClick={onOpenCreate}>
-        <IconPlus aria-hidden="true" />
-        Create First Project
-      </button>
-      <p className="dashboard-empty__hint">
-        Single-organization workstation mode · Local-First Storage
-      </p>
+
+      {/* 4-Step Interactive Workflow */}
+      <div style={{ marginBottom: "36px" }} data-tour="dashboard-workflow">
+        <h2 style={{ fontSize: "0.875rem", fontWeight: 700, color: "var(--app-text-muted, #94a3b8)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "16px" }}>
+          The 4-Stage Vectoris Workflow
+        </h2>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "16px" }}>
+          {/* Step 1 */}
+          <div
+            onClick={onOpenCreate}
+            style={{
+              background: "var(--app-surface-1, #18191c)",
+              border: "1px solid var(--accent-primary, #3b82f6)",
+              borderRadius: "10px",
+              padding: "20px",
+              cursor: "pointer",
+              transition: "transform 180ms ease, box-shadow 180ms ease",
+              boxShadow: "0 4px 16px rgba(59, 130, 246, 0.12)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+              <span style={{ fontSize: "12px", fontWeight: 700, color: "#60a5fa", background: "rgba(59, 130, 246, 0.15)", padding: "2px 8px", borderRadius: "4px" }}>
+                Stage 1 · Active
+              </span>
+              <span style={{ fontSize: "12px", color: "#60a5fa", fontWeight: 600 }}>Start →</span>
+            </div>
+            <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--app-text-primary, #f8fafc)", marginBottom: "6px" }}>
+              1. Define Project
+            </div>
+            <p style={{ fontSize: "12.5px", color: "var(--app-text-secondary, #cbd5e1)", lineHeight: "1.45", margin: 0 }}>
+              Set up project metadata, client identity, engineering discipline, and facility scope.
+            </p>
+          </div>
+
+          {/* Step 2 */}
+          <div
+            style={{
+              background: "var(--app-surface-1, #18191c)",
+              border: "1px solid var(--app-border, rgba(255, 255, 255, 0.08))",
+              borderRadius: "10px",
+              padding: "20px",
+              opacity: 0.85,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+              <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--app-text-muted, #94a3b8)" }}>
+                Stage 2
+              </span>
+              <span style={{ fontSize: "11px", color: "var(--app-text-muted, #64748b)" }}>Awaiting Step 1</span>
+            </div>
+            <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--app-text-primary, #f8fafc)", marginBottom: "6px" }}>
+              2. Ingest Drawings
+            </div>
+            <p style={{ fontSize: "12.5px", color: "var(--app-text-secondary, #94a3b8)", lineHeight: "1.45", margin: 0 }}>
+              Upload multi-page PDFs or CAD files. Vectoris extracts vector streams and sheet classifications locally.
+            </p>
+          </div>
+
+          {/* Step 3 */}
+          <div
+            style={{
+              background: "var(--app-surface-1, #18191c)",
+              border: "1px solid var(--app-border, rgba(255, 255, 255, 0.08))",
+              borderRadius: "10px",
+              padding: "20px",
+              opacity: 0.85,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+              <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--app-text-muted, #94a3b8)" }}>
+                Stage 3
+              </span>
+              <span style={{ fontSize: "11px", color: "var(--app-text-muted, #64748b)" }}>Awaiting Step 2</span>
+            </div>
+            <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--app-text-primary, #f8fafc)", marginBottom: "6px" }}>
+              3. Review Takeoff
+            </div>
+            <p style={{ fontSize: "12.5px", color: "var(--app-text-secondary, #94a3b8)", lineHeight: "1.45", margin: 0 }}>
+              Inspect bounding boxes on blueprints, verify quantities, and approve proposed items into the BOQ ledger.
+            </p>
+          </div>
+
+          {/* Step 4 */}
+          <div
+            style={{
+              background: "var(--app-surface-1, #18191c)",
+              border: "1px solid var(--app-border, rgba(255, 255, 255, 0.08))",
+              borderRadius: "10px",
+              padding: "20px",
+              opacity: 0.85,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+              <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--app-text-muted, #94a3b8)" }}>
+                Stage 4
+              </span>
+              <span style={{ fontSize: "11px", color: "var(--app-text-muted, #64748b)" }}>Awaiting Step 3</span>
+            </div>
+            <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--app-text-primary, #f8fafc)", marginBottom: "6px" }}>
+              4. Investigate & Plan
+            </div>
+            <p style={{ fontSize: "12.5px", color: "var(--app-text-secondary, #94a3b8)", lineHeight: "1.45", margin: 0 }}>
+              Ask CAD queries in the Investigation Workshop and compile version-controlled Project Plans.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Specifications / Formats Footer */}
+      <div
+        style={{
+          background: "var(--app-surface-2, rgba(255, 255, 255, 0.03))",
+          border: "1px solid var(--app-border, rgba(255, 255, 255, 0.08))",
+          borderRadius: "8px",
+          padding: "16px 20px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: "12px",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
+          <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--app-text-muted, #94a3b8)" }}>
+            Supported Ingestion:
+          </span>
+          <span style={{ fontSize: "12px", fontFamily: "var(--font-technical, monospace)", color: "var(--app-text-primary, #f8fafc)" }}>
+            PDF (FlateDecode) · AutoCAD DWG / DXF · Single-Line Diagrams (SLD)
+          </span>
+        </div>
+        <div style={{ fontSize: "12px", color: "var(--app-text-muted, #94a3b8)" }}>
+          100% On-Device Engine · Zero Fabricated Data
+        </div>
+      </div>
     </div>
   );
 }

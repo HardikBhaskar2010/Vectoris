@@ -12,7 +12,17 @@
 export interface QueuedMutation {
   id: string;
   mutation_id: string; // Stable UUID for remote idempotency
-  type: "line_item_status" | "manual_line_item" | "project_plan_draft" | "proposal_status" | "project_type";
+  type:
+    | "line_item_status"
+    | "manual_line_item"
+    | "project_plan_draft"
+    | "proposal_status"
+    | "project_type"
+    | "project_create"
+    | "project_update"
+    | "project_delete"
+    | "project_plan_accept"
+    | "project_plan_reject";
   payload: Record<string, unknown>;
   timestamp: string;
   retryCount: number;
@@ -24,11 +34,69 @@ export type MutationExecutor = (mutation: QueuedMutation) => Promise<boolean>;
 
 const STORAGE_KEY = "vectoris.offline_mutation_queue";
 
+/**
+ * Robustly classifies whether an error represents a genuine network/offline failure
+ * vs a remote database/RLS/application rejection.
+ */
+export function isNetworkOfflineError(err: unknown): boolean {
+  if (!offlineSyncService.isOnline()) {
+    return true;
+  }
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    return true;
+  }
+  if (!err) return false;
+
+  const e = err as any;
+
+  // Postgres SQLSTATE codes (e.g. 42501 for RLS denial, 23505 for unique violation, P0001 for user exception)
+  if (
+    e.code &&
+    typeof e.code === "string" &&
+    (e.code.length === 5 || e.code.startsWith("P") || e.code.startsWith("2") || e.code.startsWith("4"))
+  ) {
+    return false; // Server was reached and returned a database error
+  }
+
+  // HTTP response status codes >= 400 with a message from server
+  if (
+    typeof e.status === "number" &&
+    e.status >= 400 &&
+    e.status < 600 &&
+    e.message &&
+    !e.message.toLowerCase().includes("failed to fetch")
+  ) {
+    return false; // Server was reached and returned an HTTP error
+  }
+
+  const msg = (e.message || String(err)).toLowerCase();
+  const name = (e.name || "").toLowerCase();
+
+  if (
+    name === "aborterror" ||
+    msg.includes("failed to fetch") ||
+    msg.includes("fetch failed") ||
+    msg.includes("networkerror") ||
+    msg.includes("network error") ||
+    msg.includes("enotfound") ||
+    msg.includes("econnrefused") ||
+    msg.includes("etimedout") ||
+    msg.includes("connection refused") ||
+    msg.includes("the internet connection appears to be offline") ||
+    msg.includes("offline")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 class OfflineSyncService {
   private queue: QueuedMutation[] = [];
   private isReplaying = false;
   private listeners: Array<(pendingCount: number) => void> = [];
   private executors = new Map<string, MutationExecutor>();
+  private simulatedOnline: boolean | null = null;
 
   constructor() {
     this.loadQueue();
@@ -41,6 +109,13 @@ class OfflineSyncService {
         );
       });
     }
+  }
+
+  /**
+   * Overrides online state for testing or simulation. Set to null to restore default behavior.
+   */
+  public setOnline(online: boolean | null): void {
+    this.simulatedOnline = online;
   }
 
   /**
@@ -73,6 +148,15 @@ class OfflineSyncService {
     }
   }
 
+  public clearQueue(): void {
+    this.queue = [];
+    this.saveQueue();
+  }
+
+  public getQueue(): QueuedMutation[] {
+    return [...this.queue];
+  }
+
   private notify(): void {
     const count = this.getPendingCount();
     this.listeners.forEach((fn) => fn(count));
@@ -91,6 +175,9 @@ class OfflineSyncService {
   }
 
   public isOnline(): boolean {
+    if (this.simulatedOnline !== null) {
+      return this.simulatedOnline;
+    }
     if (typeof navigator !== "undefined" && "onLine" in navigator) {
       return navigator.onLine;
     }

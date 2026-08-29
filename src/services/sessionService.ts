@@ -13,6 +13,8 @@ import type {
   EvidenceData,
   ActionProposal,
   ToolTraceStep,
+  MetricHighlight,
+  ReferencedSource,
 } from "../data/types";
 import type { Database, Json } from "../data/database.types";
 
@@ -31,6 +33,8 @@ export interface AddMessageParams {
   tool_steps?: ToolTraceStep[];
   evidence?: EvidenceData;
   action_proposal?: ActionProposal;
+  metric_highlights?: MetricHighlight[];
+  referenced_sources?: ReferencedSource[];
 }
 
 class SessionService {
@@ -208,6 +212,8 @@ class SessionService {
         thought_trace: (params.thought_trace || []) as unknown as Json,
         evidence: (params.evidence || null) as unknown as Json,
         action_proposal: (params.action_proposal || null) as unknown as Json,
+        metric_highlights: (params.metric_highlights || null) as unknown as Json,
+        referenced_sources: (params.referenced_sources || null) as unknown as Json,
       };
 
       const dbRole: Database["public"]["Enums"]["message_role"] =

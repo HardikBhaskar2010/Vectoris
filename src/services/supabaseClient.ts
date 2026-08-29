@@ -9,21 +9,29 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "../data/database.types";
 
-const globalProcess = typeof globalThis !== "undefined" ? (globalThis as { process?: { env?: Record<string, string> } }).process : undefined;
-const env =
-  typeof import.meta !== "undefined" && import.meta.env
-    ? import.meta.env
-    : globalProcess?.env ?? {};
+function getEnvValue(key: string): string | undefined {
+  if (typeof import.meta !== "undefined" && import.meta.env && import.meta.env[key]) {
+    return import.meta.env[key];
+  }
+  const globalProcess = typeof globalThis !== "undefined" ? (globalThis as { process?: { env?: Record<string, string> } }).process : undefined;
+  return globalProcess?.env?.[key];
+}
 
-const supabaseUrl = (env.VITE_SUPABASE_URL as string | undefined);
-const supabaseAnonKey = (env.VITE_SUPABASE_ANON_KEY as string | undefined);
+let overrideConfigured: boolean | null = null;
+
+export const setSupabaseConfiguredForTest = (configured: boolean | null): void => {
+  overrideConfigured = configured;
+};
 
 export const isSupabaseConfigured = (): boolean => {
+  if (overrideConfigured !== null) return overrideConfigured;
+  const url = getEnvValue("VITE_SUPABASE_URL");
+  const anonKey = getEnvValue("VITE_SUPABASE_ANON_KEY");
   return Boolean(
-    supabaseUrl &&
-      supabaseAnonKey &&
-      supabaseUrl !== "https://your-project-ref.supabase.co" &&
-      !supabaseUrl.includes("placeholder")
+    url &&
+      anonKey &&
+      url !== "https://your-project-ref.supabase.co" &&
+      !url.includes("placeholder")
   );
 };
 
@@ -34,8 +42,8 @@ export function getSupabaseClient(): SupabaseClient<Database> {
     return clientInstance;
   }
 
-  const url = supabaseUrl || "https://placeholder-vectoris.supabase.co";
-  const anonKey = supabaseAnonKey || "placeholder-anon-key";
+  const url = getEnvValue("VITE_SUPABASE_URL") || "https://placeholder-vectoris.supabase.co";
+  const anonKey = getEnvValue("VITE_SUPABASE_ANON_KEY") || "placeholder-anon-key";
 
   clientInstance = createClient<Database>(url, anonKey, {
     auth: {

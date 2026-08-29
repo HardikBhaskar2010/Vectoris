@@ -202,11 +202,11 @@ export async function runDocumentPipelineTests(): Promise<void> {
 
   const det1 = fullResult.detections[0];
   assert(
-    det1.coordinates !== undefined && det1.coordinates.x >= 0 && det1.coordinates.x <= 1.0,
+    det1.coordinates != null && det1.coordinates.x >= 0 && det1.coordinates.x <= 1.0,
     "Expected normalized X coordinate"
   );
   assert(
-    det1.coordinates !== undefined && det1.coordinates.y >= 0 && det1.coordinates.y <= 1.0,
+    det1.coordinates != null && det1.coordinates.y >= 0 && det1.coordinates.y <= 1.0,
     "Expected normalized Y coordinate"
   );
   assert(det1.status === "proposed", "Expected detection status to be 'proposed'");

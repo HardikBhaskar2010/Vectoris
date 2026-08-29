@@ -11832,10 +11832,54 @@ html.theme-transitioning, html.theme-transitioning * {
     transition: none !important;
     transform: none !important;
   }
-  .engine-dialog__dot {
-    animation: none !important;
+}
+
+/* ── Investigation Workshop Active Investigation Skeleton ── */
+.ses-response-box--loading {
+  border-color: rgba(225, 29, 72, 0.35);
+  background: linear-gradient(180deg, var(--surface-primary, #ffffff) 0%, rgba(225, 29, 72, 0.03) 100%);
+}
+
+.ses-loading-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 0;
+}
+
+.ses-skeleton-line {
+  height: 12px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, rgba(120, 120, 120, 0.08) 25%, rgba(120, 120, 120, 0.18) 50%, rgba(120, 120, 120, 0.08) 75%);
+  background-size: 200% 100%;
+  animation: sesSkeletonPulse 1.5s infinite ease-in-out;
+  width: 100%;
+}
+
+.ses-skeleton-line--hero {
+  height: 32px;
+  width: 45%;
+  border-radius: 6px;
+}
+
+.ses-skeleton-line--medium {
+  width: 75%;
+}
+
+.ses-skeleton-line--short {
+  width: 50%;
+}
+
+@keyframes sesSkeletonPulse {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
   }
 }
 
-
-
+[data-theme="dark"] .ses-response-box--loading {
+  border-color: rgba(225, 29, 72, 0.4);
+  background: linear-gradient(180deg, rgba(20, 20, 22, 0.95) 0%, rgba(225, 29, 72, 0.06) 100%);
+}

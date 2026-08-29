@@ -7,13 +7,14 @@
  * - Restartable from Settings / Help
  * - Respects prefers-reduced-motion
  * - Non-blocking overlay with Vectoris design tokens
- * - Step sequence covering actual, real application surfaces
+ * - Two-tier tour architecture: Tier 1 Global Tour + Tier 2 Contextual Mini-Tours
  */
 
 import { driver, type Driver, type DriveStep } from "driver.js";
 import "../styles/driver-theme.css";
 
 const TOUR_STORAGE_KEY = "vectoris.tour_status";
+const CONTEXTUAL_TOUR_PREFIX = "vectoris.tour.contextual.";
 
 export type TourStatus = "completed" | "skipped" | "pending";
 
@@ -21,7 +22,21 @@ class TourService {
   private activeDriver: Driver | null = null;
 
   /**
-   * Check if the tour has already been completed or skipped.
+   * Helper to wait for DOM element existence before initiating a tour.
+   */
+  public async waitForElement(selector: string, timeoutMs = 2500): Promise<Element | null> {
+    if (typeof document === "undefined") return null;
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const el = document.querySelector(selector);
+      if (el) return el;
+      await new Promise((r) => window.setTimeout(r, 50));
+    }
+    return document.querySelector(selector);
+  }
+
+  /**
+   * Check if the global workstation tour has already been completed or skipped.
    */
   public isTourCompleted(): boolean {
     try {
@@ -66,9 +81,57 @@ class TourService {
   }
 
   /**
-   * Canonical steps grounded in actual existing UI surfaces.
+   * Check if a specific contextual mini-tour is completed.
+   */
+  public isContextualTourCompleted(key: string): boolean {
+    try {
+      return window.localStorage.getItem(CONTEXTUAL_TOUR_PREFIX + key) === "completed";
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Mark a contextual mini-tour as completed.
+   */
+  public markContextualTourCompleted(key: string): void {
+    try {
+      window.localStorage.setItem(CONTEXTUAL_TOUR_PREFIX + key, "completed");
+    } catch (err) {
+      console.warn("Failed to persist contextual tour completed status:", err);
+    }
+  }
+
+  /**
+   * Canonical global steps grounded in actual existing UI surfaces.
+   * Dynamically adapts step 4 to match whether the dashboard is empty or populated.
    */
   private getTourSteps(): DriveStep[] {
+    const hasTakeoffCard = typeof document !== "undefined" && Boolean(document.querySelector('[data-tour="dashboard-takeoff"]'));
+    const hasEmptyCta = typeof document !== "undefined" && Boolean(document.querySelector('[data-tour="dashboard-empty-cta"]'));
+
+    const step4: DriveStep = hasTakeoffCard
+      ? {
+          element: '[data-tour="dashboard-takeoff"]',
+          popover: {
+            title: "4. Drawing Takeoff & Proposal Stream",
+            description:
+              "Review vector coordinate detections, verify quantities, and approve or reject AI-proposals before exporting to the final BOQ ledger.",
+            side: "top",
+            align: "center",
+          },
+        }
+      : {
+          element: hasEmptyCta ? '[data-tour="dashboard-empty-cta"]' : '[data-tour="dashboard-primary-action"]',
+          popover: {
+            title: "4. Drawing Ingestion & Workstation Kickstart",
+            description:
+              "Start by creating your first engineering project or uploading blueprints (PDF/CAD) to trigger on-device symbol perception and automated takeoff.",
+            side: "top",
+            align: "center",
+          },
+        };
+
     return [
       {
         element: '[data-tour="workspace-header"]',
@@ -100,16 +163,7 @@ class TourService {
           align: "start",
         },
       },
-      {
-        element: '[data-tour="dashboard-takeoff"]',
-        popover: {
-          title: "4. Drawing Takeoff & Proposal Stream",
-          description:
-            "Review vector coordinate detections, verify quantities, and approve or reject AI-proposals before exporting to the final BOQ ledger.",
-          side: "top",
-          align: "center",
-        },
-      },
+      step4,
       {
         element: '[data-tour="nav-settings"]',
         popover: {
@@ -132,12 +186,10 @@ class TourService {
       return;
     }
 
-    // Check prefers-reduced-motion
     const prefersReducedMotion =
       typeof window !== "undefined" &&
       window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
-    // Filter steps to only those elements currently present in the DOM
     const rawSteps = this.getTourSteps();
     const validSteps = rawSteps.filter((step) => {
       if (typeof step.element === "string") {
@@ -174,6 +226,65 @@ class TourService {
       this.activeDriver.drive();
     } catch (err) {
       console.warn("Vectoris Tour failed to launch:", err);
+    }
+  }
+
+  /**
+   * Cleanly restarts the global tour with route synchronization.
+   */
+  public async restartTour(navigate?: (path: string) => void): Promise<void> {
+    this.resetTour();
+    if (navigate) {
+      navigate("/dashboard");
+      await this.waitForElement('[data-tour="workspace-header"]', 2000);
+    }
+    this.startTour(true);
+  }
+
+  /**
+   * Starts a contextual mini-tour on a specific page.
+   */
+  public startContextualTour(tourKey: string, steps: DriveStep[], force = false): void {
+    if (!force && this.isContextualTourCompleted(tourKey)) {
+      return;
+    }
+
+    const prefersReducedMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+    const validSteps = steps.filter((step) => {
+      if (typeof step.element === "string") {
+        return document.querySelector(step.element) !== null;
+      }
+      return true;
+    });
+
+    if (validSteps.length === 0) return;
+
+    try {
+      this.activeDriver = driver({
+        showProgress: true,
+        animate: !prefersReducedMotion,
+        popoverClass: "vectoris-driver-popover",
+        nextBtnText: "Next →",
+        prevBtnText: "← Back",
+        doneBtnText: "Got It",
+        showButtons: ["next", "previous", "close"],
+        steps: validSteps,
+        onDestroyStarted: () => {
+          this.markContextualTourCompleted(tourKey);
+          this.activeDriver?.destroy();
+          this.activeDriver = null;
+        },
+        onDestroyed: () => {
+          this.activeDriver = null;
+        },
+      });
+
+      this.activeDriver.drive();
+    } catch (err) {
+      console.warn(`Contextual tour [${tourKey}] failed:`, err);
     }
   }
 

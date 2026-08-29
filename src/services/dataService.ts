@@ -24,6 +24,8 @@ import type {
   ProjectPlan,
   PlanVersion,
   DecisionResolution,
+  CorrectionRecord,
+  EvidenceData,
 } from "../data/types";
 import { generateId } from "./idService";
 import { INITIAL_PROJECTS } from "../data/mockProjects";
@@ -48,7 +50,7 @@ import { agentRuntime } from "../ai/runtime/agentRuntime";
 import { authService } from "./authService";
 import { isSupabaseConfigured } from "./supabaseClient";
 import { documentProcessingService } from "./documentProcessingService";
-import { offlineSyncService } from "./offlineSyncService";
+import { offlineSyncService, isNetworkOfflineError } from "./offlineSyncService";
 import { fileDialogService, type DocumentSource, type SelectedFileMetadata } from "./fileDialogService";
 
 const STORAGE_KEY_PREFIX = "vectoris.store.v1.";
@@ -115,24 +117,26 @@ class DataService {
 
   private initOfflineSync(): void {
     offlineSyncService.registerExecutor("line_item_status", async (mut) => {
-      const { lineItemId, status, reason } = mut.payload as {
+      const { lineItemId, status, reason, humanValue, correctionType } = mut.payload as {
         lineItemId: string;
         status: LineItemStatus;
         reason?: string;
+        humanValue?: string;
+        correctionType?: any;
       };
-      if (isSupabaseConfigured() && lineItemId) {
+      if (isSupabaseConfigured() && lineItemId && !lineItemId.startsWith("li-mock") && !lineItemId.startsWith("li-")) {
         if (status === "approved") {
           const item = this.lineItems.find((i) => i.id === lineItemId);
           await takeoffService.approveLineItem({
             lineItemId,
-            humanValue: item ? String(item.quantity) : "1",
-            correctionType: "manual_override",
+            humanValue: humanValue || (item ? String(item.quantity) : "1"),
+            correctionType: correctionType || "manual_override",
             reason,
           });
         } else if (status === "rejected") {
           await takeoffService.rejectLineItem({
             lineItemId,
-            correctionType: "false_positive",
+            correctionType: correctionType || "false_positive",
             reason: reason || "Rejected in takeoff review",
           });
         }
@@ -141,22 +145,23 @@ class DataService {
     });
 
     offlineSyncService.registerExecutor("manual_line_item", async (mut) => {
-      const { action, projectId, documents, lineItem } = mut.payload as any;
+      const { action, projectId, documents, lineItem, item } = mut.payload as any;
       if (action === "create_documents" && documents && projectId) {
         if (isSupabaseConfigured() && !projectId.startsWith("p-")) {
           await documentService.createDocuments(projectId, documents);
         }
         return true;
       }
-      if (lineItem && projectId) {
+      const targetItem = lineItem || item;
+      if (targetItem && projectId) {
         if (isSupabaseConfigured() && !projectId.startsWith("p-")) {
           await takeoffService.createManualLineItem({
             projectId,
-            name: lineItem.name,
-            itemCode: lineItem.item_code,
-            category: lineItem.category,
-            quantity: lineItem.quantity || 1,
-            unit: lineItem.unit || "NOS",
+            name: targetItem.name,
+            itemCode: targetItem.itemCode || targetItem.item_code,
+            category: targetItem.category,
+            quantity: targetItem.quantity || 1,
+            unit: targetItem.unit || "NOS",
           });
         }
         return true;
@@ -176,6 +181,83 @@ class DataService {
       const { projectId, documentIds, claims, lineage } = mut.payload as any;
       if (isSupabaseConfigured() && !projectId.startsWith("p-")) {
         await projectPlanService.createDraft({ projectId, documentIds, claims, lineage });
+      }
+      return true;
+    });
+
+    offlineSyncService.registerExecutor("project_plan_accept", async (mut) => {
+      const { draftVersionId, resolutions } = mut.payload as any;
+      if (isSupabaseConfigured() && draftVersionId && !draftVersionId.startsWith("ppv-")) {
+        await projectPlanService.acceptDraft(draftVersionId, resolutions);
+      }
+      return true;
+    });
+
+    offlineSyncService.registerExecutor("project_plan_reject", async (mut) => {
+      const { draftVersionId, reason } = mut.payload as any;
+      if (isSupabaseConfigured() && draftVersionId && !draftVersionId.startsWith("ppv-")) {
+        await projectPlanService.rejectDraft(draftVersionId, reason);
+      }
+      return true;
+    });
+
+    offlineSyncService.registerExecutor("project_create", async (mut) => {
+      const { tempId, payload } = mut.payload as any;
+      if (isSupabaseConfigured()) {
+        let activeOrgId = organizationService.getActiveOrganizationId();
+        if (!activeOrgId) {
+          const orgs = await organizationService.getUserOrganizations();
+          if (orgs.length > 0) {
+            activeOrgId = orgs[0].id;
+          }
+        }
+        if (activeOrgId) {
+          const remote = await projectService.createProject({
+            organizationId: activeOrgId,
+            ...payload,
+          });
+          this.swapTempProjectId(tempId, remote);
+        }
+      }
+      return true;
+    });
+
+    offlineSyncService.registerExecutor("project_update", async (mut) => {
+      const { projectId, patch } = mut.payload as any;
+      if (isSupabaseConfigured() && projectId && !projectId.startsWith("p-")) {
+        await projectService.updateProject(projectId, patch);
+      }
+      return true;
+    });
+
+    offlineSyncService.registerExecutor("project_delete", async (mut) => {
+      const { projectId } = mut.payload as any;
+      if (isSupabaseConfigured() && projectId && !projectId.startsWith("p-")) {
+        await projectService.softDeleteProject(projectId);
+      }
+      return true;
+    });
+
+    offlineSyncService.registerExecutor("proposal_status", async (mut) => {
+      const { sessionId, messageId, status, user, reason, role } = mut.payload as any;
+      if (sessionId && messageId) {
+        if (status === "approved") {
+          await this.approveProposal({
+            sessionId,
+            messageId,
+            userId: user,
+            userRole: role || "Editor",
+            reason,
+          });
+        } else if (status === "rejected") {
+          await this.rejectProposal({
+            sessionId,
+            messageId,
+            userId: user,
+            userRole: role || "Editor",
+            reason,
+          });
+        }
       }
       return true;
     });
@@ -311,14 +393,75 @@ class DataService {
     return this.projects.find((p) => p.id === id) || this.projects[0];
   }
 
-  public createProject(data: {
-    name: string;
-    description?: string;
-    client?: string;
-    sector?: ProjectSector;
-    discipline?: string;
-  }): Project {
+  private removeProjectLocally(projectId: string, targetId: string): void {
+    this.projects = this.projects.filter((p) => p.id !== projectId && p.id !== targetId);
+    this.documents = this.documents.filter((d) => d.project_id !== projectId && d.project_id !== targetId);
+    this.lineItems = this.lineItems.filter((li) => li.project_id !== projectId && li.project_id !== targetId);
+    this.sheets = this.sheets.filter((s) => s.project_id !== projectId && s.project_id !== targetId);
+    delete this.takeoffSummaries[projectId];
+    delete this.takeoffSummaries[targetId];
+    delete this.projectPlans[projectId];
+    delete this.projectPlans[targetId];
+
+    saveToStorage("projects", this.projects);
+    saveToStorage("documents", this.documents);
+    saveToStorage("lineItems", this.lineItems);
+    saveToStorage("sheets", this.sheets);
+    saveToStorage("takeoffSummaries", this.takeoffSummaries);
+    saveToStorage("projectPlans", this.projectPlans);
+    this.notify();
+  }
+
+  private swapTempProjectId(tempId: string, remote: Project): void {
+    const idx = this.projects.findIndex((p) => p.id === tempId);
+    if (idx !== -1) {
+      this.projects[idx] = { ...remote, is_synced: true, sync_status: "synced" };
+    } else {
+      this.projects.unshift({ ...remote, is_synced: true, sync_status: "synced" });
+    }
+
+    // Cascade ID change to documents and line items
+    this.documents.forEach((d) => {
+      if (d.project_id === tempId) d.project_id = remote.id;
+    });
+    this.lineItems.forEach((li) => {
+      if (li.project_id === tempId) li.project_id = remote.id;
+    });
+    this.sheets.forEach((s) => {
+      if (s.project_id === tempId) s.project_id = remote.id;
+    });
+    if (this.takeoffSummaries[tempId]) {
+      this.takeoffSummaries[remote.id] = this.takeoffSummaries[tempId];
+      delete this.takeoffSummaries[tempId];
+    }
+    if (this.projectPlans[tempId]) {
+      this.projectPlans[remote.id] = this.projectPlans[tempId];
+      delete this.projectPlans[tempId];
+    }
+
+    saveToStorage("projects", this.projects);
+    saveToStorage("documents", this.documents);
+    saveToStorage("lineItems", this.lineItems);
+    saveToStorage("sheets", this.sheets);
+    saveToStorage("takeoffSummaries", this.takeoffSummaries);
+    saveToStorage("projectPlans", this.projectPlans);
+    this.notify();
+  }
+
+  public createProject(
+    data: {
+      name: string;
+      description?: string;
+      client?: string;
+      sector?: ProjectSector;
+      discipline?: string;
+    },
+    options?: { isSynced?: boolean; syncStatus?: "synced" | "offline_queued" | "error" }
+  ): Project {
     const id = generateId("p");
+    const isSynced = options?.isSynced ?? (!isSupabaseConfigured());
+    const syncStatus = options?.syncStatus ?? (isSynced ? "synced" : "offline_queued");
+
     const newProject: Project = {
       id,
       name: data.name,
@@ -339,14 +482,16 @@ class DataService {
       updated_at: "Just now",
       member_count: 1,
       members: [{ name: "Current User", initials: "CU", role: "Owner", avatarColor: "#2d4a6e" }],
+      is_synced: isSynced,
+      sync_status: syncStatus,
     };
 
     this.projects.unshift(newProject);
     saveToStorage("projects", this.projects);
     this.notify();
 
-    // Async background persistence to Supabase if configured
-    if (isSupabaseConfigured()) {
+    // Background persistence only if configured, online, and not already queued explicitly
+    if (isSupabaseConfigured() && isSynced && offlineSyncService.isOnline()) {
       this.persistProjectToSupabase(newProject, data);
     }
 
@@ -361,7 +506,17 @@ class DataService {
     discipline?: string;
   }): Promise<Project> {
     if (!isSupabaseConfigured()) {
-      return this.createProject(data);
+      return this.createProject(data, { isSynced: true, syncStatus: "synced" });
+    }
+
+    // If workstation is offline, enqueue mutation and create local draft marked not synced
+    if (!offlineSyncService.isOnline()) {
+      const offlineProj = this.createProject(data, { isSynced: false, syncStatus: "offline_queued" });
+      offlineSyncService.enqueue("project_create", {
+        tempId: offlineProj.id,
+        payload: data,
+      });
+      return offlineProj;
     }
 
     try {
@@ -377,7 +532,7 @@ class DataService {
       }
 
       if (!activeOrgId) {
-        return this.createProject(data);
+        throw new Error("No active organization found to create project in Supabase");
       }
 
       const remoteProj = await projectService.createProject({
@@ -389,14 +544,38 @@ class DataService {
         discipline: data.discipline,
       });
 
-      this.projects.unshift(remoteProj);
+      // REMOTE_SUCCESS
+      const syncedProj: Project = { ...remoteProj, is_synced: true, sync_status: "synced" };
+      this.projects.unshift(syncedProj);
       saveToStorage("projects", this.projects);
       this.notify();
-      return remoteProj;
-    } catch (err) {
-      console.warn("Supabase project creation failed, falling back to local:", err);
-      return this.createProject(data);
+      return syncedProj;
+    } catch (err: any) {
+      if (isNetworkOfflineError(err)) {
+        // OFFLINE_QUEUED
+        console.warn("Network unreachable, enqueuing offline project creation:", err);
+        const offlineProj = this.createProject(data, { isSynced: false, syncStatus: "offline_queued" });
+        offlineSyncService.enqueue("project_create", {
+          tempId: offlineProj.id,
+          payload: data,
+        });
+        return offlineProj;
+      }
+
+      // REMOTE_FAILURE: Surface explicit error without fake local fallback
+      console.error("Supabase project creation failed with remote error:", err);
+      throw new Error(err?.message || "Failed to create project in remote database");
     }
+  }
+
+  public async createProjectRemote(data: {
+    name: string;
+    description?: string;
+    client?: string;
+    sector?: ProjectSector;
+    discipline?: string;
+  }): Promise<Project> {
+    return this.createProjectAsync(data);
   }
 
   private async persistProjectToSupabase(
@@ -432,25 +611,225 @@ class DataService {
         discipline: data.discipline,
       });
 
-      // Swap temp local id with remote database id
-      const idx = this.projects.findIndex((p) => p.id === tempProject.id);
-      if (idx !== -1) {
-        this.projects[idx] = remote;
-        saveToStorage("projects", this.projects);
-        this.notify();
-      }
+      this.swapTempProjectId(tempProject.id, remote);
     } catch (err) {
       console.warn("Background project persistence to Supabase failed:", err);
     }
   }
 
-  public updateProjectType(
+  public async deleteProject(projectId: string): Promise<void> {
+    const targetId = this.resolveProjectId(projectId);
+    const isRemote =
+      isSupabaseConfigured() &&
+      !projectId.startsWith("p-") &&
+      !projectId.startsWith("p1") &&
+      !projectId.startsWith("p2");
+
+    if (isRemote) {
+      if (!offlineSyncService.isOnline()) {
+        offlineSyncService.enqueue("project_delete", { projectId });
+        this.removeProjectLocally(projectId, targetId);
+        return;
+      }
+
+      try {
+        await projectService.softDeleteProject(projectId);
+        this.removeProjectLocally(projectId, targetId);
+      } catch (err: any) {
+        if (isNetworkOfflineError(err)) {
+          offlineSyncService.enqueue("project_delete", { projectId });
+          this.removeProjectLocally(projectId, targetId);
+          return;
+        }
+        console.error("Supabase project deletion failed with remote error:", err);
+        throw new Error(err?.message || "Failed to delete project on remote database");
+      }
+    } else {
+      this.removeProjectLocally(projectId, targetId);
+    }
+  }
+
+  public seedSampleProject(): Project {
+    const sample: Project = {
+      id: generateId("p-sample"),
+      name: "TITAN HYPERSCALE DATA CENTER — CAMPUS 4",
+      client: "Titan Cloud Technologies · DC Engineering",
+      description: "80MW Critical IT Load, 415V/240V Busway Distribution, N+1 Redundant UPS Systems, and Hot-Aisle Containment.",
+      sector: "data-center",
+      discipline: "Electrical HV & Infrastructure",
+      inferred_type: "Data Center Infrastructure",
+      user_provided_type: "Data Center Infrastructure",
+      verified_type: "Data Center Infrastructure",
+      displayType: "Data Center Infrastructure · Electrical HV",
+      typeProvenance: "verified",
+      status: "review",
+      sheets: 14,
+      sheetType: "DWG / PDF",
+      progress: 68,
+      created_at: new Date().toISOString().split("T")[0],
+      updated_at: "Just now",
+      member_count: 3,
+      members: [
+        { name: "Lead Estimator", initials: "LE", role: "Owner", avatarColor: "#2d4a6e" },
+        { name: "Senior Electrical PE", initials: "SP", role: "Editor", avatarColor: "#3d5a3e" },
+        { name: "BIM Coordinator", initials: "BC", role: "Viewer", avatarColor: "#4d3d5a" },
+      ],
+    };
+
+    const sampleItems: LineItem[] = [
+      {
+        id: generateId("li-s"),
+        project_id: sample.id,
+        item_code: "SWG-415V-01",
+        name: "Main Low Voltage Switchboard 4000A 415V Form 4b",
+        description: "Main electrical distribution switchboard for Hyperscale Data Center Campus 4",
+        specification: "IEC 61439-2 Form 4b Type 7 with ACB & Motorized Incomers",
+        category: "Power Distribution",
+        quantity: 4,
+        unit: "SET",
+        source_document_id: "doc-sample-1",
+        source_document_name: "Titan_DataCenter_Electrical_Package.pdf",
+        source_sheet: "E-101_Main_SLD.dwg",
+        status: "approved",
+        detection_source: "ai_detection",
+        reviewed_by: "Lead Estimator",
+        reviewed_at: "Earlier today",
+      },
+      {
+        id: generateId("li-s"),
+        project_id: sample.id,
+        item_code: "UPS-500KVA",
+        name: "Modular Online Double Conversion UPS 500kVA / 500kW",
+        description: "High-efficiency double conversion UPS topology with LiFePO4 battery modules",
+        specification: "High efficiency 97% double conversion with LiFePO4 battery cabinet",
+        category: "Power Distribution",
+        quantity: 6,
+        unit: "NOS",
+        source_document_id: "doc-sample-1",
+        source_document_name: "Titan_DataCenter_Electrical_Package.pdf",
+        source_sheet: "E-102_UPS_Topology.dwg",
+        status: "proposed",
+        detection_source: "ai_detection",
+      },
+      {
+        id: generateId("li-s"),
+        project_id: sample.id,
+        item_code: "TR-LGT-2X4",
+        name: "Cleanroom LED Troffer 2x4 50W IP54 Dimmable",
+        description: "50W IP54 sealed recessed LED troffer for Server Data Hall B",
+        specification: "5000K CCT 0-10V DALI 2.0 addressable with battery backup unit",
+        category: "Lighting",
+        quantity: 148,
+        unit: "NOS",
+        source_document_id: "doc-sample-1",
+        source_document_name: "Titan_DataCenter_Electrical_Package.pdf",
+        source_sheet: "E-201_DataHall_Lighting.dwg",
+        status: "proposed",
+        detection_source: "ai_detection",
+      },
+      {
+        id: generateId("li-s"),
+        project_id: sample.id,
+        item_code: "CT-HDG-600",
+        name: "Heavy Duty Cable Ladder 600mm x 100mm HDG",
+        description: "Overhead cable management containment for primary power feeders",
+        specification: "Hot dip galvanized BS EN ISO 1461 with trapeze hangers every 1.5m",
+        category: "Cable Tray",
+        quantity: 320,
+        unit: "MTR",
+        source_document_id: "doc-sample-1",
+        source_document_name: "Titan_DataCenter_Electrical_Package.pdf",
+        source_sheet: "E-301_CableRoute_Overhead.dwg",
+        status: "proposed",
+        detection_source: "ai_detection",
+      },
+    ];
+
+    const sampleSheets: Sheet[] = [
+      {
+        id: generateId("sh-s"),
+        project_id: sample.id,
+        sheet_id: "E-101",
+        name: "Main Low Voltage Single Line Diagram",
+        type: "single_line",
+        detection_count: 4,
+        document_name: "E-101_Main_SLD.dwg",
+        is_empty: false,
+        scale: "N.T.S",
+        discipline: "Electrical",
+        revision: "Rev 2",
+      },
+      {
+        id: generateId("sh-s"),
+        project_id: sample.id,
+        sheet_id: "E-201",
+        name: "Data Hall B Lighting & Fixture Layout",
+        type: "floor_plan",
+        detection_count: 148,
+        document_name: "E-201_DataHall_Lighting.dwg",
+        is_empty: false,
+        scale: "1:100",
+        discipline: "Electrical",
+        revision: "Rev 1",
+      },
+    ];
+
+    const sampleDocs: ProjectDocument[] = [
+      {
+        id: generateId("doc-s"),
+        project_id: sample.id,
+        filename: "Titan_DataCenter_Electrical_Package.pdf",
+        format: "PDF",
+        size_mb: 28.4,
+        sheet_count: 14,
+        upload_status: "complete",
+        uploaded_by: "Lead Estimator",
+        uploaded_at: "Just now",
+        file_path: "/drawings/Titan_DataCenter_Electrical_Package.pdf",
+      },
+    ];
+
+    this.projects.unshift(sample);
+    this.lineItems.push(...sampleItems);
+    this.sheets.push(...sampleSheets);
+    this.documents.push(...sampleDocs);
+
+    this.takeoffSummaries[sample.id] = {
+      id: generateId("tos"),
+      project_id: sample.id,
+      status: "complete",
+      sheets_processed: 14,
+      sheets_total: 14,
+      line_items_proposed: 3,
+      line_items_approved: 1,
+      started_at: "Just now",
+      completed_at: "Just now",
+      model_version: "v2.4-perception",
+    };
+
+    saveToStorage("projects", this.projects);
+    saveToStorage("lineItems", this.lineItems);
+    saveToStorage("sheets", this.sheets);
+    saveToStorage("documents", this.documents);
+    saveToStorage("takeoffSummaries", this.takeoffSummaries);
+    this.notify();
+
+    return sample;
+  }
+
+  public async updateProjectType(
     projectId: string,
     displayType: string,
     provenance: "ai_inferred" | "user_provided" | "verified"
-  ): void {
+  ): Promise<void> {
     const project = this.projects.find((p) => p.id === projectId);
     if (!project) return;
+
+    const prevVerified = project.verified_type;
+    const prevUserProvided = project.user_provided_type;
+    const prevInferred = project.inferred_type;
+    const prevDisplay = project.displayType;
+    const prevProvenance = project.typeProvenance;
 
     if (provenance === "verified") {
       project.verified_type = displayType;
@@ -466,16 +845,87 @@ class DataService {
     saveToStorage("projects", this.projects);
     this.notify();
 
-    // Async sync to Supabase
+    // Async sync to Supabase with honest error recovery
     if (isSupabaseConfigured() && !projectId.startsWith("p-")) {
-      projectService
-        .updateProjectType({
-          projectId,
-          displayType,
-          provenance,
-        })
-        .catch((err) => console.warn("Supabase project type update failed:", err));
+      if (!offlineSyncService.isOnline()) {
+        offlineSyncService.enqueue("project_type", { projectId, displayType, provenance });
+        return;
+      }
+
+      try {
+        await projectService.updateProjectType({ projectId, displayType, provenance });
+      } catch (err: any) {
+        if (isNetworkOfflineError(err)) {
+          offlineSyncService.enqueue("project_type", { projectId, displayType, provenance });
+        } else {
+          // Rollback local state on remote error
+          project.verified_type = prevVerified;
+          project.user_provided_type = prevUserProvided;
+          project.inferred_type = prevInferred;
+          project.displayType = prevDisplay;
+          project.typeProvenance = prevProvenance;
+          saveToStorage("projects", this.projects);
+          this.notify();
+          throw new Error(err?.message || "Failed to update project type");
+        }
+      }
     }
+  }
+
+  public async updateProject(
+    projectId: string,
+    patch: {
+      name?: string;
+      description?: string;
+      client?: string;
+      sector?: ProjectSector;
+      discipline?: string;
+    }
+  ): Promise<Project> {
+    const project = this.projects.find((p) => p.id === projectId);
+    if (!project) {
+      throw new Error(`Project ${projectId} not found`);
+    }
+
+    if (patch.name !== undefined) project.name = patch.name;
+    if (patch.description !== undefined) project.description = patch.description;
+    if (patch.client !== undefined) project.client = patch.client;
+    if (patch.sector !== undefined) {
+      project.sector = patch.sector;
+      project.user_provided_type = patch.sector;
+      project.displayType = `${patch.sector} · ${patch.discipline || project.discipline || "General"}`;
+    }
+    if (patch.discipline !== undefined) project.discipline = patch.discipline;
+    project.updated_at = "Just now";
+
+    saveToStorage("projects", this.projects);
+    this.notify();
+
+    if (isSupabaseConfigured() && !projectId.startsWith("p-")) {
+      if (!offlineSyncService.isOnline()) {
+        offlineSyncService.enqueue("project_update", { projectId, patch });
+        return project;
+      }
+
+      try {
+        const remote = await projectService.updateProject(projectId, patch);
+        const idx = this.projects.findIndex((p) => p.id === projectId);
+        if (idx !== -1) {
+          this.projects[idx] = { ...remote, is_synced: true, sync_status: "synced" };
+          saveToStorage("projects", this.projects);
+          this.notify();
+        }
+        return this.projects[idx] || project;
+      } catch (err: any) {
+        if (isNetworkOfflineError(err)) {
+          offlineSyncService.enqueue("project_update", { projectId, patch });
+          return project;
+        }
+        throw new Error(err?.message || "Failed to update project in remote database");
+      }
+    }
+
+    return project;
   }
 
   // ── Documents ───────────────────────────────────────────────────────────────
@@ -603,6 +1053,25 @@ class DataService {
     return newDocs;
   }
 
+  private documentByteCache = new Map<string, Uint8Array>();
+
+  public cacheDocumentBytes(documentId: string, bytes: Uint8Array): void {
+    this.documentByteCache.set(documentId, bytes);
+  }
+
+  public async retryDocumentProcessing(projectId: string, documentId: string): Promise<void> {
+    const doc = this.documents.find((d) => d.id === documentId);
+    if (!doc) return;
+
+    doc.upload_status = "queued";
+    doc.error_message = undefined;
+    saveToStorage("documents", this.documents);
+    this.notify();
+
+    const cached = this.documentByteCache.get(documentId);
+    await this.processDocumentAsync(projectId, documentId, cached);
+  }
+
   /**
    * Executes the genuine local-first page extraction, sheet classification,
    * symbol perception, and takeoff derivation pipeline for a document.
@@ -616,6 +1085,12 @@ class DataService {
     if (!doc) return;
 
     let bytes = fileData;
+    if (bytes instanceof Uint8Array) {
+      this.cacheDocumentBytes(documentId, bytes);
+    } else if (bytes instanceof ArrayBuffer) {
+      this.cacheDocumentBytes(documentId, new Uint8Array(bytes));
+    }
+
     if (!bytes && doc.file_path) {
       try {
         bytes = await fileDialogService.readDocumentBytes({
@@ -624,6 +1099,9 @@ class DataService {
           documentId: doc.id,
           filename: doc.filename,
         });
+        if (bytes instanceof Uint8Array) {
+          this.cacheDocumentBytes(documentId, bytes);
+        }
       } catch (readErr) {
         console.warn(`Could not read staged bytes for document [${doc.filename}]:`, readErr);
       }
@@ -631,6 +1109,7 @@ class DataService {
 
     if (!bytes || (bytes instanceof Uint8Array ? bytes.length : bytes.byteLength) === 0) {
       doc.upload_status = "error";
+      doc.error_message = "0-byte file: Drawing package contains no readable binary data.";
       saveToStorage("documents", this.documents);
       this.notify();
       console.warn(`Document processing aborted: 0 bytes available for [${doc.filename}]. Zero fabricated records created.`);
@@ -638,6 +1117,7 @@ class DataService {
     }
 
     try {
+      doc.error_message = undefined;
       const result = await documentProcessingService.processDocument(
         projectId,
         doc,
@@ -695,6 +1175,7 @@ class DataService {
     } catch (err: any) {
       console.warn(`Error processing document ${documentId}:`, err);
       doc.upload_status = "error";
+      doc.error_message = err?.message || "Vectoris perception engine encountered an error while parsing drawing streams.";
       saveToStorage("documents", this.documents);
       this.notify();
     }
@@ -921,6 +1402,84 @@ class DataService {
     }
   }
 
+  public correctLineItem(
+    id: string,
+    newQuantity: number,
+    unit?: string,
+    reason: string = "Manual engineering correction",
+    user: string = "Lead Estimator"
+  ): void {
+    const item = this.lineItems.find((li) => li.id === id);
+    if (!item) return;
+
+    const prevQty = item.quantity;
+    const prevUnit = item.unit;
+    item.quantity = newQuantity;
+    if (unit) item.unit = unit;
+    item.status = "approved";
+    item.reviewed_by = user;
+    item.reviewed_at = "Just now";
+
+    if (!item.correction_history) item.correction_history = [];
+    item.correction_history.push({
+      id: generateId("corr"),
+      line_item_id: item.id,
+      timestamp: "Just now",
+      user,
+      user_id: "u-active",
+      action: `Quantity adjusted from ${prevQty} ${prevUnit} to ${newQuantity} ${unit || prevUnit}`,
+      previous_value: `${prevQty} ${prevUnit}`,
+      new_value: `${newQuantity} ${unit || prevUnit}`,
+      ai_value: `${prevQty} ${prevUnit} (AI inferred)`,
+      human_value: `${newQuantity} ${unit || prevUnit} (Verified)`,
+      delta: `${newQuantity >= prevQty ? "+" : ""}${newQuantity - prevQty}`,
+      correction_type: "manual_override",
+      correction_reason: reason,
+      reason,
+      source: "verification",
+      model_version: item.model_version || "v2.4-native",
+    });
+
+    saveToStorage("lineItems", this.lineItems);
+
+    // Recalculate takeoff summary
+    const projId = item.project_id;
+    const summary = this.takeoffSummaries[projId];
+    if (summary) {
+      const approvedCount = this.lineItems.filter(
+        (li) => li.project_id === projId && li.status === "approved"
+      ).length;
+      const proposedCount = this.lineItems.filter(
+        (li) => li.project_id === projId && li.status === "proposed"
+      ).length;
+      summary.line_items_approved = approvedCount;
+      summary.line_items_proposed = proposedCount;
+      saveToStorage("takeoffSummaries", this.takeoffSummaries);
+    }
+
+    this.notify();
+
+    if (isSupabaseConfigured() && !id.startsWith("li-mock") && !id.startsWith("li-")) {
+      takeoffService
+        .approveLineItem({
+          lineItemId: id,
+          humanValue: `${newQuantity} ${unit || prevUnit}`,
+          correctionType: "manual_override",
+          reason,
+        })
+        .catch((err) => {
+          console.warn("Supabase approve_line_item RPC error, queuing offline:", err);
+          offlineSyncService.enqueue("line_item_status", {
+            lineItemId: id,
+            status: "approved",
+            humanValue: `${newQuantity} ${unit || prevUnit}`,
+            correctionType: "manual_override",
+            reason,
+          });
+        });
+    }
+  }
+
   public getSheets(projectId: string): Sheet[] {
     const targetId = this.resolveProjectId(projectId);
     return this.sheets.filter((s) => s.project_id === projectId || s.project_id === targetId);
@@ -1088,7 +1647,10 @@ class DataService {
       tool_steps?: ChatMessage["tool_steps"];
       evidence?: ChatMessage["evidence"];
       action_proposal?: ChatMessage["action_proposal"];
-    }
+      metric_highlights?: ChatMessage["metric_highlights"];
+      referenced_sources?: ChatMessage["referenced_sources"];
+    },
+    autoRunAgent = true
   ): ChatMessage | undefined {
     const session = this.sessions.find((s) => s.id === sessionId);
     if (!session) return undefined;
@@ -1102,6 +1664,8 @@ class DataService {
       tool_steps: msg.tool_steps,
       evidence: msg.evidence,
       action_proposal: msg.action_proposal,
+      metric_highlights: msg.metric_highlights,
+      referenced_sources: msg.referenced_sources,
     };
 
     session.messages.push(newMsg);
@@ -1109,11 +1673,37 @@ class DataService {
     session.last_message_preview = msg.content.slice(0, 90) + (msg.content.length > 90 ? "…" : "");
     session.updated_at = "Just now";
 
+    // If this is an assistant response, update the session investigation outcome metadata
+    if (msg.role === "assistant") {
+      if (msg.action_proposal) {
+        session.investigation_status = "review_required";
+        session.key_metric = `${msg.action_proposal.item_code} · ${msg.action_proposal.quantity} ${msg.action_proposal.unit || "EA"}`;
+      } else if (msg.evidence) {
+        session.investigation_status = "verified";
+        session.key_metric = msg.metric_highlights?.[0]?.value || "Verified CAD Evidence";
+      } else if (msg.metric_highlights && msg.metric_highlights.length > 0) {
+        session.investigation_status = "calculated";
+        session.key_metric = msg.metric_highlights[0].value;
+      }
+
+      if (msg.evidence?.sheet) {
+        session.primary_sheet = msg.evidence.sheet;
+      } else if (msg.referenced_sources && msg.referenced_sources.length > 0) {
+        session.primary_sheet = msg.referenced_sources[0].sheet;
+      }
+
+      if (msg.referenced_sources && msg.referenced_sources.length > 0) {
+        session.source_count = (session.source_count || 0) + msg.referenced_sources.length;
+      } else if (msg.evidence) {
+        session.source_count = Math.max(session.source_count || 0, 1);
+      }
+    }
+
     saveToStorage("sessions", this.sessions);
     this.notify();
 
     // Async sync message to Supabase
-    if (isSupabaseConfigured() && !sessionId.startsWith("s1")) {
+    if (isSupabaseConfigured() && !sessionId.startsWith("s1") && !sessionId.startsWith("c1") && !sessionId.startsWith("c2")) {
       sessionService
         .addMessage({
           sessionId,
@@ -1121,14 +1711,16 @@ class DataService {
           content: msg.content,
           thought_trace: msg.thought_trace,
           tool_steps: msg.tool_steps,
-          evidence: msg.evidence,
+          evidence: msg.evidence || undefined,
           action_proposal: msg.action_proposal,
+          metric_highlights: msg.metric_highlights,
+          referenced_sources: msg.referenced_sources,
         })
         .catch((err) => console.warn("Supabase message persistence failed:", err));
     }
 
     // If a user message was sent, run the Vectoris Agent investigation asynchronously
-    if (msg.role === "user") {
+    if (msg.role === "user" && autoRunAgent) {
       agentRuntime
         .runInvestigation({
           sessionId,
@@ -1136,123 +1728,344 @@ class DataService {
           inquiry: msg.content,
         })
         .then((result) => {
-          this.addSessionMessage(sessionId, {
-            role: "assistant",
-            content: result.content,
-            thought_trace: result.thoughtTrace,
-            tool_steps: result.toolSteps,
-            evidence: result.evidence,
-            action_proposal: result.actionProposal,
-          });
+          this.addSessionMessage(
+            sessionId,
+            {
+              role: "assistant",
+              content: result.content,
+              thought_trace: result.thoughtTrace,
+              tool_steps: result.toolSteps,
+              evidence: result.evidence,
+              action_proposal: result.actionProposal,
+              metric_highlights: result.metricHighlights,
+              referenced_sources: result.referencedSources,
+            },
+            false
+          );
         })
         .catch((err) => {
           console.error("Agent investigation runtime error:", err);
-          this.addSessionMessage(sessionId, {
-            role: "assistant",
-            content: "⚠️ The Vectoris Agent encountered an unexpected runtime error during the investigation. Please check project permissions and try again.",
-          });
+          this.addSessionMessage(
+            sessionId,
+            {
+              role: "assistant",
+              content: "⚠️ The Vectoris Agent encountered an unexpected runtime error during the investigation. Please check project permissions and try again.",
+            },
+            false
+          );
         });
     }
 
     return newMsg;
   }
 
+  /**
+   * Deterministic async helper: sends user message and awaits complete assistant response.
+   * Useful for testing and controlled investigation lifecycle flows.
+   */
+  public async sendUserMessage(
+    sessionId: string,
+    content: string,
+    userRole?: "viewer" | "editor" | "manager" | "admin" | "owner"
+  ): Promise<ChatMessage | undefined> {
+    const userMsg = this.addSessionMessage(
+      sessionId,
+      {
+        role: "user",
+        content,
+      },
+      false
+    );
+
+    if (!userMsg) return undefined;
+
+    const session = this.sessions.find((s) => s.id === sessionId);
+    if (!session) return userMsg;
+
+    try {
+      const result = await agentRuntime.runInvestigation({
+        sessionId,
+        projectId: session.project_id,
+        inquiry: content,
+        userRole: userRole || "editor",
+      });
+
+      const assistantMsg = this.addSessionMessage(
+        sessionId,
+        {
+          role: "assistant",
+          content: result.content,
+          thought_trace: result.thoughtTrace,
+          tool_steps: result.toolSteps,
+          evidence: result.evidence,
+          action_proposal: result.actionProposal,
+          metric_highlights: result.metricHighlights,
+          referenced_sources: result.referencedSources,
+        },
+        false
+      );
+
+      return assistantMsg;
+    } catch (err) {
+      console.error("sendUserMessage agent runtime error:", err);
+      const errMsg = this.addSessionMessage(
+        sessionId,
+        {
+          role: "assistant",
+          content: "⚠️ The Vectoris Agent encountered an unexpected runtime error during the investigation. Please check project permissions and try again.",
+        },
+        false
+      );
+      return errMsg;
+    }
+  }
+
+  /**
+   * Approves an AI Action Proposal with strict RBAC re-validation below the model,
+   * creates the real Takeoff line item mutation, records an immutable audit record,
+   * and refreshes the Takeoff store.
+   */
+  public async approveProposal(params: {
+    sessionId: string;
+    messageId: string;
+    userId?: string;
+    userRole?: string;
+    userEmail?: string;
+    reason?: string;
+  }): Promise<{ success: boolean; error?: string; lineItem?: LineItem }> {
+    const session = this.sessions.find((s) => s.id === params.sessionId);
+    if (!session) {
+      return { success: false, error: `Session '${params.sessionId}' not found.` };
+    }
+
+    const msg = session.messages.find(
+      (m) => m.id === params.messageId || m.action_proposal?.id === params.messageId
+    );
+    if (!msg || !msg.action_proposal) {
+      return { success: false, error: "Action proposal not found in session." };
+    }
+
+    if (msg.action_proposal.status !== "pending") {
+      return { success: false, error: `Proposal has already been ${msg.action_proposal.status}.` };
+    }
+
+    // 1. RBAC Check below the model: Only Editor, Manager, Admin, Owner can approve mutations
+    const role = (params.userRole || "Editor").toLowerCase().trim();
+    const disallowedRoles = ["viewer", "read-only", "guest"];
+    if (disallowedRoles.includes(role)) {
+      return {
+        success: false,
+        error: `Authorization failure: Role '${params.userRole || "Viewer"}' lacks permission to approve takeoff mutations (requires Editor, Admin, or Owner).`,
+      };
+    }
+
+    // 2. Active Project Scope Check
+    const projectId = session.project_id || msg.action_proposal.project_id;
+    if (!projectId) {
+      return {
+        success: false,
+        error: "Cannot approve takeoff line item: No active project associated with this investigation session.",
+      };
+    }
+
+    const committerName = params.userId || "Project Reviewer";
+    const committerId = params.userId || "u-active";
+    const readableTimestamp = "Just now";
+
+    // 3. Extract quantity, unit, category, metadata
+    const rawQty = msg.action_proposal.quantity;
+    const qty = typeof rawQty === "number" ? rawQty : parseFloat(String(rawQty).replace(/[^\d.]/g, "")) || 1;
+    const unit = ((msg.action_proposal.unit || "NOS") as string).toUpperCase() as LineItem["unit"];
+    const category = ((msg.action_proposal.category || "Power Distribution") as string) as LineItem["category"];
+    const itemCode = msg.action_proposal.item_code || "PROP-01";
+    const itemName = msg.action_proposal.item_name || msg.action_proposal.title;
+    const sheet = msg.action_proposal.source_sheet || msg.evidence?.sheet || "E-104";
+    const docId = msg.evidence?.doc_id || "doc-1";
+    const docName = msg.evidence?.doc_name || "Drawing Package";
+    const reason = params.reason || `Approved via Investigation Session: ${session.title}`;
+
+    // 4. Create immutable audit/correction record
+    const correctionRecord: CorrectionRecord = {
+      id: generateId("corr"),
+      line_item_id: itemCode,
+      timestamp: readableTimestamp,
+      user: committerName,
+      user_id: committerId,
+      action: "Item committed and verified from AI Action Proposal",
+      previous_value: "proposed (AI proposal)",
+      new_value: "approved",
+      ai_value: `${qty} ${unit} proposed`,
+      human_value: `${qty} ${unit} verified`,
+      delta: "0",
+      correction_type: "manual_override",
+      reason,
+      source: "verification",
+      model_version: "v2.4-native",
+    };
+
+    // 5. Update or insert LineItem into Takeoff store
+    let lineItem: LineItem;
+    const existingIndex = this.lineItems.findIndex(
+      (li) => li.project_id === projectId && li.item_code === itemCode && li.status === "proposed"
+    );
+
+    if (existingIndex >= 0) {
+      const existing = this.lineItems[existingIndex];
+      existing.status = "approved";
+      existing.reviewed_by = committerName;
+      existing.reviewed_at = readableTimestamp;
+      existing.correction_history = [correctionRecord, ...(existing.correction_history || [])];
+      lineItem = existing;
+    } else {
+      lineItem = {
+        id: generateId("li"),
+        project_id: projectId,
+        item_code: itemCode,
+        name: itemName,
+        description: msg.action_proposal.description,
+        specification: "Verified via Vectoris AI Investigation Workshop",
+        category,
+        quantity: qty,
+        unit,
+        source_document_id: docId,
+        source_document_name: docName,
+        source_sheet: sheet,
+        status: "approved",
+        detection_source: "ai_detection",
+        model_version: "v2.4-native",
+        reviewed_by: committerName,
+        reviewed_at: readableTimestamp,
+        correction_history: [correctionRecord],
+      };
+      this.lineItems.push(lineItem);
+    }
+
+    saveToStorage("lineItems", this.lineItems);
+
+    // 6. Recalculate and update Takeoff Summary
+    const summary = this.takeoffSummaries[projectId];
+    if (summary) {
+      summary.line_items_proposed = this.lineItems.filter((li) => li.project_id === projectId).length;
+      summary.line_items_approved = this.lineItems.filter(
+        (li) => li.project_id === projectId && li.status === "approved"
+      ).length;
+      saveToStorage("takeoffSummaries", this.takeoffSummaries);
+    }
+
+    // 7. Update Proposal state on message to 'approved'
+    msg.action_proposal.status = "approved";
+    msg.action_proposal.committed_at = readableTimestamp;
+    msg.action_proposal.committed_by = committerName;
+    saveToStorage("sessions", this.sessions);
+
+    // 8. Remote Supabase persistence & offline sync queue
+    if (isSupabaseConfigured() && !projectId.startsWith("p-") && !projectId.startsWith("p1")) {
+      takeoffService
+        .createManualLineItem({
+          projectId,
+          name: itemName,
+          itemCode,
+          category,
+          quantity: qty,
+          unit,
+        })
+        .catch((err) => {
+          console.warn("Supabase createManualLineItem error, enqueuing offline:", err);
+          offlineSyncService.enqueue("manual_line_item", {
+            projectId,
+            lineItem: { name: itemName, item_code: itemCode, category, quantity: qty, unit },
+          });
+        });
+    }
+
+    // 9. Notify all reactive subscribers
+    this.notify();
+
+    return { success: true, lineItem };
+  }
+
+  /**
+   * Rejects an AI Action Proposal with user rejection reason, records audit trail,
+   * updates the proposal state to 'rejected', and disables actions.
+   */
+  public async rejectProposal(params: {
+    sessionId: string;
+    messageId: string;
+    userId?: string;
+    userRole?: string;
+    reason?: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    const session = this.sessions.find((s) => s.id === params.sessionId);
+    if (!session) {
+      return { success: false, error: `Session '${params.sessionId}' not found.` };
+    }
+
+    const msg = session.messages.find(
+      (m) => m.id === params.messageId || m.action_proposal?.id === params.messageId
+    );
+    if (!msg || !msg.action_proposal) {
+      return { success: false, error: "Action proposal not found in session." };
+    }
+
+    if (msg.action_proposal.status !== "pending") {
+      return { success: false, error: `Proposal has already been ${msg.action_proposal.status}.` };
+    }
+
+    // 1. RBAC Check: Viewer cannot reject proposals
+    const role = (params.userRole || "Editor").toLowerCase().trim();
+    const disallowedRoles = ["viewer", "read-only", "guest"];
+    if (disallowedRoles.includes(role)) {
+      return {
+        success: false,
+        error: `Authorization failure: Role '${params.userRole || "Viewer"}' lacks permission to reject takeoff proposals.`,
+      };
+    }
+
+    const rejecterName = params.userId || "Project Reviewer";
+    const readableTimestamp = "Just now";
+    const rejectionReason = params.reason || "Rejected by reviewer during investigation";
+
+    // 2. Update Proposal state on message to 'rejected'
+    msg.action_proposal.status = "rejected";
+    msg.action_proposal.rejection_reason = rejectionReason;
+    msg.action_proposal.committed_at = readableTimestamp;
+    msg.action_proposal.committed_by = rejecterName;
+
+    saveToStorage("sessions", this.sessions);
+
+    // 3. Notify subscribers
+    this.notify();
+
+    return { success: true };
+  }
+
+  /**
+   * Synchronous / backward-compatible wrapper for proposal approval and rejection.
+   */
   public updateProposalStatus(
     sessionId: string,
     messageId: string,
     status: "approved" | "rejected",
-    user: string = "Project User"
+    user: string = "Project User",
+    reason?: string
   ): void {
-    const session = this.sessions.find((s) => s.id === sessionId);
-    if (!session) return;
-
-    const msg = session.messages.find((m) => m.id === messageId || m.action_proposal?.id === messageId);
-    if (!msg || !msg.action_proposal) return;
-
-    msg.action_proposal.status = status;
     if (status === "approved") {
-      msg.action_proposal.committed_at = "Just now";
-      msg.action_proposal.committed_by = user;
-
-      // If attached to a project, update or create the takeoff line item
-      if (session.project_id) {
-        const itemCode = msg.action_proposal.item_code;
-        const existing = this.lineItems.find(
-          (li) => li.project_id === session.project_id && li.item_code === itemCode
-        );
-
-        if (existing) {
-          this.updateLineItemStatus(
-            existing.id,
-            "approved",
-            user,
-            `Approved via Investigation Workshop: ${session.title}`
-          );
-        } else {
-          // Parse quantity as number
-          const rawQty = msg.action_proposal.quantity;
-          const qty = typeof rawQty === "number" ? rawQty : parseInt(String(rawQty).replace(/[^\d.]/g, ""), 10) || 1;
-          const unit = (msg.action_proposal.unit as any) || "EA";
-          const category = (msg.action_proposal.category as any) || "Power Distribution";
-
-          const newItem: LineItem = {
-            id: generateId("li"),
-            project_id: session.project_id,
-            item_code: itemCode,
-            name: msg.action_proposal.item_name || msg.action_proposal.title,
-            description: msg.action_proposal.description,
-            specification: "Verified via Vectoris Investigation Workshop",
-            category,
-            quantity: qty,
-            unit,
-            source_document_id: msg.evidence?.doc_id || "d1",
-            source_document_name: msg.evidence?.doc_name || "Single Line Diagram",
-            source_sheet: msg.evidence?.sheet || "E-001",
-            status: "approved",
-            detection_source: "ai_detection",
-            model_version: "v2.4-native",
-            reviewed_by: user,
-            reviewed_at: "Just now",
-            correction_history: [
-              {
-                id: generateId("corr"),
-                line_item_id: itemCode,
-                timestamp: "Just now",
-                user,
-                user_id: "u-active",
-                action: "Item committed and verified from Investigation Workshop",
-                previous_value: "proposed (investigation)",
-                new_value: "approved",
-                ai_value: `${qty} ${unit} proposed`,
-                human_value: `${qty} ${unit} verified`,
-                delta: "0",
-                correction_type: "manual_override",
-                reason: `Approved from investigation: ${session.title}`,
-                source: "verification",
-                model_version: "v2.4-native",
-              },
-            ],
-          };
-
-          this.lineItems.push(newItem);
-          saveToStorage("lineItems", this.lineItems);
-
-          const summary = this.takeoffSummaries[session.project_id];
-          if (summary) {
-            summary.line_items_proposed = this.lineItems.filter(
-              (li) => li.project_id === session.project_id
-            ).length;
-            summary.line_items_approved = this.lineItems.filter(
-              (li) => li.project_id === session.project_id && li.status === "approved"
-            ).length;
-            saveToStorage("takeoffSummaries", this.takeoffSummaries);
-          }
-        }
-      }
+      void this.approveProposal({
+        sessionId,
+        messageId,
+        userId: user,
+        userRole: "Editor",
+        reason,
+      });
+    } else {
+      void this.rejectProposal({
+        sessionId,
+        messageId,
+        userId: user,
+        userRole: "Editor",
+        reason,
+      });
     }
-
-    saveToStorage("sessions", this.sessions);
-    this.notify();
   }
 
   // ── Engine Status ───────────────────────────────────────────────────────────
@@ -1557,4 +2370,17 @@ export function useDraftPlanVersion(projectId?: string | null): PlanVersion | nu
   const plan = useProjectPlan(projectId);
   return plan?.draft_version || null;
 }
+
+export function useAllLineItems(): LineItem[] {
+  const [items, setItems] = useState<LineItem[]>(() => dataService.getAllLineItems());
+
+  useEffect(() => {
+    return dataService.subscribe(() => {
+      setItems(dataService.getAllLineItems());
+    });
+  }, []);
+
+  return items;
+}
+
 

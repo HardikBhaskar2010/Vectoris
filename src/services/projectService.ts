@@ -235,6 +235,52 @@ class ProjectService {
       throw new Error(error.message);
     }
   }
+
+  /**
+   * Updates project attributes (name, description, client, etc.) in Supabase.
+   */
+  public async updateProject(
+    projectId: string,
+    patch: {
+      name?: string;
+      description?: string;
+      client?: string;
+      sector?: ProjectSector;
+      discipline?: string;
+    }
+  ): Promise<Project> {
+    if (!isSupabaseConfigured()) {
+      throw new Error("Supabase is not configured");
+    }
+
+    const updateFields: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    };
+    if (patch.name !== undefined) updateFields.name = patch.name.trim();
+    if (patch.description !== undefined) updateFields.description = patch.description.trim();
+    if (patch.sector !== undefined) {
+      updateFields.user_provided_type = `${patch.sector} · ${patch.discipline || "General"}`;
+    }
+
+    const { data: updatedRow, error } = await supabase
+      .from("projects")
+      .update(updateFields as any)
+      .eq("id", projectId)
+      .select()
+      .single();
+
+    if (error || !updatedRow) {
+      console.error("Failed to update project in Supabase:", error?.message);
+      throw new Error(error?.message || "Failed to update project");
+    }
+
+    const { data: membersData } = await supabase
+      .from("project_members")
+      .select("*")
+      .eq("project_id", projectId);
+
+    return mapDbProjectToDomain(updatedRow, membersData || []);
+  }
 }
 
 export const projectService = new ProjectService();

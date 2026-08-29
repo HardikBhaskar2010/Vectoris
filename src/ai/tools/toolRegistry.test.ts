@@ -160,6 +160,7 @@ export async function runToolRegistryTests() {
 }
 
 // Auto-run if executed directly
-if (typeof window === "undefined") {
+const isDirectToolTest = typeof globalThis !== "undefined" && (globalThis as any).process?.argv?.[1]?.includes("toolRegistry.test");
+if (isDirectToolTest) {
   void runToolRegistryTests();
 }

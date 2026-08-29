@@ -40,16 +40,17 @@ export class SheetClassifier {
    */
   public classifyPage(page: ExtractedPage): ClassificationResult {
     const text = (page.rawText + " " + (page.titleBlock?.sheetTitle || "")).toLowerCase();
-    const sheetNum = (page.titleBlock?.sheetNumber || `E-${page.pageNumber}`).toUpperCase();
-    const sheetTitle = page.titleBlock?.sheetTitle || `Drawing Sheet ${page.pageNumber}`;
+    const sheetNum = (page.titleBlock?.sheetNumber || `Sheet-${page.pageNumber}`).toUpperCase();
+    const sheetTitle = page.titleBlock?.sheetTitle || `Drawing Page ${page.pageNumber}`;
     const signals: string[] = [];
 
     // 0. Raster / Scanned PDF check (No extractable text vectors)
     if (page.lines.length === 0 || page.rawText.trim().length === 0) {
+      signals.push("Text extraction unavailable — vector_text_only — raster OCR deferred");
       signals.push("Text extraction unavailable — visual perception / OCR required");
       return {
         sheetId: sheetNum,
-        sheetTitle: `Scanned / Raster Sheet ${page.pageNumber}`,
+        sheetTitle: page.titleBlock?.sheetTitle || `Scanned / Raster Page ${page.pageNumber}`,
         category: "Unknown / Needs Review",
         discipline: "General",
         drawingType: "raster_scan",

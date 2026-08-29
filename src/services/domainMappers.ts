@@ -233,6 +233,8 @@ export function mapDbMessageToDomain(row: DbMessage): ChatMessage {
   let evidence: EvidenceData | undefined = undefined;
   let actionProposal: ActionProposal | undefined = undefined;
   let thoughtTrace: string[] | undefined = undefined;
+  let metricHighlights: ChatMessage["metric_highlights"] = undefined;
+  let referencedSources: ChatMessage["referenced_sources"] = undefined;
 
   // Extract structured tool calls
   if (Array.isArray(row.tool_calls) && row.tool_calls.length > 0) {
@@ -251,6 +253,12 @@ export function mapDbMessageToDomain(row: DbMessage): ChatMessage {
     if (Array.isArray(rawEv.thought_trace)) {
       thoughtTrace = rawEv.thought_trace as string[];
     }
+    if (Array.isArray(rawEv.metric_highlights)) {
+      metricHighlights = rawEv.metric_highlights as ChatMessage["metric_highlights"];
+    }
+    if (Array.isArray(rawEv.referenced_sources)) {
+      referencedSources = rawEv.referenced_sources as ChatMessage["referenced_sources"];
+    }
   }
 
   return {
@@ -262,6 +270,8 @@ export function mapDbMessageToDomain(row: DbMessage): ChatMessage {
     tool_steps: toolSteps,
     evidence,
     action_proposal: actionProposal,
+    metric_highlights: metricHighlights,
+    referenced_sources: referencedSources,
   };
 }
 

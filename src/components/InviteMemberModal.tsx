@@ -4,20 +4,21 @@
  * Implements Emil Kowalski & Impeccable craft standards:
  * - Spring entrance and tactile feedback (:active transform)
  * - Clear role permission explanations
- * - Instant transactional persistence via Supabase
+ * - Instant transactional persistence via Supabase & local-first fallback
  */
 
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { organizationService, type DbOrgMember } from "../services/organizationService";
+import { organizationService, type WorkspaceMember } from "../services/organizationService";
 import type { OrgRole } from "../data/database.types";
+import { AnimatedCheckCircle, AnimatedShield } from "./icons/AnimatedIcons";
 
 interface InviteMemberModalProps {
   isOpen: boolean;
   onClose: () => void;
   orgId: string;
   orgName: string;
-  onMemberInvited: (newMember: DbOrgMember) => void;
+  onMemberInvited: (newMember: WorkspaceMember) => void;
 }
 
 const ROLES: Array<{
@@ -28,32 +29,25 @@ const ROLES: Array<{
   permissions: string[];
 }> = [
   {
-    role: "estimator" as unknown as OrgRole, // mapped in UI to editor
-    label: "Estimator / Engineer",
-    badgeColor: "#3b82f6",
-    description: "Generates takeoffs, inspects blueprint geometry, and proposes line item quantities.",
-    permissions: ["Upload drawings", "Run AI takeoff detection", "Propose quantities", "Export BOQ spreadsheets"],
-  },
-  {
     role: "editor",
-    label: "Reviewer / Editor",
-    badgeColor: "#10b981",
-    description: "Audits takeoff proposals, approves or rejects line items, and verifies engineering tolerances.",
-    permissions: ["Approve / reject line items", "Log correction audits", "Inspect single-line diagrams", "View reports"],
+    label: "Lead Estimator / Editor",
+    badgeColor: "#3b82f6",
+    description: "Generates takeoffs, inspects blueprint geometry, audits quantities, and proposes line items.",
+    permissions: ["Upload drawings & specifications", "Run AI takeoff detection", "Correct / verify quantities", "Export BOQ spreadsheets"],
   },
   {
     role: "manager",
     label: "Project Manager",
     badgeColor: "#f59e0b",
     description: "Oversees project milestones, sheet assignments, and coordinate exports across teams.",
-    permissions: ["Manage project assignments", "Review audit trail", "Create new projects", "Export audit ledgers"],
+    permissions: ["Manage project assignments", "Review audit trails", "Initialize new projects", "Export audit ledgers"],
   },
   {
     role: "admin",
     label: "Organization Admin",
     badgeColor: "#8b5cf6",
     description: "Manages organizational workspace settings, member seats, and compute policies.",
-    permissions: ["Invite / remove members", "Configure compute engine", "Manage billing", "Access all projects"],
+    permissions: ["Invite / remove members", "Configure compute engine", "Manage billing", "Access all workspace projects"],
   },
   {
     role: "viewer",
@@ -72,6 +66,7 @@ export function InviteMemberModal({
   onMemberInvited,
 }: InviteMemberModalProps) {
   const [email, setEmail] = useState("");
+  const [fullName, setFullName] = useState("");
   const [selectedRole, setSelectedRole] = useState<OrgRole>("editor");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -81,6 +76,7 @@ export function InviteMemberModal({
   useEffect(() => {
     if (isOpen) {
       setEmail("");
+      setFullName("");
       setSelectedRole("editor");
       setErrorMsg(null);
       setSuccessMsg(null);
@@ -111,32 +107,17 @@ export function InviteMemberModal({
     setErrorMsg(null);
 
     try {
-      // Create a deterministic UUID for simulated or real invited user
-      const syntheticUserId = "user-" + Math.random().toString(36).substring(2, 10);
-      const invitedMember = await organizationService.inviteMember(orgId, syntheticUserId, selectedRole);
+      const invitedMember = await organizationService.inviteMember(orgId, {
+        email: cleanEmail,
+        name: fullName.trim() || undefined,
+        role: selectedRole,
+      });
 
-      if (invitedMember) {
-        setSuccessMsg(`Invitation sent to ${cleanEmail} as ${selectedRole.toUpperCase()}`);
-        onMemberInvited(invitedMember);
-        window.setTimeout(() => {
-          onClose();
-        }, 800);
-      } else {
-        // Fallback simulated record
-        const fallback: DbOrgMember = {
-          id: "mem-" + Date.now(),
-          organization_id: orgId,
-          user_id: syntheticUserId,
-          role: selectedRole,
-          invited_by: null,
-          joined_at: new Date().toISOString(),
-        };
-        onMemberInvited(fallback);
-        setSuccessMsg(`Invitation registered for ${cleanEmail}!`);
-        window.setTimeout(() => {
-          onClose();
-        }, 800);
-      }
+      setSuccessMsg(`Invitation dispatched to ${cleanEmail} as ${selectedRole.toUpperCase()}`);
+      onMemberInvited(invitedMember);
+      window.setTimeout(() => {
+        onClose();
+      }, 700);
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Failed to invite team member.");
     } finally {
@@ -210,9 +191,7 @@ export function InviteMemberModal({
             }}
             aria-label="Close dialog"
           >
-            <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
-            </svg>
+            ✕
           </button>
         </div>
 
@@ -245,46 +224,78 @@ export function InviteMemberModal({
                 color: "#4ade80",
                 fontSize: "12px",
                 marginBottom: "16px",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
               }}
               role="status"
             >
-              {successMsg}
+              <AnimatedCheckCircle size={15} />
+              <span>{successMsg}</span>
             </div>
           )}
 
-          <div style={{ marginBottom: "18px" }}>
-            <label
-              htmlFor="invite-email-input"
-              style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--app-text-secondary, #cbd5e1)", marginBottom: "6px" }}
-            >
-              Email Address
-            </label>
-            <input
-              id="invite-email-input"
-              ref={inputRef}
-              type="email"
-              placeholder="colleague@apexengineering.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              style={{
-                width: "100%",
-                padding: "10px 12px",
-                fontSize: "13px",
-                borderRadius: "6px",
-                border: "1px solid var(--app-border, rgba(255,255,255,0.15))",
-                background: "var(--app-surface-2, rgba(0,0,0,0.25))",
-                color: "var(--app-text-primary, #f8fafc)",
-                outline: "none",
-              }}
-            />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "16px" }}>
+            <div>
+              <label
+                htmlFor="invite-email-input"
+                style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--app-text-secondary, #cbd5e1)", marginBottom: "6px" }}
+              >
+                Work Email *
+              </label>
+              <input
+                id="invite-email-input"
+                ref={inputRef}
+                type="email"
+                placeholder="colleague@company.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  fontSize: "13px",
+                  borderRadius: "6px",
+                  border: "1px solid var(--app-border, rgba(255,255,255,0.15))",
+                  background: "var(--app-surface-2, rgba(0,0,0,0.25))",
+                  color: "var(--app-text-primary, #f8fafc)",
+                  outline: "none",
+                }}
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="invite-name-input"
+                style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--app-text-secondary, #cbd5e1)", marginBottom: "6px" }}
+              >
+                Full Name (Optional)
+              </label>
+              <input
+                id="invite-name-input"
+                type="text"
+                placeholder="e.g. Alex Morgan"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  fontSize: "13px",
+                  borderRadius: "6px",
+                  border: "1px solid var(--app-border, rgba(255,255,255,0.15))",
+                  background: "var(--app-surface-2, rgba(0,0,0,0.25))",
+                  color: "var(--app-text-primary, #f8fafc)",
+                  outline: "none",
+                }}
+              />
+            </div>
           </div>
 
           <div style={{ marginBottom: "20px" }}>
             <label
               style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--app-text-secondary, #cbd5e1)", marginBottom: "8px" }}
             >
-              Workstation Role
+              Assigned Workspace Role
             </label>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "12px" }}>
@@ -338,8 +349,9 @@ export function InviteMemberModal({
                 border: "1px solid var(--app-border, rgba(255,255,255,0.08))",
               }}
             >
-              <div style={{ fontSize: "11px", fontWeight: 600, color: activeRoleConfig.badgeColor, marginBottom: "4px" }}>
-                {activeRoleConfig.label} Permissions:
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11.5px", fontWeight: 600, color: activeRoleConfig.badgeColor, marginBottom: "6px" }}>
+                <AnimatedShield size={13} />
+                <span>{activeRoleConfig.label} Access Scope:</span>
               </div>
               <ul style={{ margin: 0, paddingLeft: "16px", fontSize: "11px", color: "var(--app-text-secondary, #cbd5e1)", lineHeight: "1.5" }}>
                 {activeRoleConfig.permissions.map((p) => (

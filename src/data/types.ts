@@ -48,6 +48,8 @@ export interface Project {
   updated_at: string;
   member_count: number;
   members: ProjectMember[];
+  is_synced?: boolean;
+  sync_status?: "synced" | "offline_queued" | "error";
 }
 
 export interface ProjectMeta {
@@ -191,7 +193,8 @@ export interface LineItem {
   source_document_id: string;
   source_document_name: string;
   source_sheet: string;
-  source_coordinates?: Coordinates;
+  source_coordinates?: Coordinates | null;
+  spatial_confidence?: "grounded" | "unavailable";
   status: LineItemStatus;
   detection_source: "ai_detection" | "human_created";
   model_version?: string;
@@ -246,7 +249,9 @@ export interface Detection {
   unit: string;
   model_version: string;
   reviewed_by?: string;
-  coordinates?: Coordinates;
+  coordinates?: Coordinates | null;
+  spatial_confidence?: "grounded" | "unavailable";
+  spatialConfidence?: "grounded" | "unavailable";
   line_item_id?: string;
 }
 
@@ -261,14 +266,16 @@ export interface ToolTraceStep {
 }
 
 export interface EvidenceData {
-  doc_id: string;
-  doc_name: string;
-  sheet: string;
-  sheet_id?: string;
-  region?: string;
-  coordinates?: string;
+  doc_id?: string | null;
+  doc_name?: string | null;
+  sheet?: string | null;
+  sheet_id?: string | null;
+  region?: string | null;
+  coordinates?: string | null;
   thumbnail_type?: "switchgear" | "tray" | "conduit" | "lighting" | "panel";
   specs?: Array<{ label: string; value: string }>;
+  spatial_confidence?: "grounded" | "unavailable";
+  evidence_status?: "available" | "unavailable";
 }
 
 export interface ActionProposal {
@@ -280,9 +287,15 @@ export interface ActionProposal {
   category?: string;
   quantity: string | number;
   unit?: string;
+  source_sheet?: string;
+  evidence_provenance?: string;
+  action_type?: string;
   status: "pending" | "approved" | "rejected";
   committed_at?: string;
   committed_by?: string;
+  rejection_reason?: string;
+  created_at?: string;
+  project_id?: string;
 }
 
 export interface MetricHighlight {
@@ -304,7 +317,8 @@ export interface ChatMessage {
   timestamp: string;
   thought_trace?: string[];
   tool_steps?: ToolTraceStep[];
-  evidence?: EvidenceData;
+  evidence?: EvidenceData | null;
+  evidence_status?: "available" | "unavailable";
   action_proposal?: ActionProposal;
   metric_highlights?: MetricHighlight[];
   referenced_sources?: ReferencedSource[];
@@ -406,6 +420,8 @@ export interface PlanVersion {
   superseded_at?: string | null;
   claims: PlanClaim[];
   documents?: ProjectDocument[];
+  is_synced?: boolean;
+  sync_status?: "synced" | "offline_queued" | "error";
 }
 
 export interface ProjectPlan {
@@ -416,6 +432,18 @@ export interface ProjectPlan {
   active_version?: PlanVersion | null;
   draft_version?: PlanVersion | null;
   version_history?: PlanVersion[];
+  is_synced?: boolean;
+  sync_status?: "synced" | "offline_queued" | "error";
+}
+
+export type PersistenceStatus = "REMOTE_SUCCESS" | "OFFLINE_QUEUED" | "REMOTE_FAILURE";
+
+export interface PersistenceResult<T> {
+  status: PersistenceStatus;
+  data?: T;
+  error?: string;
+  isSynced: boolean;
+  mutationId?: string;
 }
 
 export interface Decision {

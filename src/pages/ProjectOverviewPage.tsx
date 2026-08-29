@@ -39,8 +39,11 @@ import {
   useTakeoff,
   useSessions,
   useLineItems,
+  useActivePlanVersion,
+  useDraftPlanVersion,
   dataService,
 } from "../services/dataService";
+import { AnimatedZap, AnimatedArrowRight, AnimatedChevronRight, AnimatedCheckCircle } from "../components/icons/AnimatedIcons";
 
 type PageState = "loading" | "empty" | "data" | "error" | "permission" | "offline";
 
@@ -53,11 +56,35 @@ export default function ProjectOverviewPage() {
       ? stateParam
       : "data";
 
-  const project = useProject(projectId) || INITIAL_PROJECTS[0];
+  const rawProject = useProject(projectId);
+  const project: Project = rawProject || {
+    id: projectId,
+    name: "Engineering Project",
+    client: "Workspace Client",
+    description: "Multi-tenant project workspace container.",
+    sector: "commercial",
+    discipline: "Electrical",
+    status: "review",
+    sheets: 0,
+    sheetType: "PDF",
+    progress: 0,
+    created_at: new Date().toISOString().split("T")[0],
+    updated_at: "Just now",
+    member_count: 1,
+    members: [{ name: "Lead Estimator", initials: "LE", role: "Owner" }],
+    inferred_type: "Commercial",
+    user_provided_type: "Commercial",
+    verified_type: "Commercial",
+    displayType: "Commercial · Electrical",
+    typeProvenance: "ai_inferred",
+  };
+
   const documents = useDocuments(projectId);
   const takeoff = useTakeoff(projectId);
   const sessions = useSessions(projectId);
   const lineItems = useLineItems(projectId);
+  const activePlan = useActivePlanVersion(projectId);
+  const draftPlan = useDraftPlanVersion(projectId);
 
   const [isVerifyingType, setIsVerifyingType] = useState(false);
 
@@ -75,6 +102,78 @@ export default function ProjectOverviewPage() {
     project.inferred_type ||
     `${project.sector.replace("-", " ")} · ${project.discipline}`
   ).replace(/\s*\([^)]*\)/g, "").trim();
+
+  // Next Best Action determination
+  const processingCount = documents.filter((d) =>
+    ["queued", "ingesting", "classifying", "detecting"].includes(d.upload_status)
+  ).length;
+  const proposedCount = lineItems.filter((i) => i.status === "proposed").length;
+  const approvedCount = lineItems.filter((i) => i.status === "approved").length;
+
+  let nextAction: { title: string; desc: string; buttonText: string; route: string; badge: string; isPrimary: boolean } = {
+    title: "Upload Drawing Package",
+    desc: "No engineering drawings uploaded yet. Add PDF single-line diagrams or DWG/DXF drawings to begin.",
+    buttonText: "Upload Drawings",
+    route: `/project/${projectId}/documents`,
+    badge: "Step 1: Input",
+    isPrimary: true,
+  };
+
+  if (documents.length === 0) {
+    nextAction = {
+      title: "Upload Drawing Package",
+      desc: "No engineering drawings uploaded yet. Ingest your multi-page PDF or DWG drawings to begin automated sheet extraction.",
+      buttonText: "Upload Drawings",
+      route: `/project/${projectId}/documents`,
+      badge: "Stage 1: Input",
+      isPrimary: true,
+    };
+  } else if (processingCount > 0) {
+    nextAction = {
+      title: `Processing ${processingCount} Drawing${processingCount > 1 ? "s" : ""} in Progress`,
+      desc: "Vectoris perception engine is decompressing vectors and extracting CAD symbols locally.",
+      buttonText: "View Processing Status",
+      route: `/project/${projectId}/documents`,
+      badge: "Stage 1: Ingestion",
+      isPrimary: true,
+    };
+  } else if (proposedCount > 0) {
+    nextAction = {
+      title: `Review ${proposedCount} Proposed Takeoff Item${proposedCount > 1 ? "s" : ""}`,
+      desc: `${proposedCount} AI-derived quantities are awaiting human engineer verification and approval.`,
+      buttonText: "Review Takeoff Ledger",
+      route: `/project/${projectId}/takeoff`,
+      badge: "Stage 3: Quantify",
+      isPrimary: true,
+    };
+  } else if (draftPlan) {
+    nextAction = {
+      title: `Review Project Plan Revision (v${draftPlan.version_number})`,
+      desc: `A revised engineering plan draft is ready with ${draftPlan.claims?.length || 1} proposed claim(s).`,
+      buttonText: "Review Plan Changes",
+      route: `/project/${projectId}/plan`,
+      badge: "Stage 4: Execution Plan",
+      isPrimary: true,
+    };
+  } else if (!activePlan && approvedCount > 0) {
+    nextAction = {
+      title: "Generate Grounded Project Plan",
+      desc: `Takeoff items verified (${approvedCount} approved). Generate a version-controlled project execution plan from project evidence.`,
+      buttonText: "Generate Project Plan",
+      route: `/project/${projectId}/plan`,
+      badge: "Stage 4: Execution Plan",
+      isPrimary: true,
+    };
+  } else if (approvedCount > 0) {
+    nextAction = {
+      title: "Export Reconciled BOQ & Reports",
+      desc: "All takeoff items and drawing evidence are verified. Export the bill of quantities to XLSX or start an investigation session.",
+      buttonText: "Export BOQ Report",
+      route: `/project/${projectId}/reports`,
+      badge: "Stage 5: Delivery",
+      isPrimary: false,
+    };
+  }
 
   // Role simulation: "viewer" shows read-only
   const isViewer = pageState === "permission";
@@ -218,6 +317,76 @@ export default function ProjectOverviewPage() {
       {((pageState === "data" && documents.length > 0) || pageState === "permission" || pageState === "offline") && (
         <div className="po-body">
 
+          {/* ── Deterministic Next Best Action Banner ────────────────── */}
+          <section
+            className="po-card"
+            style={{
+              background: "linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(37, 99, 235, 0.03) 100%)",
+              border: "1px solid rgba(59, 130, 246, 0.3)",
+              borderRadius: "10px",
+              padding: "18px 22px",
+              marginBottom: "20px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "20px",
+              flexWrap: "wrap",
+            }}
+            aria-label="Next Recommended Action"
+          >
+            <div style={{ display: "flex", alignItems: "flex-start", gap: "14px", flex: 1, minWidth: "260px" }}>
+              <div
+                style={{
+                  width: "36px",
+                  height: "36px",
+                  borderRadius: "8px",
+                  background: "rgba(59, 130, 246, 0.18)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#60a5fa",
+                  flexShrink: 0,
+                  marginTop: "2px",
+                }}
+              >
+                <IconBolt aria-hidden="true" />
+              </div>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                  <span
+                    style={{
+                      fontSize: "11px",
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                      color: "#60a5fa",
+                      background: "rgba(59, 130, 246, 0.15)",
+                      padding: "2px 6px",
+                      borderRadius: "4px",
+                    }}
+                  >
+                    {nextAction.badge}
+                  </span>
+                  <span style={{ fontSize: "14.5px", fontWeight: 700, color: "var(--app-text-primary, #f8fafc)" }}>
+                    {nextAction.title}
+                  </span>
+                </div>
+                <p style={{ fontSize: "13px", color: "var(--app-text-secondary, #cbd5e1)", margin: 0, lineHeight: "1.45" }}>
+                  {nextAction.desc}
+                </p>
+              </div>
+            </div>
+
+            <Link
+              to={nextAction.route}
+              className={nextAction.isPrimary ? "btn btn--primary btn--sm" : "btn btn--secondary btn--sm"}
+              style={{ padding: "8px 16px", fontSize: "13px", fontWeight: 600, flexShrink: 0, display: "inline-flex", alignItems: "center", gap: "6px" }}
+            >
+              <span>{nextAction.buttonText}</span>
+              <AnimatedArrowRight size={13} />
+            </Link>
+          </section>
+
           {/* ── Project Lifecycle Progression Tracker ──────────────── */}
           <section className="po-stage-tracker" aria-label="Project Workflow Progression">
             <div className="po-stage-tracker__header">
@@ -225,7 +394,7 @@ export default function ProjectOverviewPage() {
                 <IconWorkflow /> Sequential Workflow Progression
               </span>
               <span className="po-stage-tracker__current-stage">
-                Active Stage: <strong>Takeoff &amp; Verification</strong>
+                Active Stage: <strong>{nextAction.badge}</strong>
               </span>
             </div>
 
@@ -337,8 +506,9 @@ export default function ProjectOverviewPage() {
                     </h2>
                     <span className="po-card__count font-mono">{documents.length} files</span>
                   </div>
-                  <Link to={`/project/${projectId}/documents`} className="po-card__header-link">
-                    View Documents Tab →
+                  <Link to={`/project/${projectId}/documents`} className="po-card__header-link" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                    <span>View Documents Tab</span>
+                    <AnimatedArrowRight size={12} />
                   </Link>
                 </div>
 
@@ -371,8 +541,9 @@ export default function ProjectOverviewPage() {
                       {takeoff.line_items_approved} / {takeoff.line_items_proposed} Approved
                     </span>
                   </div>
-                  <Link to={`/project/${projectId}/takeoff`} className="po-card__header-link">
-                    Review Takeoff Tab →
+                  <Link to={`/project/${projectId}/takeoff`} className="po-card__header-link" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                    <span>Review Takeoff Tab</span>
+                    <AnimatedArrowRight size={12} />
                   </Link>
                 </div>
 
@@ -495,8 +666,9 @@ export default function ProjectOverviewPage() {
                 )}
 
                 <div className="po-card__footer">
-                  <Link to={`/sessions?project=${projectId}`} className="po-card__footer-link">
-                    Open Investigation Workshop ({sessions.length}) →
+                  <Link to={`/sessions?project=${projectId}`} className="po-card__footer-link" style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
+                    <span>Open Investigation Workshop ({sessions.length})</span>
+                    <AnimatedArrowRight size={13} />
                   </Link>
                 </div>
               </section>
@@ -891,6 +1063,14 @@ function EmptyProjectIllustration() {
     <svg width="64" height="64" viewBox="0 0 64 64" fill="none" aria-hidden="true">
       <rect x="12" y="16" width="40" height="36" rx="4" stroke="var(--border-strong)" strokeWidth="2" strokeDasharray="4 4"/>
       <path d="M32 26v16M24 34h16" stroke="var(--primary)" strokeWidth="2.5" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+function IconBolt(props: { className?: string; "aria-hidden"?: boolean | "true" | "false" }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
     </svg>
   );
 }

@@ -26,22 +26,33 @@ import {
   useProjects,
   dataService,
 } from "../services/dataService";
+import { useAuth } from "../hooks/useAuth";
+import { AnimatedCheck, AnimatedCheckCircle, AnimatedAlertTriangle, AnimatedArrowRight } from "../components/icons/AnimatedIcons";
 
 type FilterTab = "all" | "project" | "general";
 
 export default function SessionsPage() {
   const { searchParams } = useRouter();
+  const { user } = useAuth();
   const sessions = useSessions();
   const projects = useProjects();
 
   // State
   const [filterTab, setFilterTab] = useState<FilterTab>("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeSessionId, setActiveSessionId] = useState<string>("s1");
+  const [activeSessionId, setActiveSessionId] = useState<string>(() => {
+    const sessionParam = searchParams.get("session");
+    if (sessionParam) return sessionParam;
+    return sessions[0]?.id || "s1";
+  });
   const [selectedContextProject, setSelectedContextProject] = useState<string>("general");
   const [inputMessage, setInputMessage] = useState("");
+  const [isInvestigating, setIsInvestigating] = useState(false);
   const [expandedTraceIds, setExpandedTraceIds] = useState<Record<string, boolean>>({});
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
+  const [rejectingProposalId, setRejectingProposalId] = useState<string | null>(null);
+  const [rejectionReason, setRejectionReason] = useState<string>("");
+  const [actionFeedback, setActionFeedback] = useState<{ msgId: string; type: "success" | "error"; text: string } | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -52,7 +63,7 @@ export default function SessionsPage() {
     [projects]
   );
 
-  // Read URL params on initial load
+  // Read URL params and keep active session in sync
   useEffect(() => {
     const projParam = searchParams.get("project");
     if (projParam) {
@@ -63,8 +74,10 @@ export default function SessionsPage() {
     const sessionParam = searchParams.get("session");
     if (sessionParam) {
       setActiveSessionId(sessionParam);
+    } else if (sessions.length > 0 && !sessions.some((s) => s.id === activeSessionId)) {
+      setActiveSessionId(sessions[0].id);
     }
-  }, [searchParams, availableProjects]);
+  }, [searchParams, availableProjects, sessions, activeSessionId]);
 
   // Filtered session list
   const filteredSessions = useMemo(() => {
@@ -116,7 +129,7 @@ export default function SessionsPage() {
   const latestEvidence: EvidenceData | undefined = useMemo(() => {
     for (let i = activeSession.messages.length - 1; i >= 0; i--) {
       if (activeSession.messages[i].evidence) {
-        return activeSession.messages[i].evidence;
+        return activeSession.messages[i].evidence || undefined;
       }
     }
     return undefined;
@@ -142,19 +155,33 @@ export default function SessionsPage() {
     return undefined;
   }, [activeSession.messages]);
 
+  // Turn off isInvestigating when assistant response arrives
+  useEffect(() => {
+    if (isInvestigating && activeSession.messages.length > 0) {
+      const lastMsg = activeSession.messages[activeSession.messages.length - 1];
+      if (lastMsg.role === "assistant") {
+        setIsInvestigating(false);
+      }
+    }
+  }, [activeSession.messages, isInvestigating]);
+
+  // Smooth scroll to latest message
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [activeSession.messages.length, isInvestigating]);
+
   // Send message
   const handleSendMessage = () => {
-    if (!inputMessage.trim() || !activeSession.id) return;
+    const trimmed = inputMessage.trim();
+    if (!trimmed || !activeSession.id || isInvestigating) return;
 
+    setIsInvestigating(true);
     dataService.addSessionMessage(activeSession.id, {
       role: "user",
-      content: inputMessage.trim(),
+      content: trimmed,
     });
 
     setInputMessage("");
-    setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, 50);
   };
 
   // Start new investigation
@@ -169,13 +196,82 @@ export default function SessionsPage() {
       initialMessage: "",
     });
 
+    setIsInvestigating(false);
     setActiveSessionId(newSession.id);
   };
 
   // Approve takeoff proposal
-  const handleApproveProposal = (msgId: string) => {
-    if (isViewer) return;
-    dataService.updateProposalStatus(activeSession.id, msgId, "approved", "Project Reviewer");
+  const handleApproveProposal = async (msgId: string) => {
+    if (isViewer) {
+      setActionFeedback({
+        msgId,
+        type: "error",
+        text: "Permission denied: Viewer role is not authorized to commit takeoff mutations.",
+      });
+      return;
+    }
+
+    const committer = user?.email || user?.id || member?.name || "Lead Estimator";
+    const result = await dataService.approveProposal({
+      sessionId: activeSession.id,
+      messageId: msgId,
+      userId: committer,
+      userRole: effectiveRole,
+      reason: `Human-approved via Engineering Investigation: ${activeSession.title}`,
+    });
+
+    if (result.success) {
+      setActionFeedback({
+        msgId,
+        type: "success",
+        text: `Successfully committed "${result.lineItem?.name || "Item"}" to Takeoff Ledger.`,
+      });
+    } else {
+      setActionFeedback({
+        msgId,
+        type: "error",
+        text: result.error || "Failed to commit proposal.",
+      });
+    }
+  };
+
+  // Reject takeoff proposal
+  const handleRejectProposal = async (msgId: string, customReason?: string) => {
+    if (isViewer) {
+      setActionFeedback({
+        msgId,
+        type: "error",
+        text: "Permission denied: Viewer role is not authorized to reject takeoff proposals.",
+      });
+      return;
+    }
+
+    const reasonText = customReason || rejectionReason.trim() || "Dismissed by engineer during investigation";
+    const committer = user?.email || user?.id || member?.name || "Lead Estimator";
+
+    const result = await dataService.rejectProposal({
+      sessionId: activeSession.id,
+      messageId: msgId,
+      userId: committer,
+      userRole: effectiveRole,
+      reason: reasonText,
+    });
+
+    if (result.success) {
+      setRejectingProposalId(null);
+      setRejectionReason("");
+      setActionFeedback({
+        msgId,
+        type: "success",
+        text: `Proposal rejected: "${reasonText}".`,
+      });
+    } else {
+      setActionFeedback({
+        msgId,
+        type: "error",
+        text: result.error || "Failed to reject proposal.",
+      });
+    }
   };
 
   // Toggle trace expansion
@@ -305,18 +401,21 @@ export default function SessionsPage() {
                     {/* Investigation Outcome Pill */}
                     <div className="ses-item__outcome-row">
                       {session.investigation_status === "verified" && (
-                        <span className="ses-outcome-pill ses-outcome-pill--verified">
-                          ✓ {session.key_metric || "Verified"}
+                        <span className="ses-outcome-pill ses-outcome-pill--verified" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                          <AnimatedCheck size={11} />
+                          <span>{session.key_metric || "Verified"}</span>
                         </span>
                       )}
                       {session.investigation_status === "calculated" && (
-                        <span className="ses-outcome-pill ses-outcome-pill--calculated">
-                          ✓ {session.key_metric || "Calculated"}
+                        <span className="ses-outcome-pill ses-outcome-pill--calculated" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                          <AnimatedCheck size={11} />
+                          <span>{session.key_metric || "Calculated"}</span>
                         </span>
                       )}
                       {session.investigation_status === "review_required" && (
-                        <span className="ses-outcome-pill ses-outcome-pill--warn">
-                          ⚠ {session.key_metric || "Review Required"}
+                        <span className="ses-outcome-pill ses-outcome-pill--warn" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                          <AnimatedAlertTriangle size={11} />
+                          <span>{session.key_metric || "Review Required"}</span>
                         </span>
                       )}
                       {!session.investigation_status && (
@@ -521,25 +620,29 @@ export default function SessionsPage() {
                     </div>
 
                     {/* ── 3. GROUNDED EVIDENCE SURFACE ── */}
-                    {(msg.evidence || (msg.referenced_sources && msg.referenced_sources.length > 0)) && (
+                    {((msg.evidence && (msg.evidence.sheet || msg.evidence.doc_name)) || (msg.referenced_sources && msg.referenced_sources.length > 0)) ? (
                       <div className="ses-evidence-strip">
                         <div className="ses-evidence-strip__header">
                           <span className="ses-evidence-strip__title">Evidence &amp; Grounding</span>
                         </div>
 
                         <div className="ses-evidence-sources-list">
-                          {msg.evidence && (
+                          {msg.evidence && (msg.evidence.sheet || msg.evidence.doc_name) && (
                             <div className="ses-evidence-item">
                               <div className="ses-evidence-item__icon" aria-hidden="true">
                                 <IconBlueprint />
                               </div>
                               <div className="ses-evidence-item__main">
                                 <span className="ses-evidence-item__sheet font-mono">
-                                  {msg.evidence.sheet} · {msg.evidence.region || msg.evidence.doc_name}
+                                  {msg.evidence.sheet || "Drawing Sheet"} · {msg.evidence.region || msg.evidence.doc_name || "Document"}
                                 </span>
-                                {msg.evidence.coordinates && (
+                                {msg.evidence.coordinates ? (
                                   <span className="ses-evidence-item__sub font-mono">
                                     Coordinates: {msg.evidence.coordinates}
+                                  </span>
+                                ) : (
+                                  <span className="ses-evidence-item__sub font-mono" style={{ color: "var(--app-text-muted)" }}>
+                                    Coordinates: Unavailable (Text-only)
                                   </span>
                                 )}
                               </div>
@@ -559,11 +662,11 @@ export default function SessionsPage() {
                           ))}
                         </div>
 
-                        {/* Direct Actions: Open Drawing & Add/Approve Takeoff */}
+                        {/* Direct Actions: Open Drawing */}
                         <div className="ses-evidence-actions">
-                          {msg.evidence && activeSession.project_id && (
+                          {msg.evidence && msg.evidence.sheet && activeSession.project_id && (
                             <Link
-                              to={`/project/${activeSession.project_id}/workspace?doc=${msg.evidence.doc_id}&sheet=${encodeURIComponent(
+                              to={`/project/${activeSession.project_id}/workspace?doc=${msg.evidence.doc_id || ""}&sheet=${encodeURIComponent(
                                 msg.evidence.sheet
                               )}`}
                               className="btn btn--secondary btn--sm"
@@ -572,27 +675,231 @@ export default function SessionsPage() {
                               <IconJumpCAD aria-hidden="true" /> Open Drawing
                             </Link>
                           )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="ses-evidence-strip ses-evidence-strip--unavailable" role="status" aria-label="Evidence status">
+                        <span className="ses-evidence-unavailable-text" style={{ color: "var(--app-text-muted)", fontSize: "12px", fontStyle: "italic" }}>
+                          Evidence unavailable for this result.
+                        </span>
+                      </div>
+                    )}
 
-                          {msg.action_proposal && (
-                            msg.action_proposal.status === "pending" ? (
-                              isViewer ? (
-                                <span className="ses-viewer-lock-tag font-mono">
-                                  Viewer: Read-only
-                                </span>
-                              ) : (
+                    {/* ── 3.5 AI ACTION PROPOSAL CARD (Human-in-the-Loop Mutation Gate) ── */}
+                    {msg.action_proposal && (
+                      <div className={`ses-proposal-card ses-proposal-card--${msg.action_proposal.status}`}>
+                        {/* Proposal Header */}
+                        <div className="ses-proposal-header">
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <span
+                              className={`ses-proposal-badge ses-proposal-badge--${msg.action_proposal.status}`}
+                            >
+                              {msg.action_proposal.status === "pending" && (
+                                <>
+                                  <AnimatedAlertTriangle size={11} />
+                                  <span>AI ACTION PROPOSAL · PENDING APPROVAL</span>
+                                </>
+                              )}
+                              {msg.action_proposal.status === "approved" && (
+                                <>
+                                  <AnimatedCheckCircle size={12} />
+                                  <span>COMMITTED TO TAKEOFF</span>
+                                </>
+                              )}
+                              {msg.action_proposal.status === "rejected" && (
+                                <>
+                                  <IconDismissSmall />
+                                  <span>PROPOSAL REJECTED</span>
+                                </>
+                              )}
+                            </span>
+                            <span className="ses-item__proj-tag font-mono">
+                              {msg.action_proposal.item_code}
+                            </span>
+                          </div>
+
+                          <span className="ses-proposal-label font-mono">
+                            Action: Insert Line Item
+                          </span>
+                        </div>
+
+                        {/* Proposal Title */}
+                        <h4 className="ses-proposal-title">
+                          {msg.action_proposal.item_name || msg.action_proposal.title}
+                        </h4>
+
+                        {/* Structured Technical Parameters Grid */}
+                        <div className="ses-proposal-grid">
+                          <div className="ses-proposal-field">
+                            <span className="ses-proposal-label">Category / Discipline</span>
+                            <span className="ses-proposal-val">{msg.action_proposal.category || "Power Distribution"}</span>
+                          </div>
+                          <div className="ses-proposal-field">
+                            <span className="ses-proposal-label">Proposed Quantity</span>
+                            <span className="ses-proposal-val font-mono" style={{ color: "var(--color-racing-red)" }}>
+                              +{msg.action_proposal.quantity} {msg.action_proposal.unit || "NOS"}
+                            </span>
+                          </div>
+                          <div className="ses-proposal-field">
+                            <span className="ses-proposal-label">Sheet Reference</span>
+                            <span className="ses-proposal-val font-mono">
+                              {msg.action_proposal.source_sheet || msg.evidence?.sheet || "E-104"}
+                            </span>
+                          </div>
+                          <div className="ses-proposal-field">
+                            <span className="ses-proposal-label">Proposed Mutation</span>
+                            <span className="ses-proposal-val">Takeoff BOQ Ledger</span>
+                          </div>
+                        </div>
+
+                        {/* Evidence Provenance Note */}
+                        <div className="ses-proposal-provenance">
+                          <strong>Provenance:</strong>{" "}
+                          {msg.action_proposal.evidence_provenance ||
+                            `Grounded in inspection of Sheet ${msg.action_proposal.source_sheet || msg.evidence?.sheet || "E-104"}`}
+                        </div>
+
+                        {/* Description / Specification */}
+                        {msg.action_proposal.description && (
+                          <p className="ses-evidence-item__sub" style={{ margin: 0 }}>
+                            {msg.action_proposal.description}
+                          </p>
+                        )}
+
+                        {/* Feedback message banner if present */}
+                        {actionFeedback?.msgId === msg.id && (
+                          <div
+                            className={`ses-outcome-pill ses-outcome-pill--${actionFeedback.type === "success" ? "verified" : "warn"}`}
+                            style={{ padding: "6px 10px", fontSize: "0.75rem", width: "fit-content" }}
+                          >
+                            {actionFeedback.type === "success" ? <AnimatedCheck size={12} /> : <AnimatedAlertTriangle size={12} />}
+                            <span>{actionFeedback.text}</span>
+                          </div>
+                        )}
+
+                        {/* Human Confirmation Workflow Actions */}
+                        <div className="ses-proposal-actions">
+                          {msg.action_proposal.status === "pending" ? (
+                            isViewer ? (
+                              <span className="ses-viewer-lock-tag font-mono" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                                <IconShieldSmall /> Viewer Role: Read-only access. Approval requires Editor/Admin permissions.
+                              </span>
+                            ) : rejectingProposalId === msg.id ? (
+                              <div className="ses-proposal-reject-box">
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                  <span className="ses-proposal-label" style={{ color: "#ef4444", fontWeight: 700 }}>
+                                    Reject Proposal — Select reason or enter custom justification:
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="btn btn--secondary btn--xs"
+                                    onClick={() => {
+                                      setRejectingProposalId(null);
+                                      setRejectionReason("");
+                                    }}
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+
+                                <div className="ses-proposal-reject-presets">
+                                  {[
+                                    "False positive detection",
+                                    "Duplicate line item",
+                                    "Out of project scope",
+                                    "Specification mismatch",
+                                  ].map((preset) => (
+                                    <button
+                                      key={preset}
+                                      type="button"
+                                      className="ses-reject-preset-chip"
+                                      onClick={() => handleRejectProposal(msg.id, preset)}
+                                    >
+                                      {preset}
+                                    </button>
+                                  ))}
+                                </div>
+
+                                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                                  <input
+                                    type="text"
+                                    className="ses-proposal-reject-input"
+                                    placeholder="Optional custom rejection reason for audit trail..."
+                                    value={rejectionReason}
+                                    onChange={(e) => setRejectionReason(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        handleRejectProposal(msg.id);
+                                      }
+                                    }}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="btn btn--secondary btn--sm"
+                                    style={{ color: "#ef4444", borderColor: "#ef4444", flexShrink: 0 }}
+                                    onClick={() => handleRejectProposal(msg.id)}
+                                  >
+                                    Confirm Reject
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
                                 <button
                                   type="button"
                                   className="btn btn--primary btn--sm"
                                   onClick={() => handleApproveProposal(msg.id)}
+                                  title="Approve and write line item to Takeoff Ledger"
                                 >
-                                  <IconCheckmarkSmall aria-hidden="true" /> Add to Takeoff (+{msg.action_proposal.quantity} {msg.action_proposal.unit || ""})
+                                  <IconCheckmarkSmall aria-hidden="true" />
+                                  <span>Approve &amp; Commit (+{msg.action_proposal.quantity} {msg.action_proposal.unit || "NOS"})</span>
                                 </button>
-                              )
-                            ) : (
-                              <span className="ses-committed-badge font-mono">
-                                ✓ Added to Takeoff ({msg.action_proposal.item_code})
-                              </span>
+
+                                <button
+                                  type="button"
+                                  className="btn btn--secondary btn--sm"
+                                  style={{ color: "#ef4444" }}
+                                  onClick={() => {
+                                    setRejectingProposalId(msg.id);
+                                    setRejectionReason("");
+                                  }}
+                                  title="Reject this proposal and log reason in audit ledger"
+                                >
+                                  <IconDismissSmall />
+                                  <span>Reject Proposal</span>
+                                </button>
+                              </>
                             )
+                          ) : msg.action_proposal.status === "approved" ? (
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", flexWrap: "wrap", gap: "8px" }}>
+                              <span className="ses-committed-badge font-mono" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                                <AnimatedCheckCircle size={14} />
+                                <span>
+                                  Committed by {msg.action_proposal.committed_by || "Lead Estimator"} ({msg.action_proposal.committed_at || "Just now"})
+                                </span>
+                              </span>
+
+                              {activeSession.project_id && (
+                                <Link
+                                  to={`/project/${activeSession.project_id}/takeoff`}
+                                  className="btn btn--secondary btn--xs"
+                                  style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}
+                                >
+                                  <span>View in Takeoff Ledger</span>
+                                  <AnimatedArrowRight size={11} />
+                                </Link>
+                              )}
+                            </div>
+                          ) : (
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+                              <span className="ses-outcome-pill ses-outcome-pill--warn font-mono" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                                <AnimatedAlertTriangle size={12} />
+                                <span>
+                                  Rejected: {msg.action_proposal.rejection_reason || "Dismissed by engineer"} ({msg.action_proposal.committed_by || "Reviewer"})
+                                </span>
+                              </span>
+                            </div>
                           )}
                         </div>
                       </div>
@@ -621,7 +928,10 @@ export default function SessionsPage() {
                                   <div className="ses-detail-step__head font-mono">
                                     <span className="ses-detail-step__num">{idx + 1}.</span>
                                     <span className="ses-detail-step__name">{step.name}()</span>
-                                    <span className="ses-detail-step__status">✓ pass</span>
+                                    <span className="ses-detail-step__status" style={{ display: "inline-flex", alignItems: "center", gap: "3px" }}>
+                                      <AnimatedCheck size={10} />
+                                      <span>pass</span>
+                                    </span>
                                   </div>
                                   <div className="ses-detail-step__label">{step.label}</div>
                                   {step.output && (
@@ -645,6 +955,28 @@ export default function SessionsPage() {
                 );
               })
             )}
+
+            {/* Active Investigation In-Progress State */}
+            {isInvestigating && (
+              <div className="ses-response-box ses-response-box--loading" aria-live="polite" aria-busy="true">
+                <div className="ses-response-header">
+                  <div className="ses-response-identity">
+                    <span className="ses-response-name">VECTORIS</span>
+                    <span className="ses-response-grounding">
+                      <span className="ses-engine-dot" aria-hidden="true" style={{ animation: "pulse 1.2s infinite" }} />
+                      <span>Investigating CAD drawing layers &amp; running engineering tools…</span>
+                    </span>
+                  </div>
+                  <span className="ses-response-time font-mono">Running…</span>
+                </div>
+                <div className="ses-loading-skeleton" aria-hidden="true">
+                  <div className="ses-skeleton-line ses-skeleton-line--hero" />
+                  <div className="ses-skeleton-line" />
+                  <div className="ses-skeleton-line ses-skeleton-line--medium" />
+                </div>
+              </div>
+            )}
+
             <div ref={messagesEndRef} />
           </div>
 
@@ -725,9 +1057,10 @@ export default function SessionsPage() {
                   type="button"
                   className="btn btn--primary btn--sm ses-send-btn"
                   onClick={handleSendMessage}
-                  disabled={!inputMessage.trim()}
+                  disabled={!inputMessage.trim() || isInvestigating}
                 >
-                  <IconSend aria-hidden="true" /> Run Investigation
+                  <IconSend aria-hidden="true" />
+                  <span>{isInvestigating ? "Investigating…" : "Run Investigation"}</span>
                 </button>
               </div>
 
@@ -799,21 +1132,62 @@ export default function SessionsPage() {
                 <span className="ses-inspector-label">Takeoff Impact</span>
                 <div className="ses-inspector-card">
                   <div className="ses-inspector-metric-row">
+                    <span>Item:</span>
+                    <span className="ses-inspector-metric-val font-mono">{latestProposal.item_name || latestProposal.title}</span>
+                  </div>
+                  <div className="ses-inspector-metric-row">
                     <span>Item Code:</span>
                     <span className="ses-inspector-metric-val font-mono">{latestProposal.item_code}</span>
                   </div>
                   <div className="ses-inspector-metric-row">
                     <span>Quantity:</span>
+                    <span className="ses-inspector-metric-val font-mono" style={{ color: "var(--color-racing-red)", fontWeight: 700 }}>
+                      +{latestProposal.quantity} {latestProposal.unit || "NOS"}
+                    </span>
+                  </div>
+                  <div className="ses-inspector-metric-row">
+                    <span>Sheet:</span>
                     <span className="ses-inspector-metric-val font-mono">
-                      +{latestProposal.quantity} {latestProposal.unit || ""}
+                      {latestProposal.source_sheet || "E-104"}
                     </span>
                   </div>
                   <div className="ses-inspector-metric-row">
                     <span>Status:</span>
-                    <span className="ses-inspector-metric-val">
-                      {latestProposal.status === "approved" ? "✓ Committed" : "Pending Approval"}
+                    <span className="ses-inspector-metric-val" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                      {latestProposal.status === "approved" ? (
+                        <>
+                          <AnimatedCheck size={11} />
+                          <span style={{ color: "#16a34a", fontWeight: 600 }}>Committed</span>
+                        </>
+                      ) : latestProposal.status === "rejected" ? (
+                        <span style={{ color: "#ef4444", fontWeight: 600 }}>Rejected</span>
+                      ) : (
+                        <span style={{ color: "#f59e0b", fontWeight: 600 }}>Pending Approval</span>
+                      )}
                     </span>
                   </div>
+
+                  {/* Inspector Fast-Action Buttons */}
+                  {latestProposal.status === "pending" && !isViewer && (
+                    <div style={{ display: "flex", gap: "6px", marginTop: "10px" }}>
+                      <button
+                        type="button"
+                        className="btn btn--primary btn--xs"
+                        style={{ flex: 1 }}
+                        onClick={() => handleApproveProposal(latestProposal.id)}
+                      >
+                        <AnimatedCheck size={11} /> Approve
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn--secondary btn--xs"
+                        style={{ color: "#ef4444" }}
+                        onClick={() => handleRejectProposal(latestProposal.id, "Rejected via Live Inspector")}
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -823,11 +1197,14 @@ export default function SessionsPage() {
               <div className="ses-inspector-action">
                 <Link
                   to={`/project/${activeProject.id}/workspace?doc=${latestEvidence.doc_id}&sheet=${encodeURIComponent(
-                    latestEvidence.sheet
+                    latestEvidence.sheet || ""
                   )}`}
                   className="btn btn--secondary btn--sm ses-inspector-full-btn"
+                  style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
                 >
-                  <IconJumpCAD aria-hidden="true" /> Open in Workspace →
+                  <IconJumpCAD aria-hidden="true" />
+                  <span>Open in Workspace</span>
+                  <AnimatedArrowRight size={13} />
                 </Link>
               </div>
             )}
@@ -946,6 +1323,14 @@ function IconSend() {
   return (
     <svg width="12" height="12" viewBox="0 0 14 14" fill="none" aria-hidden="true">
       <path d="M12.5 1.5L6 8M12.5 1.5l-3.5 11-3-4.5-4.5-3 11-3.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+function IconDismissSmall() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+      <path d="M9 3L3 9M3 3l6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   );
 }

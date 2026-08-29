@@ -86,19 +86,26 @@ export class VectorisDeterministicEngineAdapter implements ModelAdapter {
       });
     }
 
-    if (hasProject && (q.includes("sheet") || q.includes("drawing") || q.includes("symbol") || q.includes("find") || q.includes("where") || q.includes("e-"))) {
+    if (hasProject && (q.includes("sheet") || q.includes("drawing") || q.includes("symbol") || q.includes("find") || q.includes("where") || q.includes("e-") || q.includes("sld-"))) {
       plan.push("4. Inspecting drawing package for relevant sheets, equipment tags, and detections.");
       
-      const sheetMatch = q.match(/e-?\d+/i);
-      const sheetNum = sheetMatch ? sheetMatch[0].toUpperCase() : "E-104";
+      const sheetMatch = q.match(/\b([A-Z]{1,3}[-–_.]?\d{2,4}[A-Z]?)\b/i);
+      const sheetNum = sheetMatch ? sheetMatch[0].toUpperCase() : undefined;
 
-      toolCalls.push({
-        name: "inspect_drawing_region",
-        args: {
-          sheetNumber: sheetNum,
-          componentQuery: q.includes("feeder") ? "Feeder" : q.includes("light") ? "Lighting" : undefined,
-        },
-      });
+      if (sheetNum) {
+        toolCalls.push({
+          name: "inspect_drawing_region",
+          args: {
+            sheetNumber: sheetNum,
+            componentQuery: q.includes("feeder") ? "Feeder" : q.includes("light") ? "Lighting" : undefined,
+          },
+        });
+      } else {
+        toolCalls.push({
+          name: "list_sheets",
+          args: {},
+        });
+      }
     }
        if (hasProject && (q.includes("takeoff") || q.includes("count") || q.includes("quantity") || q.includes("boq") || q.includes("item"))) {
       plan.push("5. Searching active project takeoff ledger for line items and verification states.");
@@ -114,7 +121,7 @@ export class VectorisDeterministicEngineAdapter implements ModelAdapter {
       plan.push("6. Formulating proposed line item addition for human confirmation review.");
       const qtyMatch = q.match(/(\d+)\s*(x|nos|ea|units?)/i);
       const qty = qtyMatch ? parseInt(qtyMatch[1], 10) : 1;
-      const sheetMatch = q.match(/e-?\d+/i);
+      const sheetMatch = q.match(/\b([A-Z]{1,3}[-–_.]?\d{2,4}[A-Z]?)\b/i) || q.match(/e-?\d+/i);
       const sheetNum = sheetMatch ? sheetMatch[0].toUpperCase() : "E-104";
 
       toolCalls.push({
@@ -234,17 +241,67 @@ export class VectorisDeterministicEngineAdapter implements ModelAdapter {
 
 /**
  * Groq Cloud Inference Gateway Adapter (qwen/qwen3.8-27b).
- * Connects when VITE_GROQ_API_KEY is available.
+ *
+ * SECURITY BOUNDARY INVARIANT:
+ * - Client builds must NEVER bundle raw Groq API keys (e.g. VITE_GROQ_API_KEY).
+ * - When deployed, cloud inference is proxied through an authenticated backend / edge gateway (VITE_INFERENCE_GATEWAY_URL).
+ * - In local workstation environments with no gateway configured, automatically and cleanly falls back
+ *   to the Vectoris deterministic intelligence engine.
  */
+export interface GroqCloudModelAdapterOptions {
+  apiKey?: string;
+  gatewayUrl?: string;
+  modelId?: string;
+}
+
 export class GroqCloudModelAdapter implements ModelAdapter {
   public readonly modelId: string;
   public readonly modelVersion = "2026-qwen3.8";
   public readonly provider = "cloud_gateway" as const;
-  private apiKey: string;
+  private apiKey?: string;
+  private gatewayUrl?: string;
 
-  constructor(apiKey?: string, modelId?: string) {
-    this.apiKey = apiKey || import.meta.env.VITE_GROQ_API_KEY || "";
-    this.modelId = modelId || import.meta.env.VITE_AI_MODEL || "qwen/qwen3.8-27b";
+  constructor(options?: GroqCloudModelAdapterOptions | string, modelId?: string) {
+    if (typeof options === "string") {
+      if (options.startsWith("http://") || options.startsWith("https://")) {
+        this.gatewayUrl = options;
+      } else {
+        this.apiKey = options;
+      }
+      this.modelId = modelId || "qwen/qwen3.8-27b";
+    } else if (options && typeof options === "object") {
+      this.apiKey = options.apiKey;
+      this.gatewayUrl = options.gatewayUrl;
+      this.modelId = options.modelId || "qwen/qwen3.8-27b";
+    } else {
+      let resolvedGateway: string | undefined;
+      let resolvedModel: string | undefined;
+      try {
+        if (typeof import.meta !== "undefined" && import.meta.env) {
+          resolvedGateway = import.meta.env.VITE_INFERENCE_GATEWAY_URL;
+          resolvedModel = import.meta.env.VITE_AI_MODEL;
+        }
+      } catch {
+        // Ignore environment access errors
+      }
+      this.gatewayUrl = resolvedGateway;
+      this.modelId = resolvedModel || "qwen/qwen3.8-27b";
+    }
+  }
+
+  public isConfigured(): boolean {
+    return Boolean(this.gatewayUrl || (this.apiKey && this.apiKey.length > 0));
+  }
+
+  private resolveEndpoint(): string {
+    if (this.gatewayUrl) {
+      const trimmed = this.gatewayUrl.replace(/\/+$/, "");
+      if (trimmed.endsWith("/chat/completions")) {
+        return trimmed;
+      }
+      return `${trimmed}/chat/completions`;
+    }
+    return "https://api.groq.com/openai/v1/chat/completions";
   }
 
   public async generatePlanAndTools(
@@ -252,7 +309,7 @@ export class GroqCloudModelAdapter implements ModelAdapter {
     context: AgentContext,
     tools: ToolDefinition[]
   ): Promise<{ plan: string[]; toolCalls: ModelToolCall[] }> {
-    if (!this.apiKey) {
+    if (!this.isConfigured()) {
       const fallback = new VectorisDeterministicEngineAdapter();
       return fallback.generatePlanAndTools(inquiry, context, tools);
     }
@@ -262,12 +319,17 @@ export class GroqCloudModelAdapter implements ModelAdapter {
         .map((t) => `- ${t.name}: ${t.description} (params: ${JSON.stringify(t.parameters)})`)
         .join("\n");
 
-      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      const endpoint = this.resolveEndpoint();
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (this.apiKey) {
+        headers["Authorization"] = `Bearer ${this.apiKey}`;
+      }
+
+      const response = await fetch(endpoint, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${this.apiKey}`,
-        },
+        headers,
         body: JSON.stringify({
           model: this.modelId,
           messages: [
@@ -312,7 +374,7 @@ export class GroqCloudModelAdapter implements ModelAdapter {
     plan: string[],
     toolResults: Array<{ tool: string; result: any }>
   ): Promise<ModelResponse> {
-    if (!this.apiKey) {
+    if (!this.isConfigured()) {
       const fallback = new VectorisDeterministicEngineAdapter();
       return fallback.synthesizeResponse(inquiry, context, plan, toolResults);
     }
@@ -322,12 +384,17 @@ export class GroqCloudModelAdapter implements ModelAdapter {
         .map((tr) => `Tool [${tr.tool}] Result: ${JSON.stringify(tr.result?.data || {})}`)
         .join("\n");
 
-      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      const endpoint = this.resolveEndpoint();
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (this.apiKey) {
+        headers["Authorization"] = `Bearer ${this.apiKey}`;
+      }
+
+      const response = await fetch(endpoint, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${this.apiKey}`,
-        },
+        headers,
         body: JSON.stringify({
           model: this.modelId,
           messages: [
@@ -368,14 +435,20 @@ export class GroqCloudModelAdapter implements ModelAdapter {
   }
 }
 
-// Export default adapter (uses Groq with qwen/qwen3.8-27b if key is present, else local deterministic engine)
+/**
+ * Resolves the default ModelAdapter adhering to Vectoris Zero-Client-Secret architecture:
+ * 1. If an authenticated backend gateway (VITE_INFERENCE_GATEWAY_URL) is configured, routes via gateway.
+ * 2. If running in a server/Node test context with GROQ_API_KEY, instantiates GroqCloudModelAdapter with server key.
+ * 3. Otherwise, returns the standalone, zero-network VectorisDeterministicEngineAdapter.
+ */
 export function resolveDefaultModelAdapter(): ModelAdapter {
-  let groqKey: string | undefined;
+  let gatewayUrl: string | undefined;
   let modelId: string | undefined;
+  let serverGroqKey: string | undefined;
 
   try {
     if (typeof import.meta !== "undefined" && import.meta.env) {
-      groqKey = import.meta.env.VITE_GROQ_API_KEY;
+      gatewayUrl = import.meta.env.VITE_INFERENCE_GATEWAY_URL;
       modelId = import.meta.env.VITE_AI_MODEL;
     }
   } catch {
@@ -383,14 +456,26 @@ export function resolveDefaultModelAdapter(): ModelAdapter {
   }
 
   const nodeProcess = typeof globalThis !== "undefined" ? (globalThis as { process?: { env?: Record<string, string> } }).process : undefined;
-  if (!groqKey && nodeProcess?.env) {
-    groqKey = nodeProcess.env.VITE_GROQ_API_KEY;
+  if (nodeProcess?.env) {
+    gatewayUrl = gatewayUrl || nodeProcess.env.VITE_INFERENCE_GATEWAY_URL;
+    serverGroqKey = nodeProcess.env.GROQ_API_KEY;
     modelId = modelId || nodeProcess.env.VITE_AI_MODEL;
   }
 
-  if (groqKey && groqKey.startsWith("gsk_")) {
-    return new GroqCloudModelAdapter(groqKey, modelId || "qwen/qwen3.8-27b");
+  if (gatewayUrl) {
+    return new GroqCloudModelAdapter({
+      gatewayUrl,
+      modelId: modelId || "qwen/qwen3.8-27b",
+    });
   }
+
+  if (serverGroqKey && serverGroqKey.startsWith("gsk_")) {
+    return new GroqCloudModelAdapter({
+      apiKey: serverGroqKey,
+      modelId: modelId || "qwen/qwen3.8-27b",
+    });
+  }
+
   return new VectorisDeterministicEngineAdapter();
 }
 

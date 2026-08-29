@@ -6,6 +6,7 @@ import { useOnlineStatus } from "../hooks/useOnlineStatus";
 import { authService, type AuthResult } from "../services/authService";
 import { organizationService } from "../services/organizationService";
 import { isSupabaseConfigured } from "../services/supabaseClient";
+import { AnimatedPencil } from "../components/icons/AnimatedIcons";
 
 export type AuthMode = "signin" | "signup" | "forgot" | "reset";
 export type FormStatus = "idle" | "submitting" | "blocked" | "success";
@@ -854,7 +855,7 @@ export function AuthPage() {
                       lineHeight: "1.4",
                     }}
                   >
-                    Supabase multi-tenant policy requires verified operator identity before creating organizations or loading project drawings.
+                    Vectoris requires verified operator identity to protect confidential drawing packages, single-line diagrams, and digital engineering signatures.
                   </div>
                 </div>
               </div>
@@ -917,24 +918,46 @@ export function AuthPage() {
                     : "Resend confirmation email"}
                 </button>
 
-                <button
-                  type="button"
-                  className="btn btn--ghost"
-                  onClick={() => {
-                    setUnverifiedEmail(null);
-                    setVerificationFeedback(null);
-                    setStatus("idle");
-                  }}
-                  style={{
-                    width: "100%",
-                    padding: "8px",
-                    fontSize: "13px",
-                    color: "var(--app-text-muted, #94a3b8)",
-                    marginTop: "6px",
-                  }}
-                >
-                  ← Back to Sign In
-                </button>
+                <div style={{ display: "flex", gap: "8px", marginTop: "6px" }}>
+                  <button
+                    type="button"
+                    className="btn btn--ghost"
+                    onClick={() => {
+                      setEmail(unverifiedEmail);
+                      setUnverifiedEmail(null);
+                      setVerificationFeedback(null);
+                      setMode("signup");
+                      setStatus("idle");
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: "8px",
+                      fontSize: "12px",
+                      color: "var(--app-text-muted, #94a3b8)",
+                    }}
+                  >
+                    <AnimatedPencil size={13} style={{ marginRight: "6px" }} />
+                    Edit email address
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--ghost"
+                    onClick={() => {
+                      setUnverifiedEmail(null);
+                      setVerificationFeedback(null);
+                      setMode("signin");
+                      setStatus("idle");
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: "8px",
+                      fontSize: "12px",
+                      color: "var(--app-text-muted, #94a3b8)",
+                    }}
+                  >
+                    ← Back to Sign In
+                  </button>
+                </div>
               </div>
             </div>
           ) : mode === "forgot" ? (
@@ -1615,36 +1638,38 @@ export function AuthPage() {
             </>
           )}
 
-          {/* Dev / QA Testing Bypass */}
-          <div
-            className="auth-dev-bypass"
-            style={{
-              marginTop: "20px",
-              paddingTop: "16px",
-              borderTop: "1px dashed var(--border-subtle, rgba(255, 255, 255, 0.1))",
-              textAlign: "center",
-            }}
-          >
-            <Link
-              to="/dashboard"
-              className="button button--secondary"
+          {/* Dev / QA Testing Bypass (Only visible in Development) */}
+          {import.meta.env.DEV && (
+            <div
+              className="auth-dev-bypass"
               style={{
-                display: "inline-flex",
-                width: "100%",
-                justifyContent: "center",
-                alignItems: "center",
-                gap: "8px",
-                fontSize: "13px",
-                fontWeight: 600,
-                minHeight: "40px",
-                borderRadius: "8px",
-                textDecoration: "none",
+                marginTop: "20px",
+                paddingTop: "16px",
+                borderTop: "1px dashed var(--border-subtle, rgba(255, 255, 255, 0.1))",
+                textAlign: "center",
               }}
             >
-              <span>Skip to Dashboard (Testing / Dev)</span>
-              <span aria-hidden="true">&rarr;</span>
-            </Link>
-          </div>
+              <Link
+                to="/dashboard"
+                className="button button--secondary"
+                style={{
+                  display: "inline-flex",
+                  width: "100%",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  gap: "8px",
+                  fontSize: "13px",
+                  fontWeight: 600,
+                  minHeight: "40px",
+                  borderRadius: "8px",
+                  textDecoration: "none",
+                }}
+              >
+                <span>Skip to Dashboard (Testing / Dev)</span>
+                <span aria-hidden="true">&rarr;</span>
+              </Link>
+            </div>
+          )}
         </div>
       </section>
     </main>
